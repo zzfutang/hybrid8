@@ -32,9 +32,13 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
     }
 
     private func setupUI() {
-        guard let tree = audioUnit?.parameterTree else { return }
+        guard let synthAudioUnit = audioUnit as? SynthAudioUnit,
+              let tree = synthAudioUnit.parameterTree else { return }
         view.subviews.forEach { $0.removeFromSuperview() }
-        let host = NSHostingView(rootView: SynthView(model: ParameterModel(tree: tree)))
+        let model = ParameterModel(tree: tree) {
+            synthAudioUnit.effectiveValue(for: $0)
+        }
+        let host = NSHostingView(rootView: SynthView(model: model))
         host.frame = view.bounds
         host.autoresizingMask = [.width, .height]
         view.addSubview(host)

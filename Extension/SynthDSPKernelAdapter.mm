@@ -38,6 +38,10 @@
     return (AUValue)_engine.getParameter((uint64_t)address);
 }
 
+- (AUValue)effectiveValueForParameter:(AUParameterAddress)address {
+    return (AUValue)_engine.getEffectiveParameter((uint64_t)address);
+}
+
 - (AUInternalRenderBlock)internalRenderBlockWithMusicalContext:
     (AUHostMusicalContextBlock)musicalContext {
     // Capture a raw pointer to the C++ engine so the audio thread never does

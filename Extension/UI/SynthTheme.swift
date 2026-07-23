@@ -43,7 +43,7 @@ enum Palette {
 struct Knob: View {
     let title: String
     let addr: SynthParam
-    let model: ParameterModel
+    @ObservedObject var model: ParameterModel
     let unit: String
     let log: Bool
     let integer: Bool
@@ -96,6 +96,17 @@ struct Knob: View {
                     .stroke(accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .frame(width: 38, height: 38)
                     .shadow(color: accent.opacity(0.6), radius: 2)
+                let effectiveNorm = normFor(model.effectiveValue(addr))
+                let baseNorm = normFor(value)
+                if abs(effectiveNorm - baseNorm) > 0.002 {
+                    KnobArc(fraction: effectiveNorm)
+                        .trim(from: max(0, effectiveNorm - 0.018),
+                              to: effectiveNorm)
+                        .stroke(Color.white,
+                                style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .frame(width: 38, height: 38)
+                        .shadow(color: Color.black.opacity(0.9), radius: 1)
+                }
 
                 // Cap
                 Circle()

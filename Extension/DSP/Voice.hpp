@@ -37,6 +37,13 @@ struct VCFTolerance {
     }
 };
 
+struct VoiceTelemetry {
+    float osc1Octave = 0.0f, osc2Octave = 0.0f;
+    float pulseWidth = 0.5f, wtFrame = 0.0f, wtLiveness = 0.0f;
+    float crossMod = 0.0f, cutoff = 6000.0f;
+    float resonance = 0.0f, drive = 0.0f, amplitude = 1.0f;
+};
+
 class Voice {
 public:
     static constexpr int kOversample = 2; // oscillator/FM/sync run at 2x
@@ -70,6 +77,7 @@ public:
     int   note() const { return pendingNote_ ? pendingNoteNumber_ : note_; }
     bool  isHeld() const { return held_; }
     uint64_t age() const { return age_; }
+    const VoiceTelemetry& telemetry() const { return telemetry_; }
 
     void noteOn(int note, float velocity, float phaseSpread, float startPitch) {
         if (ampEnv_.isActive()) {
@@ -369,6 +377,19 @@ public:
         float velGain = (1.0f - p.velToVolume) + p.velToVolume * velocity_;
         float ampMod  = clampf(1.0f + md[ModDstAmp], 0.0f, 2.0f);
         float amp = ampVal * velGain * ampMod;
+        telemetry_.osc1Octave = p.octave
+                              + (vibrato + md[ModDstOscPitch] * 12.0f) / 12.0f;
+        telemetry_.osc2Octave = p.osc2Octave
+                              + (vibrato + p.osc2PitchEnv * env * 36.0f
+                                 + md[ModDstOsc2Pitch] * 36.0f) / 12.0f;
+        telemetry_.pulseWidth = clampf(p.pulseWidth + pwm, 0.02f, 0.98f);
+        telemetry_.wtFrame = wtFrameMod;
+        telemetry_.wtLiveness = wtLivenessMod;
+        telemetry_.crossMod = cm;
+        telemetry_.cutoff = static_cast<float>(cutoff);
+        telemetry_.resonance = reso;
+        telemetry_.drive = drive;
+        telemetry_.amplitude = clampf(p.masterGain * ampMod, 0.0f, 1.0f);
         float output = filtered * amp;
         if (stealFadeRemaining_ > 0) {
             output *= static_cast<float>(stealFadeRemaining_)
@@ -398,6 +419,7 @@ private:
     int   note_ = 60;
     float random_ = 0.0f;
     VCFTolerance vcfTolerance_;
+    VoiceTelemetry telemetry_;
     float targetPitch_ = 60.0f;
     float glidePitch_ = 60.0f;
     float velocity_ = 1.0f;

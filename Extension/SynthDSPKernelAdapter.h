@@ -21,6 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Thread-safe parameter set/get (address == SynthParam value).
 - (void)setParameter:(AUParameterAddress)address value:(AUValue)value;
 - (AUValue)valueForParameter:(AUParameterAddress)address;
+- (AUValue)effectiveValueForParameter:(AUParameterAddress)address;
 
 /// The real-time render block handed to the AUAudioUnit.
 - (AUInternalRenderBlock)internalRenderBlockWithMusicalContext:

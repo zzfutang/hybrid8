@@ -11,13 +11,40 @@ import AudioToolbox
 final class ParameterModel: ObservableObject {
     let tree: AUParameterTree
     @Published private(set) var version: Int = 0
+    @Published private(set) var modulationVersion: Int = 0
     private var token: AUParameterObserverToken?
+    private var timer: Timer?
+    private let effectiveProvider: ((AUParameterAddress) -> Float)?
+    private var effectiveValues: [AUParameterAddress: Float] = [:]
 
-    init(tree: AUParameterTree) {
+    init(tree: AUParameterTree,
+         effectiveProvider: ((AUParameterAddress) -> Float)? = nil) {
         self.tree = tree
+        self.effectiveProvider = effectiveProvider
         token = tree.token(byAddingParameterObserver: { [weak self] _, _ in
             DispatchQueue.main.async { self?.version &+= 1 }
         })
+        if effectiveProvider != nil {
+            timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0,
+                                         repeats: true) { [weak self] _ in
+                self?.pollEffectiveValues()
+            }
+        }
+    }
+
+    deinit { timer?.invalidate() }
+
+    private func pollEffectiveValues() {
+        guard let provider = effectiveProvider else { return }
+        for parameter in tree.allParameters {
+            effectiveValues[parameter.address] = provider(parameter.address)
+        }
+        modulationVersion &+= 1
+    }
+
+    func effectiveValue(_ address: SynthParam) -> Float {
+        let raw = AUParameterAddress(address.rawValue)
+        return effectiveValues[raw] ?? param(address)?.value ?? 0
     }
 
     func param(_ address: SynthParam) -> AUParameter? {

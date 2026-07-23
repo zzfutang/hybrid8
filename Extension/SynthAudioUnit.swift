@@ -125,6 +125,10 @@ public final class SynthAudioUnit: AUAudioUnit {
         kernel.internalRenderBlock(musicalContext: musicalContextBlock)
     }
 
+    func effectiveValue(for address: AUParameterAddress) -> AUValue {
+        kernel.effectiveValue(forParameter: address)
+    }
+
     // Allow hosts to preserve long high-feedback delay tails.
     public override var tailTime: TimeInterval { 45.0 }
 }

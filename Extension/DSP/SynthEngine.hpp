@@ -101,6 +101,9 @@ public:
         store_[SynthParamDelayTone].store(0.65f);
         store_[SynthParamDelayPingPong].store(1.0f);
         store_[SynthParamStereoSpread].store(0.0f);
+        for (int i = 0; i < SynthParamCount; ++i)
+            effective_[i].store(store_[i].load(std::memory_order_relaxed),
+                                std::memory_order_relaxed);
 
         // Build the wavetable library up front (off the audio thread) so the
         // first note never triggers generation in the render callback.
@@ -142,6 +145,11 @@ public:
     }
     float getParameter(uint64_t address) const {
         if (address < SynthParamCount) return store_[address].load(std::memory_order_relaxed);
+        return 0.0f;
+    }
+    float getEffectiveParameter(uint64_t address) const {
+        if (address < SynthParamCount)
+            return effective_[address].load(std::memory_order_relaxed);
         return 0.0f;
     }
 
@@ -303,6 +311,7 @@ public:
         p.lfoToCutoff     = store_[SynthParamLFOToCutoff].load();
         p.lfoToResonance  = store_[SynthParamLFOToResonance].load();
         p.analogAmount = store_[SynthParamAnalogAmount].load();
+        p.masterGain = store_[SynthParamMasterGain].load();
         p.pitchBendSemis = pitchBendSemis_;
         // Glide: exponential approach reaching ~99% of the target in the set
         // time. 0 (or near) -> coefficient 1 -> instant (glide off).
@@ -415,6 +424,30 @@ public:
                                                mixR * kVoiceSumGain);
             outL[n] = softClip(fx.l) * gain;
             if (outR != outL) outR[n] = softClip(fx.r) * gain;
+        }
+
+        // Publish one representative voice once per block. Atomics keep this
+        // audio-thread write lock-free while the editor polls independently.
+        const Voice* displayVoice = nullptr;
+        for (const auto& voice : voices_) {
+            if (voice.isActive()) { displayVoice = &voice; break; }
+        }
+        for (int i = 0; i < SynthParamCount; ++i)
+            effective_[i].store(store_[i].load(std::memory_order_relaxed),
+                                std::memory_order_relaxed);
+        if (displayVoice) {
+            const VoiceTelemetry& t = displayVoice->telemetry();
+            effective_[SynthParamOctave].store(t.osc1Octave);
+            effective_[SynthParamOsc2Octave].store(t.osc2Octave);
+            effective_[SynthParamOscPulseWidth].store(t.pulseWidth);
+            effective_[SynthParamOsc2PulseWidth].store(t.pulseWidth);
+            effective_[SynthParamWTFrame].store(t.wtFrame);
+            effective_[SynthParamWTLiveness].store(t.wtLiveness);
+            effective_[SynthParamOscCrossMod].store(t.crossMod);
+            effective_[SynthParamFilterCutoff].store(t.cutoff);
+            effective_[SynthParamFilterResonance].store(t.resonance);
+            effective_[SynthParamFilterDrive].store(t.drive);
+            effective_[SynthParamMasterGain].store(t.amplitude);
         }
     }
 
@@ -579,6 +612,7 @@ private:
     uint32_t arpRng_ = 0x9e3779b9u;
 
     std::atomic<float> store_[SynthParamCount];
+    std::atomic<float> effective_[SynthParamCount];
 };
 
 } // namespace synth
