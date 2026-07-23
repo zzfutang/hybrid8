@@ -1,0 +1,80 @@
+name: Hybrid8
+options:
+  bundleIdPrefix: com.johangorsjo
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+schemes:
+  Hybrid8:
+    build:
+      targets:
+        Hybrid8: all
+        Hybrid8Extension: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
+settings:
+  base:
+    # Local (ad-hoc) signing so it builds without a paid developer account.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGNING_REQUIRED: "YES"
+    CODE_SIGNING_ALLOWED: "YES"
+    ENABLE_HARDENED_RUNTIME: "YES"
+    ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+    SWIFT_VERSION: "5.0"
+    CLANG_CXX_LANGUAGE_STANDARD: "gnu++17"
+    CLANG_CXX_LIBRARY: "libc++"
+    GCC_C_LANGUAGE_STANDARD: "gnu11"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+
+targets:
+
+  # ------------------------------------------------------------------ App ---
+  Hybrid8:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        excludes:
+          - "Info.plist"
+          - "*.entitlements"
+    settings:
+      base:
+        PRODUCT_NAME: Hybrid8
+        PRODUCT_BUNDLE_IDENTIFIER: com.johangorsjo.Hybrid8
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+        GENERATE_INFOPLIST_FILE: "NO"
+        COMBINE_HIDPI_IMAGES: "YES"
+    dependencies:
+      - target: Hybrid8Extension
+        embed: true
+        codeSign: true
+
+  # ------------------------------------------------------ AUv3 Extension ---
+  Hybrid8Extension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Extension
+        excludes:
+          - "Info.plist"
+          - "*.entitlements"
+    settings:
+      base:
+        PRODUCT_NAME: Hybrid8Extension
+        PRODUCT_BUNDLE_IDENTIFIER: com.johangorsjo.Hybrid8.AUv3
+        INFOPLIST_FILE: Extension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Extension/Extension.entitlements
+        GENERATE_INFOPLIST_FILE: "NO"
+        SWIFT_OBJC_BRIDGING_HEADER: Extension/Extension-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/Extension"
+        # AUv3 extension boilerplate.
+        SKIP_INSTALL: "YES"

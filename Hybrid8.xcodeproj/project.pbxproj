@@ -1,0 +1,535 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		11715466F6817FCC81AFD690 /* SynthParametersTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1C382D5C95F92CE70271E1 /* SynthParametersTree.swift */; };
+		19BED8CE50B96437C6B03166 /* SynthTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3098E2CA53815C28DFBDFF /* SynthTheme.swift */; };
+		2C8E269FB1288172C592C3BF /* KnobShapes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33F329CBCC076644995FD3A6 /* KnobShapes.swift */; };
+		45CCA61426EF5F476F70D725 /* PresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97914D3D466CC0071C9535CD /* PresetStore.swift */; };
+		73C1B6C0A75B2B9E49B9C48A /* Hybrid8Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 120104614B6CF8293F99DD17 /* Hybrid8Extension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		73D7E97129915CC85F59436F /* SynthDSPKernelAdapter.mm in Sources */ = {isa = PBXBuildFile; fileRef = B969D4EA2487259367B0EEB7 /* SynthDSPKernelAdapter.mm */; };
+		758D39BD24C8B3B0A8DFD111 /* SynthHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E0830377D667BD763D41AA /* SynthHost.swift */; };
+		861CBC33DC1CAA24B92E02EE /* AudioUnitViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39D64F8046DBE8A8415EEAA2 /* AudioUnitViewController.swift */; };
+		8A427ACBDE97F9D01CCF711D /* SynthTimeMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90C36064148CBB1BA047620D /* SynthTimeMapping.swift */; };
+		8EC40184DF9C738BEADBB0AF /* ParameterModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E278E8B3AFB116734B0AF070 /* ParameterModel.swift */; };
+		986F35527D787FE98E1483EC /* Hybrid8App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D2A41C1C9551453765E809A /* Hybrid8App.swift */; };
+		A1F8C8D70F94068A4FF2DB6B /* FactoryPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30348A168347EA9A2A7B5095 /* FactoryPresets.swift */; };
+		B49FF5B0CD00C178BCB8FDE8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CBC5D8B70379456237CDEA /* ContentView.swift */; };
+		C042951BAA0025B7C2160D94 /* SynthAudioUnit.swift in Sources */ = {isa = PBXBuildFile; fileRef = B03850F9ED8AC10D7B9481FA /* SynthAudioUnit.swift */; };
+		C72F5D3039604622BED6A6D5 /* SynthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F516362934563D869871E8AC /* SynthView.swift */; };
+		C79DA96821606F36494D0795 /* TypingKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEDCDB4B30F3C9BFF404CD6F /* TypingKeyboard.swift */; };
+		FF873F2C72C80E6BC50A8410 /* SynthHelp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28045EECD214931C4F493FF4 /* SynthHelp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C68EEEE2EA082B75285A3604 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D2442D1CDE5DF43838D1BC1C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1A230F97156A0F4A03F10A3D;
+			remoteInfo = Hybrid8Extension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		EA959AD97A4039825B96317B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				73C1B6C0A75B2B9E49B9C48A /* Hybrid8Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		120104614B6CF8293F99DD17 /* Hybrid8Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Hybrid8Extension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		16FD64C1B93199CB47D8C0D1 /* ADSR.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ADSR.hpp; sourceTree = "<group>"; };
+		17E900F2930F9791B5F6CA56 /* Params.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Params.hpp; sourceTree = "<group>"; };
+		23D32892482F96EDA9B11D12 /* SynthParameters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SynthParameters.h; sourceTree = "<group>"; };
+		25CBC5D8B70379456237CDEA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		2791E23540FEE283AA6B39E1 /* Filter.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Filter.hpp; sourceTree = "<group>"; };
+		28045EECD214931C4F493FF4 /* SynthHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthHelp.swift; sourceTree = "<group>"; };
+		30348A168347EA9A2A7B5095 /* FactoryPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactoryPresets.swift; sourceTree = "<group>"; };
+		33F329CBCC076644995FD3A6 /* KnobShapes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnobShapes.swift; sourceTree = "<group>"; };
+		35CF1CFEABA565BC7BDFA7A1 /* Decimator.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Decimator.hpp; sourceTree = "<group>"; };
+		39AA2E2B16CF7967B4E89D95 /* Voice.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Voice.hpp; sourceTree = "<group>"; };
+		39D64F8046DBE8A8415EEAA2 /* AudioUnitViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioUnitViewController.swift; sourceTree = "<group>"; };
+		3A38E226BAF69E22B3FADF6D /* Hybrid8.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hybrid8.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B3CE22CA2EAB15CE13EC26C /* Wavetable.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Wavetable.hpp; sourceTree = "<group>"; };
+		4B917A556B54CD66B004878A /* SynthEngine.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = SynthEngine.hpp; sourceTree = "<group>"; };
+		5D2A41C1C9551453765E809A /* Hybrid8App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hybrid8App.swift; sourceTree = "<group>"; };
+		5EA7533D68274288E8D74CB5 /* LFO.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = LFO.hpp; sourceTree = "<group>"; };
+		6F1B6179EAB5CDDA2B814BA6 /* Oscillator.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Oscillator.hpp; sourceTree = "<group>"; };
+		7E1C382D5C95F92CE70271E1 /* SynthParametersTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthParametersTree.swift; sourceTree = "<group>"; };
+		82E0830377D667BD763D41AA /* SynthHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthHost.swift; sourceTree = "<group>"; };
+		90C36064148CBB1BA047620D /* SynthTimeMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthTimeMapping.swift; sourceTree = "<group>"; };
+		97914D3D466CC0071C9535CD /* PresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetStore.swift; sourceTree = "<group>"; };
+		AA3098E2CA53815C28DFBDFF /* SynthTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthTheme.swift; sourceTree = "<group>"; };
+		B03850F9ED8AC10D7B9481FA /* SynthAudioUnit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthAudioUnit.swift; sourceTree = "<group>"; };
+		B969D4EA2487259367B0EEB7 /* SynthDSPKernelAdapter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SynthDSPKernelAdapter.mm; sourceTree = "<group>"; };
+		BF92ACF59C7B54B50729D9A3 /* Utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Utils.hpp; sourceTree = "<group>"; };
+		DE0A2823181C214D850EE6FA /* Extension-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Extension-Bridging-Header.h"; sourceTree = "<group>"; };
+		E278E8B3AFB116734B0AF070 /* ParameterModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParameterModel.swift; sourceTree = "<group>"; };
+		EC7E11D10EAACE898A3DC8D7 /* SynthDSPKernelAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SynthDSPKernelAdapter.h; sourceTree = "<group>"; };
+		EEE51E42B7E45C92A7F722E2 /* ModMatrix.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ModMatrix.h; sourceTree = "<group>"; };
+		F516362934563D869871E8AC /* SynthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthView.swift; sourceTree = "<group>"; };
+		FEDCDB4B30F3C9BFF404CD6F /* TypingKeyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingKeyboard.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		17BAFE757C4A9BD64E2EE124 /* DSP */ = {
+			isa = PBXGroup;
+			children = (
+				16FD64C1B93199CB47D8C0D1 /* ADSR.hpp */,
+				35CF1CFEABA565BC7BDFA7A1 /* Decimator.hpp */,
+				2791E23540FEE283AA6B39E1 /* Filter.hpp */,
+				5EA7533D68274288E8D74CB5 /* LFO.hpp */,
+				6F1B6179EAB5CDDA2B814BA6 /* Oscillator.hpp */,
+				17E900F2930F9791B5F6CA56 /* Params.hpp */,
+				4B917A556B54CD66B004878A /* SynthEngine.hpp */,
+				BF92ACF59C7B54B50729D9A3 /* Utils.hpp */,
+				39AA2E2B16CF7967B4E89D95 /* Voice.hpp */,
+				3B3CE22CA2EAB15CE13EC26C /* Wavetable.hpp */,
+			);
+			path = DSP;
+			sourceTree = "<group>";
+		};
+		484BFE6BAF96C7A5CAA8F46A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3A38E226BAF69E22B3FADF6D /* Hybrid8.app */,
+				120104614B6CF8293F99DD17 /* Hybrid8Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		859D925C737DFE6A643208C9 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				25CBC5D8B70379456237CDEA /* ContentView.swift */,
+				5D2A41C1C9551453765E809A /* Hybrid8App.swift */,
+				82E0830377D667BD763D41AA /* SynthHost.swift */,
+				FEDCDB4B30F3C9BFF404CD6F /* TypingKeyboard.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		B24F404B3E108CFF936A76AE /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				33F329CBCC076644995FD3A6 /* KnobShapes.swift */,
+				E278E8B3AFB116734B0AF070 /* ParameterModel.swift */,
+				97914D3D466CC0071C9535CD /* PresetStore.swift */,
+				28045EECD214931C4F493FF4 /* SynthHelp.swift */,
+				AA3098E2CA53815C28DFBDFF /* SynthTheme.swift */,
+				90C36064148CBB1BA047620D /* SynthTimeMapping.swift */,
+				F516362934563D869871E8AC /* SynthView.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		CFC693F6AF44D839B7178222 /* Extension */ = {
+			isa = PBXGroup;
+			children = (
+				17BAFE757C4A9BD64E2EE124 /* DSP */,
+				B24F404B3E108CFF936A76AE /* UI */,
+				39D64F8046DBE8A8415EEAA2 /* AudioUnitViewController.swift */,
+				DE0A2823181C214D850EE6FA /* Extension-Bridging-Header.h */,
+				30348A168347EA9A2A7B5095 /* FactoryPresets.swift */,
+				EEE51E42B7E45C92A7F722E2 /* ModMatrix.h */,
+				B03850F9ED8AC10D7B9481FA /* SynthAudioUnit.swift */,
+				EC7E11D10EAACE898A3DC8D7 /* SynthDSPKernelAdapter.h */,
+				B969D4EA2487259367B0EEB7 /* SynthDSPKernelAdapter.mm */,
+				23D32892482F96EDA9B11D12 /* SynthParameters.h */,
+				7E1C382D5C95F92CE70271E1 /* SynthParametersTree.swift */,
+			);
+			path = Extension;
+			sourceTree = "<group>";
+		};
+		D405E020761DBB0ED0102DEE = {
+			isa = PBXGroup;
+			children = (
+				859D925C737DFE6A643208C9 /* App */,
+				CFC693F6AF44D839B7178222 /* Extension */,
+				484BFE6BAF96C7A5CAA8F46A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1A230F97156A0F4A03F10A3D /* Hybrid8Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2560BBC6F79EFC0CB89BF362 /* Build configuration list for PBXNativeTarget "Hybrid8Extension" */;
+			buildPhases = (
+				8742F10F3527592F30D00CFC /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Hybrid8Extension;
+			packageProductDependencies = (
+			);
+			productName = Hybrid8Extension;
+			productReference = 120104614B6CF8293F99DD17 /* Hybrid8Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		953E3C38691277AE6EDD2D1E /* Hybrid8 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3BEF185D198B281811315D9D /* Build configuration list for PBXNativeTarget "Hybrid8" */;
+			buildPhases = (
+				27D9ED6E1E5CD11839D7C486 /* Sources */,
+				EA959AD97A4039825B96317B /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				09A8D85E280B8C5EAE36F59F /* PBXTargetDependency */,
+			);
+			name = Hybrid8;
+			packageProductDependencies = (
+			);
+			productName = Hybrid8;
+			productReference = 3A38E226BAF69E22B3FADF6D /* Hybrid8.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D2442D1CDE5DF43838D1BC1C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					1A230F97156A0F4A03F10A3D = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+					953E3C38691277AE6EDD2D1E = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 1326BFF1E24E7697F4D6DC75 /* Build configuration list for PBXProject "Hybrid8" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = D405E020761DBB0ED0102DEE;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 484BFE6BAF96C7A5CAA8F46A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				953E3C38691277AE6EDD2D1E /* Hybrid8 */,
+				1A230F97156A0F4A03F10A3D /* Hybrid8Extension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		27D9ED6E1E5CD11839D7C486 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B49FF5B0CD00C178BCB8FDE8 /* ContentView.swift in Sources */,
+				986F35527D787FE98E1483EC /* Hybrid8App.swift in Sources */,
+				758D39BD24C8B3B0A8DFD111 /* SynthHost.swift in Sources */,
+				C79DA96821606F36494D0795 /* TypingKeyboard.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8742F10F3527592F30D00CFC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				861CBC33DC1CAA24B92E02EE /* AudioUnitViewController.swift in Sources */,
+				A1F8C8D70F94068A4FF2DB6B /* FactoryPresets.swift in Sources */,
+				2C8E269FB1288172C592C3BF /* KnobShapes.swift in Sources */,
+				8EC40184DF9C738BEADBB0AF /* ParameterModel.swift in Sources */,
+				45CCA61426EF5F476F70D725 /* PresetStore.swift in Sources */,
+				C042951BAA0025B7C2160D94 /* SynthAudioUnit.swift in Sources */,
+				73D7E97129915CC85F59436F /* SynthDSPKernelAdapter.mm in Sources */,
+				FF873F2C72C80E6BC50A8410 /* SynthHelp.swift in Sources */,
+				11715466F6817FCC81AFD690 /* SynthParametersTree.swift in Sources */,
+				19BED8CE50B96437C6B03166 /* SynthTheme.swift in Sources */,
+				8A427ACBDE97F9D01CCF711D /* SynthTimeMapping.swift in Sources */,
+				C72F5D3039604622BED6A6D5 /* SynthView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		09A8D85E280B8C5EAE36F59F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1A230F97156A0F4A03F10A3D /* Hybrid8Extension */;
+			targetProxy = C68EEEE2EA082B75285A3604 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0C2332BEFEC95122F9388A12 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Extension/Extension.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Extension",
+				);
+				INFOPLIST_FILE = Extension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.johangorsjo.Hybrid8.AUv3;
+				PRODUCT_NAME = Hybrid8Extension;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Extension/Extension-Bridging-Header.h";
+			};
+			name = Release;
+		};
+		212DC61C9C3BD8FF1372B1C3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Extension/Extension.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Extension",
+				);
+				INFOPLIST_FILE = Extension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.johangorsjo.Hybrid8.AUv3;
+				PRODUCT_NAME = Hybrid8Extension;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Extension/Extension-Bridging-Header.h";
+			};
+			name = Debug;
+		};
+		384CFD65868833E5D2E09269 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		691E217D2DB1B32D49917380 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.johangorsjo.Hybrid8;
+				PRODUCT_NAME = Hybrid8;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		C512F257C3500576745C0B28 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		CB50BD5B5BCE42FDCD609ADB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.johangorsjo.Hybrid8;
+				PRODUCT_NAME = Hybrid8;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1326BFF1E24E7697F4D6DC75 /* Build configuration list for PBXProject "Hybrid8" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C512F257C3500576745C0B28 /* Debug */,
+				384CFD65868833E5D2E09269 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2560BBC6F79EFC0CB89BF362 /* Build configuration list for PBXNativeTarget "Hybrid8Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				212DC61C9C3BD8FF1372B1C3 /* Debug */,
+				0C2332BEFEC95122F9388A12 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3BEF185D198B281811315D9D /* Build configuration list for PBXNativeTarget "Hybrid8" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB50BD5B5BCE42FDCD609ADB /* Debug */,
+				691E217D2DB1B32D49917380 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D2442D1CDE5DF43838D1BC1C /* Project object */;
+}
