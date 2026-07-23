@@ -13,11 +13,11 @@ struct ContentView: View {
         VStack(spacing: 0) {
             if let vc = host.viewController {
                 AUViewRepresentable(viewController: vc)
-                    .frame(minHeight: 904)
+                    .frame(minHeight: 890)
             } else {
                 Text("Hybrid 8")
                     .font(.largeTitle.bold())
-                    .frame(maxWidth: .infinity, minHeight: 904)
+                    .frame(maxWidth: .infinity, minHeight: 890)
                     .background(Color(red: 0.11, green: 0.11, blue: 0.13))
             }
 

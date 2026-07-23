@@ -103,8 +103,33 @@ typedef enum SynthParam : unsigned long long {
     SynthParamMod5Source, SynthParamMod5Dest, SynthParamMod5Amount,
     SynthParamMod6Source, SynthParamMod6Dest, SynthParamMod6Amount,
 
+    // Arpeggiator (host-tempo-synchronised clock, latch).
+    SynthParamArpOn,        // 0 = off, 1 = on
+    SynthParamArpMode,      // 0=Up, 1=Down, 2=Up/Down, 3=Random
+    SynthParamArpOctaves,   // 1..4 octave range
+    SynthParamArpRate,      // indexed musical division (see SYNTH_SYNC_* below)
+    SynthParamArpGate,      // 0.05..1  fraction of the step the note sounds
+    SynthParamArpHold,      // 0/1 latch held notes
+
+    // Global stereo effects (chorus -> delay).
+    SynthParamChorusMix,       // 0..1 wet/dry
+    SynthParamChorusRate,      // indexed musical division
+    SynthParamChorusDepth,     // 0..1 modulation depth
+    SynthParamDelayMix,        // 0..1 wet/dry
+    SynthParamDelayTime,       // indexed musical division
+    SynthParamDelayFeedback,   // 0..0.94
+    SynthParamDelayTone,       // 0..1 dark..bright feedback filtering
+    SynthParamDelayPingPong,   // 0..1 stereo cross-feedback
+
     SynthParamCount
 } SynthParam;
+
+// Musical division indices shared by arp, chorus and delay. Values are ordered
+// slow-to-fast; the DSP table stores their duration in quarter-note beats.
+#define SYNTH_SYNC_DIVISION_COUNT 14
+#define SYNTH_SYNC_DEFAULT_ARP 11       // 1/16
+#define SYNTH_SYNC_DEFAULT_CHORUS 2     // 1/2
+#define SYNTH_SYNC_DEFAULT_DELAY 7      // dotted 1/8
 
 // Envelope-time mapping shared by the DSP, the UI display and the presets.
 // The stored parameter value is a normalised 0..1; the actual time in seconds

@@ -77,6 +77,17 @@ public:
         filtEnv_.gate(false);
     }
 
+    // Immediate silence for MIDI "All Sound Off" (CC120): hard-reset the
+    // envelopes, filter and decimator so the voice stops now rather than
+    // continuing through a (possibly long) release stage.
+    void silence() {
+        held_ = false;
+        ampEnv_.resetHard();
+        filtEnv_.resetHard();
+        filter_.reset();
+        decimator_.reset();
+    }
+
     // Legato: retarget the pitch (glides from the current pitch) WITHOUT
     // re-gating the envelopes or resetting the oscillators.
     void legatoNote(int note) {

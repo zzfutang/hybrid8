@@ -55,6 +55,16 @@ inline int wtLevelForFreq(double f0) {
     int L = (int)std::floor(std::log2(f0 / WT_F_MIN));
     return std::max(0, std::min(L, WT_NUM_LEVELS - 1));
 }
+// Fractional mip level (each level spans one octave). Used to crossfade the two
+// adjacent mips so pitch modulation / glide across an octave boundary doesn't
+// step abruptly between tables with different harmonic content.
+inline float wtLevelForFreqF(double f0) {
+    if (f0 <= WT_F_MIN) return 0.0f;
+    float L = (float)std::log2(f0 / WT_F_MIN);
+    if (L < 0.0f) L = 0.0f;
+    if (L > (float)(WT_NUM_LEVELS - 1)) L = (float)(WT_NUM_LEVELS - 1);
+    return L;
+}
 inline int wtNextPow2(int x) { int p = WT_MIN_LEN; while (p < x) p <<= 1; return p; }
 
 // Deterministic pseudo-random phase in [0, 2pi) for a (harmonic, seed) pair.
@@ -297,7 +307,7 @@ public:
         double f = std::fabs(hz);
         phaseInc_ = f / sampleRate_;
         if (phaseInc_ > 0.5) phaseInc_ = 0.5;
-        level_ = wtLevelForFreq(f);
+        levelF_ = wtLevelForFreqF(f);
     }
     inline void setFrame(float frame01) {
         framePos_ = clampf(frame01, 0.0f, 1.0f) * (WT_NUM_FRAMES - 1);
@@ -314,7 +324,7 @@ public:
         double vp = liveness_ * WT_NUM_VARIANTS * 0.5 *
                     (1.0 - std::cos(kTwoPi * livenessPhase_));
 
-        float out = read(framePos_, vp, level_, phase_);
+        float out = read(framePos_, vp, levelF_, phase_);
 
         phase_ += phaseInc_;
         if (phase_ >= 1.0) phase_ -= 1.0;
@@ -328,12 +338,9 @@ private:
         float fr = (float)(fp - i);
         return t.samples[i] + fr * (t.samples[i + 1] - t.samples[i]);
     }
-    inline float read(float framePos, double variantPos, int L, double phase) const {
-        int f0 = (int)framePos, f1 = std::min(f0 + 1, WT_NUM_FRAMES - 1);
-        float ff = framePos - f0;
-        int vint = (int)variantPos;
-        int v0 = vint % WT_NUM_VARIANTS, v1 = (v0 + 1) % WT_NUM_VARIANTS;
-        float vf = (float)(variantPos - vint);
+    // Bilinear read (frame x variant) at a single mip level.
+    inline float readLevel(int f0, int f1, float ff, int v0, int v1, float vf,
+                           int L, double phase) const {
         float a = sampleMip(set_->at(f0, v0).levels[L], phase);
         float b = sampleMip(set_->at(f1, v0).levels[L], phase);
         float c = sampleMip(set_->at(f0, v1).levels[L], phase);
@@ -342,12 +349,28 @@ private:
         float hi = c + ff * (d - c);
         return lo + vf * (hi - lo);
     }
+    // Trilinear read: frame x variant x mip level. Crossfading the two adjacent
+    // octave mips keeps the timbre continuous across octave boundaries.
+    inline float read(float framePos, double variantPos, float levelF, double phase) const {
+        int f0 = (int)framePos, f1 = std::min(f0 + 1, WT_NUM_FRAMES - 1);
+        float ff = framePos - f0;
+        int vint = (int)variantPos;
+        int v0 = vint % WT_NUM_VARIANTS, v1 = (v0 + 1) % WT_NUM_VARIANTS;
+        float vf = (float)(variantPos - vint);
+        int L0 = (int)levelF;
+        int L1 = std::min(L0 + 1, WT_NUM_LEVELS - 1);
+        float lf = levelF - L0;
+        float lo = readLevel(f0, f1, ff, v0, v1, vf, L0, phase);
+        if (lf <= 0.0001f || L1 == L0) return lo;
+        float hi = readLevel(f0, f1, ff, v0, v1, vf, L1, phase);
+        return lo + lf * (hi - lo);
+    }
 
     const WavetableSet* set_ = nullptr;
     double sampleRate_ = 96000.0;
     double phase_ = 0.0, phaseInc_ = 0.0;
     double livenessPhase_ = 0.0, livenessInc_ = 0.0;
-    int    level_ = 0;
+    float  levelF_ = 0.0f;
     float  framePos_ = 0.0f, liveness_ = 0.0f;
 };
 

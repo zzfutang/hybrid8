@@ -4,5 +4,5 @@
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
-clang++ -std=c++17 -O2 Tests/test_dsp.cpp -o /tmp/analog8_test_dsp
-/tmp/analog8_test_dsp
+clang++ -std=c++17 -O2 Tests/test_dsp.cpp -o /tmp/hybrid8_test_dsp
+/tmp/hybrid8_test_dsp

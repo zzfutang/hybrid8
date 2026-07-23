@@ -42,36 +42,41 @@ struct SynthView: View {
     // MARK: Main panel
 
     private var panel: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             header
+            helpBar               // kept near the top so it stays on-screen as the panel grows
             VStack(spacing: 12) {
                 HStack(alignment: .top, spacing: 12) {
                     // Column 1 — Oscillators + Mixer
-                    VStack(spacing: 12) {
-                        oscillatorPanel.frame(height: 214)
-                        osc2Panel.frame(height: 220)
-                        mixerPanel.frame(height: 150)
+                    VStack(spacing: 10) {
+                        oscillatorPanel.frame(height: 186)
+                        osc2Panel.frame(height: 192)
+                        mixerPanel.frame(height: 118)
                         Spacer(minLength: 0)
                     }
                     // Column 2 — Envelopes + LFO
-                    VStack(spacing: 12) {
-                        ampEnvPanel.frame(height: 150)
-                        filterEnvPanel.frame(height: 150)
-                        lfoPanel.frame(height: 312)
+                    VStack(spacing: 10) {
+                        ampEnvPanel.frame(height: 118)
+                        filterEnvPanel.frame(height: 118)
+                        lfoPanel.frame(height: 244)
                         Spacer(minLength: 0)
                     }
                     // Column 3 — Filter + Global (Vel Vol lives in Global)
-                    VStack(spacing: 12) {
-                        filterPanel.frame(height: 300)
-                        globalPanel.frame(height: 312)
+                    VStack(spacing: 10) {
+                        filterPanel.frame(height: 226)
+                        globalPanel.frame(height: 250)
                         Spacer(minLength: 0)
                     }
                 }
-                .frame(height: 636)
-                modMatrixPanel.frame(height: 108)
+                .frame(height: 516)
+                HStack(alignment: .top, spacing: 12) {
+                    arpPanel.frame(width: 420)
+                    effectsPanel.frame(maxWidth: .infinity)
+                }
+                .frame(height: 112)
+                modMatrixPanel.frame(height: 104)
             }
             .id(model.version) // rebuild only the controls on value changes
-            helpBar
         }
         .padding(EdgeInsets(top: 22, leading: 16, bottom: 14, trailing: 16))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -409,6 +414,75 @@ struct SynthView: View {
                     Color.clear.frame(maxWidth: .infinity)
                 }
             }
+        }
+    }
+
+    private var arpPanel: some View {
+        Panel(title: "Arpeggiator", accent: Palette.arpAccent) {
+            HStack(alignment: .top, spacing: 8) {
+                ToggleButton("Arp", SynthParamArpOn, model, accent: Palette.arpAccent)
+                ToggleButton("Hold", SynthParamArpHold, model, accent: Palette.arpAccent)
+                arpDropdown("Mode", SynthParamArpMode,
+                            ["Up", "Down", "Up-Dn", "Rnd"], width: 72)
+                arpDropdown("Octaves", SynthParamArpOctaves,
+                            ["1", "2", "3", "4"], width: 64)
+                arpDropdown("Division", SynthParamArpRate,
+                            SynthParameters.syncDivisionStrings, width: 64)
+                Knob("Gate", SynthParamArpGate, model, accent: Palette.arpAccent)
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func arpDropdown(_ title: String, _ address: SynthParam,
+                             _ options: [String], width: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .tracking(0.6)
+                .foregroundColor(Palette.engrave)
+            Dropdown(address, options, model, accent: Palette.arpAccent,
+                     helpText: SynthHelp.text(for: AUParameterAddress(address.rawValue)))
+                .frame(width: width)
+        }
+    }
+
+    private var effectsPanel: some View {
+        Panel(title: "Effects  ·  Chorus → Delay", accent: Palette.fxAccent) {
+            HStack(alignment: .top, spacing: 0) {
+                Knob("Cho Mix", SynthParamChorusMix, model,
+                     accent: Palette.fxAccent).frame(maxWidth: .infinity)
+                fxDivision("Cho Sync", SynthParamChorusRate)
+                    .frame(maxWidth: .infinity)
+                Knob("Cho Depth", SynthParamChorusDepth, model,
+                     accent: Palette.fxAccent).frame(maxWidth: .infinity)
+                Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1, height: 70)
+                    .padding(.horizontal, 8)
+                Knob("Dly Mix", SynthParamDelayMix, model,
+                     accent: Palette.fxAccent).frame(maxWidth: .infinity)
+                fxDivision("Dly Sync", SynthParamDelayTime)
+                    .frame(maxWidth: .infinity)
+                Knob("Feedback", SynthParamDelayFeedback, model,
+                     accent: Palette.fxAccent).frame(maxWidth: .infinity)
+                Knob("Tone", SynthParamDelayTone, model,
+                     accent: Palette.fxAccent).frame(maxWidth: .infinity)
+                Knob("PingPong", SynthParamDelayPingPong, model,
+                     accent: Palette.fxAccent).frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func fxDivision(_ title: String, _ address: SynthParam) -> some View {
+        VStack(alignment: .center, spacing: 3) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .tracking(0.5)
+                .foregroundColor(Palette.engrave)
+                .lineLimit(1)
+            Dropdown(address, SynthParameters.syncDivisionStrings, model,
+                     accent: Palette.fxAccent,
+                     helpText: SynthHelp.text(for: AUParameterAddress(address.rawValue)))
+                .frame(width: 58)
         }
     }
 

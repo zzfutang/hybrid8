@@ -34,6 +34,8 @@ enum Palette {
     static let velAccent    = Color(red: 0.93, green: 0.45, blue: 0.55)  // rose
     static let mixerAccent  = Color(red: 0.72, green: 0.74, blue: 0.80)  // silver
     static let wtAccent     = Color(red: 0.60, green: 0.52, blue: 0.92)  // violet
+    static let arpAccent    = Color(red: 0.95, green: 0.78, blue: 0.32)  // gold
+    static let fxAccent     = Color(red: 0.42, green: 0.74, blue: 0.96)  // sky blue
 }
 
 // MARK: - Rotary knob
@@ -74,10 +76,10 @@ struct Knob: View {
     }
 
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 2) {
             Text(title.uppercased())
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .tracking(0.6)
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .tracking(0.5)
                 .foregroundColor(Palette.engrave)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -85,29 +87,29 @@ struct Knob: View {
             ZStack {
                 KnobTicks()
                     .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                    .frame(width: 62, height: 62)
+                    .frame(width: 44, height: 44)
 
                 KnobArc(fraction: 1)
-                    .stroke(Palette.track, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .frame(width: 54, height: 54)
+                    .stroke(Palette.track, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .frame(width: 38, height: 38)
                 KnobArc(fraction: normFor(value))
-                    .stroke(accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                    .frame(width: 54, height: 54)
-                    .shadow(color: accent.opacity(0.6), radius: 3)
+                    .stroke(accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .frame(width: 38, height: 38)
+                    .shadow(color: accent.opacity(0.6), radius: 2)
 
                 // Cap
                 Circle()
                     .fill(LinearGradient(colors: [Palette.capTop, Palette.capBottom],
                                          startPoint: .top, endPoint: .bottom))
-                    .frame(width: 42, height: 42)
+                    .frame(width: 30, height: 30)
                     .overlay(Circle().stroke(Color.black.opacity(0.6), lineWidth: 1))
                     .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
 
                 KnobPointer(norm: normFor(value))
-                    .stroke(accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .frame(width: 38, height: 38)
+                    .stroke(accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .frame(width: 27, height: 27)
             }
-            .frame(width: 66, height: 66)
+            .frame(width: 46, height: 46)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -123,11 +125,11 @@ struct Knob: View {
             )
 
             Text(displayString)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundColor(Palette.lcd)
                 .lineLimit(1)
         }
-        .frame(width: 72)
+        .frame(width: 52)
         .onHover { hovering in
             let h = SynthHelp.text(for: AUParameterAddress(addr.rawValue))
             if hovering { help.set(h) } else { help.clear(ifMatches: h) }

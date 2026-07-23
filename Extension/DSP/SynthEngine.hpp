@@ -11,6 +11,7 @@
 #include "Voice.hpp"
 #include "LFO.hpp"
 #include "Params.hpp"
+#include "Effects.hpp"
 #include "../SynthParameters.h"
 
 namespace synth {
@@ -83,6 +84,20 @@ public:
             store_[SynthParamMod1Dest   + s * 3].store(0.0f);
             store_[SynthParamMod1Amount + s * 3].store(0.0f);
         }
+        store_[SynthParamArpOn].store(0.0f);
+        store_[SynthParamArpMode].store(0.0f);      // Up
+        store_[SynthParamArpOctaves].store(1.0f);
+        store_[SynthParamArpRate].store(SYNTH_SYNC_DEFAULT_ARP);
+        store_[SynthParamArpGate].store(0.5f);
+        store_[SynthParamArpHold].store(0.0f);
+        store_[SynthParamChorusMix].store(0.0f);
+        store_[SynthParamChorusRate].store(SYNTH_SYNC_DEFAULT_CHORUS);
+        store_[SynthParamChorusDepth].store(0.35f);
+        store_[SynthParamDelayMix].store(0.0f);
+        store_[SynthParamDelayTime].store(SYNTH_SYNC_DEFAULT_DELAY);
+        store_[SynthParamDelayFeedback].store(0.35f);
+        store_[SynthParamDelayTone].store(0.65f);
+        store_[SynthParamDelayPingPong].store(1.0f);
 
         // Build the wavetable library up front (off the audio thread) so the
         // first note never triggers generation in the render callback.
@@ -93,6 +108,7 @@ public:
         sampleRate_ = sr;
         lfo_.setSampleRate(sr);
         lfo2_.setSampleRate(sr);
+        effects_.setup(sr);
         for (int i = 0; i < kNumVoices; ++i) {
             voices_[i].setSampleRate(sr);
             voices_[i].seed(0x1234ULL + 0x9e37U * (i + 1));
@@ -112,6 +128,10 @@ public:
         snapSmoothers();
     }
 
+    void setTempo(double bpm) {
+        tempoBPM_ = std::min(400.0, std::max(20.0, bpm));
+    }
+
     // --- Parameter access (thread-safe) ------------------------------------
     void setParameter(uint64_t address, float value) {
         if (address < SynthParamCount) store_[address].store(value, std::memory_order_relaxed);
@@ -122,9 +142,20 @@ public:
     }
 
     // --- MIDI --------------------------------------------------------------
+    // Public note in/out: when the arpeggiator is on, incoming keys feed the
+    // arp's held-note set instead of playing directly; the arp clock (advanced
+    // in render) triggers the voices.
     void noteOn(int note, int velocity) {
         if (velocity == 0) { noteOff(note); return; }
+        if (store_[SynthParamArpOn].load() >= 0.5f) { arpKeyDown(note, velocity); return; }
+        directNoteOn(note, velocity);
+    }
+    void noteOff(int note) {
+        if (store_[SynthParamArpOn].load() >= 0.5f) { arpKeyUp(note); return; }
+        directNoteOff(note);
+    }
 
+    void directNoteOn(int note, int velocity) {
         int maxVoices = clampInt(store_[SynthParamVoiceCount].load(), 1, kNumVoices);
         bool legato = (store_[SynthParamLegato].load() >= 0.5f) && (maxVoices == 1);
 
@@ -158,7 +189,7 @@ public:
         v.noteOn(note, velocity / 127.0f, phaseSpread, startPitch);
     }
 
-    void noteOff(int note) {
+    void directNoteOff(int note) {
         removeHeld(note);
         int maxVoices = clampInt(store_[SynthParamVoiceCount].load(), 1, kNumVoices);
         bool legato = (store_[SynthParamLegato].load() >= 0.5f) && (maxVoices == 1);
@@ -182,8 +213,39 @@ public:
         }
     }
 
-    void allNotesOff() { heldCount_ = 0; for (auto& v : voices_) v.noteOff(); }
-    void allSoundOff() { heldCount_ = 0; for (auto& v : voices_) v.noteOff(); }
+    void allNotesOff() { heldCount_ = 0; arpClear(); for (auto& v : voices_) v.noteOff(); }   // CC123
+    void allSoundOff() {
+        heldCount_ = 0;
+        arpClear();
+        for (auto& v : voices_) v.silence();
+        effects_.reset(); // CC120 / host reset must also kill effect tails
+    }
+
+    // ---- Arpeggiator -----------------------------------------------------
+    void arpClear() {
+        arpCount_ = 0; arpPhysCount_ = 0;
+        for (bool& b : arpPhysDown_) b = false;
+        arpPhase_ = 0.0; arpStep_ = 0; arpGateOpen_ = false;
+        if (arpCurNote_ >= 0) { directNoteOff(arpCurNote_); arpCurNote_ = -1; }
+    }
+
+    void arpKeyDown(int note, int velocity) {
+        // Latch: when Hold is on and every key had been released, the next key
+        // press starts a fresh chord rather than adding to the latched one.
+        bool hold = store_[SynthParamArpHold].load() >= 0.5f;
+        if (hold && arpPhysCount_ == 0) arpCount_ = 0;
+        if (note >= 0 && note < 128 && !arpPhysDown_[note]) { arpPhysDown_[note] = true; ++arpPhysCount_; }
+        arpInsert(note, velocity);
+        // First note of a new chord: fire on the next clock tick immediately.
+        if (arpCount_ == 1) { arpPhase_ = 1.0; arpStep_ = 0; }
+    }
+
+    void arpKeyUp(int note) {
+        if (note >= 0 && note < 128 && arpPhysDown_[note]) {
+            arpPhysDown_[note] = false; if (arpPhysCount_ > 0) --arpPhysCount_;
+        }
+        if (store_[SynthParamArpHold].load() < 0.5f) arpRemove(note);
+    }
 
     void modWheel(float v)   { modWheel_.store(clampf(v, 0.0f, 1.0f), std::memory_order_relaxed); }
     void aftertouch(float v) { aftertouch_.store(clampf(v, 0.0f, 1.0f), std::memory_order_relaxed); }
@@ -262,6 +324,16 @@ public:
         lfo_.setRate(p.lfoRate);
         lfo2_.setWave(static_cast<LFOWave>(clampInt(store_[SynthParamLFO2Waveform].load(), 0, 2)));
         lfo2_.setRate(store_[SynthParamLFO2Rate].load());
+        const double chorusSeconds = syncSeconds(store_[SynthParamChorusRate].load());
+        const double delaySeconds = syncSeconds(store_[SynthParamDelayTime].load());
+        effects_.setParams(store_[SynthParamChorusMix].load(),
+                           static_cast<float>(1.0 / chorusSeconds),
+                           store_[SynthParamChorusDepth].load(),
+                           store_[SynthParamDelayMix].load(),
+                           static_cast<float>(delaySeconds),
+                           store_[SynthParamDelayFeedback].load(),
+                           store_[SynthParamDelayTone].load(),
+                           store_[SynthParamDelayPingPong].load());
 
         // Smoothed continuous params: set targets, ramp per sample.
         cutoffSmoother_.setTarget(store_[SynthParamFilterCutoff].load());
@@ -280,7 +352,22 @@ public:
         // Update envelope times on active voices once per block.
         for (auto& v : voices_) v.updateEnvelopes(p);
 
+        // Arpeggiator settings for this block.
+        bool   arpOn   = store_[SynthParamArpOn].load() >= 0.5f;
+        int    arpMode = clampInt(store_[SynthParamArpMode].load(), 0, 3);
+        int    arpOct  = clampInt(store_[SynthParamArpOctaves].load(), 1, 4);
+        double arpStepInc = 1.0 / (syncSeconds(store_[SynthParamArpRate].load()) * sampleRate_);
+        double arpGateFrac = clampf(store_[SynthParamArpGate].load(), 0.05f, 1.0f);
+        if (arpOn != arpWasOn_) {                       // arp switched on/off
+            arpWasOn_ = arpOn;
+            if (arpCurNote_ >= 0) { directNoteOff(arpCurNote_); arpCurNote_ = -1; }
+            arpPhase_ = (arpOn && arpCount_ > 0) ? 1.0 : 0.0;   // fire at once if notes held
+            arpStep_ = 0; arpGateOpen_ = false;
+            if (!arpOn) { arpCount_ = 0; arpPhysCount_ = 0; for (bool& b : arpPhysDown_) b = false; }
+        }
+
         for (int n = 0; n < frames; ++n) {
+            if (arpOn) arpTick(arpStepInc, arpGateFrac, arpMode, arpOct);
             p.cutoff     = cutoffSmoother_.next();
             p.resonance  = resoSmoother_.next();
             p.pulseWidth = pwSmoother_.next();
@@ -302,9 +389,9 @@ public:
                 if (v.isActive()) mix += v.render(p, lfoVal, lfo2Val);
             }
             // Head-room scaling for 8 stacked voices, then soft ceiling.
-            float out = softClip(mix * 0.22f) * gain;
-            outL[n] = out;
-            if (outR != outL) outR[n] = out;
+            StereoSample fx = effects_.process(mix * 0.22f);
+            outL[n] = softClip(fx.l) * gain;
+            if (outR != outL) outR[n] = softClip(fx.r) * gain;
         }
     }
 
@@ -348,6 +435,64 @@ private:
         }
     }
 
+    // ---- Arpeggiator internals -------------------------------------------
+    void arpInsert(int note, int vel) {
+        for (int i = 0; i < arpCount_; ++i) {           // already present -> refresh velocity
+            if (arpNotes_[i] == note) { arpVels_[i] = vel; return; }
+        }
+        if (arpCount_ >= kArpMax) return;
+        int i = arpCount_ - 1;                           // keep ascending order
+        while (i >= 0 && arpNotes_[i] > note) { arpNotes_[i + 1] = arpNotes_[i]; arpVels_[i + 1] = arpVels_[i]; --i; }
+        arpNotes_[i + 1] = note; arpVels_[i + 1] = vel; ++arpCount_;
+    }
+    void arpRemove(int note) {
+        for (int i = 0; i < arpCount_; ++i) {
+            if (arpNotes_[i] == note) {
+                for (int j = i; j < arpCount_ - 1; ++j) { arpNotes_[j] = arpNotes_[j + 1]; arpVels_[j] = arpVels_[j + 1]; }
+                --arpCount_;
+                return;
+            }
+        }
+    }
+    // Position in the expanded (note x octave) list for the current step.
+    int arpPatternIndex(int mode, int L) {
+        if (L <= 1) return 0;
+        long s = arpStep_;
+        switch (mode) {
+            case 1: return (int)(L - 1 - (s % L));                    // Down
+            case 2: { long period = 2 * L - 2;                       // Up/Down (ping-pong)
+                      long m = s % period; return (int)((m < L) ? m : (period - m)); }
+            case 3: { arpRng_ = arpRng_ * 1664525u + 1013904223u;    // Random
+                      return (int)((arpRng_ >> 9) % (uint32_t)L); }
+            default: return (int)(s % L);                            // Up
+        }
+    }
+    inline void arpTick(double stepInc, double gateFrac, int mode, int octaves) {
+        if (arpCount_ == 0) {                            // nothing held
+            if (arpCurNote_ >= 0) { directNoteOff(arpCurNote_); arpCurNote_ = -1; }
+            arpGateOpen_ = false;
+            return;
+        }
+        // Close the gate partway through the step (staccato).
+        if (arpGateOpen_ && arpPhase_ >= gateFrac) {
+            if (arpCurNote_ >= 0) directNoteOff(arpCurNote_);
+            arpGateOpen_ = false;
+        }
+        arpPhase_ += stepInc;
+        if (arpPhase_ >= 1.0) {                          // next step
+            arpPhase_ -= 1.0;
+            if (arpCurNote_ >= 0) directNoteOff(arpCurNote_);
+            int L = arpCount_ * octaves;
+            int idx = arpPatternIndex(mode, L);
+            int note = arpNotes_[idx % arpCount_] + 12 * (idx / arpCount_);
+            note = std::min(127, std::max(0, note));
+            directNoteOn(note, arpVels_[idx % arpCount_]);
+            arpCurNote_ = note;
+            arpGateOpen_ = true;
+            ++arpStep_;
+        }
+    }
+
     void snapSmoothers() {
         cutoffSmoother_.snap(store_[SynthParamFilterCutoff].load());
         resoSmoother_.snap(store_[SynthParamFilterResonance].load());
@@ -363,10 +508,24 @@ private:
         slopeSmoother_.snap(store_[SynthParamFilterSlope].load());
     }
 
+    double syncSeconds(float rawIndex) const {
+        // Duration of each division in quarter-note beats.
+        static constexpr double beats[SYNTH_SYNC_DIVISION_COUNT] = {
+            4.0, 3.0, 2.0, 4.0 / 3.0,
+            1.5, 1.0, 2.0 / 3.0,
+            0.75, 0.5, 1.0 / 3.0,
+            0.375, 0.25, 1.0 / 6.0, 0.125
+        };
+        const int index = clampInt(rawIndex, 0, SYNTH_SYNC_DIVISION_COUNT - 1);
+        return beats[index] * 60.0 / tempoBPM_;
+    }
+
     double sampleRate_ = 44100.0;
+    double tempoBPM_ = 120.0;
     std::array<Voice, kNumVoices> voices_;
     LFO lfo_;
     LFO lfo2_;
+    GlobalEffects effects_;
     std::atomic<float> modWheel_{0.0f};
     std::atomic<float> aftertouch_{0.0f};
 
@@ -379,6 +538,20 @@ private:
     bool  hasLastNote_ = false;
     int   heldStack_[128] = {0};
     int   heldCount_ = 0;
+
+    // Arpeggiator state.
+    static constexpr int kArpMax = 16;
+    int      arpNotes_[kArpMax] = {0};
+    int      arpVels_[kArpMax]  = {0};
+    int      arpCount_ = 0;
+    bool     arpPhysDown_[128] = {false};
+    int      arpPhysCount_ = 0;
+    double   arpPhase_ = 0.0;
+    long     arpStep_  = 0;
+    int      arpCurNote_ = -1;
+    bool     arpGateOpen_ = false;
+    bool     arpWasOn_ = false;
+    uint32_t arpRng_ = 0x9e3779b9u;
 
     std::atomic<float> store_[SynthParamCount];
 };

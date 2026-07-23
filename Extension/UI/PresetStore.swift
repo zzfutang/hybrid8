@@ -11,6 +11,7 @@ import AudioToolbox
 struct StoredPreset: Codable {
     var name: String
     var values: [String: Float]   // keyed by String(AUParameterAddress)
+    var formatVersion: Int?
 }
 
 final class PresetStore: ObservableObject {
@@ -68,7 +69,14 @@ final class PresetStore: ObservableObject {
         guard userPresets.indices.contains(index) else { return }
         let preset = userPresets[index]
         var s = defaults
-        for (ks, v) in preset.values { if let a = AUParameterAddress(ks) { s[a] = v } }
+        for (ks, storedValue) in preset.values {
+            guard let address = AUParameterAddress(ks) else { continue }
+            var value = storedValue
+            if preset.formatVersion == nil {
+                value = migrateLegacyTiming(address: address, value: value)
+            }
+            s[address] = value
+        }
         model.applyState(s)
         currentName = preset.name
         currentIsUser = true
@@ -92,7 +100,7 @@ final class PresetStore: ObservableObject {
         guard !trimmed.isEmpty else { return }
         var dict = [String: Float]()
         for (a, v) in model.captureState() { dict[String(a)] = v }
-        let preset = StoredPreset(name: trimmed, values: dict)
+        let preset = StoredPreset(name: trimmed, values: dict, formatVersion: 2)
         if let data = try? JSONEncoder().encode(preset) {
             try? data.write(to: fileURL(for: trimmed))
         }
@@ -139,5 +147,19 @@ final class PresetStore: ObservableObject {
             }
         }
         userPresets = list.sorted { $0.name.lowercased() < $1.name.lowercased() }
+    }
+
+    private func migrateLegacyTiming(address: AUParameterAddress, value: Float) -> Float {
+        // Version 1 stored arp/chorus as Hz and delay as seconds. Convert at the
+        // standalone fallback tempo (120 BPM) to retain the closest old sound.
+        if address == AUParameterAddress(SynthParamArpRate.rawValue)
+            || address == AUParameterAddress(SynthParamChorusRate.rawValue) {
+            let beats = 2.0 / Double(max(value, 0.0001))
+            return SynthParameters.nearestSyncDivision(beats: beats)
+        }
+        if address == AUParameterAddress(SynthParamDelayTime.rawValue) {
+            return SynthParameters.nearestSyncDivision(beats: Double(value) * 2.0)
+        }
+        return value
     }
 }

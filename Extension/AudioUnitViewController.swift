@@ -13,8 +13,8 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
     var audioUnit: AUAudioUnit?
 
     public override func loadView() {
-        self.view = NSView(frame: NSRect(x: 0, y: 0, width: 1040, height: 904))
-        self.preferredContentSize = NSSize(width: 1040, height: 904)
+        self.view = NSView(frame: NSRect(x: 0, y: 0, width: 1040, height: 890))
+        self.preferredContentSize = NSSize(width: 1040, height: 890)
     }
 
     public override func viewDidLoad() {

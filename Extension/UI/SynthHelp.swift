@@ -67,6 +67,22 @@ enum SynthHelp {
         a(SynthParamLFO2Waveform):    "LFO 2 shape (sine, square, saw). LFO 2 is a mod-matrix source only.",
         a(SynthParamLFO2Rate):        "LFO 2 speed. Route it to any destination in the Mod Matrix.",
 
+        a(SynthParamArpOn):           "Arpeggiator on/off. Held notes are played one at a time by the arp clock.",
+        a(SynthParamArpMode):         "Arp direction — Up, Down, Up/Down (ping-pong), or Random.",
+        a(SynthParamArpOctaves):      "Arp octave range — repeats the held chord across 1–4 octaves.",
+        a(SynthParamArpRate):         "Arp step division synced to the host tempo; T means triplet and a dot means dotted.",
+        a(SynthParamArpGate):         "Arp note length — fraction of each step the note sounds (staccato ↔ legato).",
+        a(SynthParamArpHold):         "Latch: keep arpeggiating after you release the keys. Press new keys to replace.",
+
+        a(SynthParamChorusMix):       "Stereo chorus wet/dry mix.",
+        a(SynthParamChorusRate):      "Chorus modulation cycle synced to the host tempo.",
+        a(SynthParamChorusDepth):     "Chorus delay-modulation depth and stereo spread.",
+        a(SynthParamDelayMix):        "Stereo delay wet/dry mix.",
+        a(SynthParamDelayTime):       "Delay division synced to the host tempo. Changes crossfade without pitch jumps.",
+        a(SynthParamDelayFeedback):   "Echo regeneration; high values produce long, saturated tails.",
+        a(SynthParamDelayTone):       "Brightness of successive echoes.",
+        a(SynthParamDelayPingPong):   "Stereo cross-feedback: 0 = straight, 1 = full ping-pong.",
+
         a(SynthParamAnalogAmount):   "Analog character — per-voice drift, detune and filter saturation.",
         a(SynthParamMasterGain):     "Overall output level.",
         a(SynthParamPitchBendRange): "Pitch-bend wheel range, in semitones.",

@@ -55,6 +55,7 @@
 		16FD64C1B93199CB47D8C0D1 /* ADSR.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ADSR.hpp; sourceTree = "<group>"; };
 		17E900F2930F9791B5F6CA56 /* Params.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Params.hpp; sourceTree = "<group>"; };
 		23D32892482F96EDA9B11D12 /* SynthParameters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SynthParameters.h; sourceTree = "<group>"; };
+		241A26C15C7C5613ACF94963 /* Effects.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Effects.hpp; sourceTree = "<group>"; };
 		25CBC5D8B70379456237CDEA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		2791E23540FEE283AA6B39E1 /* Filter.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Filter.hpp; sourceTree = "<group>"; };
 		28045EECD214931C4F493FF4 /* SynthHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthHelp.swift; sourceTree = "<group>"; };
@@ -91,6 +92,7 @@
 			children = (
 				16FD64C1B93199CB47D8C0D1 /* ADSR.hpp */,
 				35CF1CFEABA565BC7BDFA7A1 /* Decimator.hpp */,
+				241A26C15C7C5613ACF94963 /* Effects.hpp */,
 				2791E23540FEE283AA6B39E1 /* Filter.hpp */,
 				5EA7533D68274288E8D74CB5 /* LFO.hpp */,
 				6F1B6179EAB5CDDA2B814BA6 /* Oscillator.hpp */,

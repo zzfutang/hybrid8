@@ -14,7 +14,7 @@ struct Hybrid8App: App {
     var body: some Scene {
         WindowGroup("Hybrid 8") {
             ContentView(host: host)
-                .frame(minWidth: 1060, minHeight: 1060)
+                .frame(minWidth: 1060, minHeight: 1046)
         }
         .windowResizability(.contentSize)
     }

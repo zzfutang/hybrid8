@@ -553,6 +553,8 @@ enum FactoryPresets {
             (SynthParamAmpSustain, 0.0), (SynthParamAmpRelease, 0.15),
             (SynthParamVelToCutoff, 0.4), (SynthParamAnalogAmount, 0.25),
             (SynthParamMasterGain, 0.72),
+            (SynthParamArpOn, 1), (SynthParamArpMode, 0), (SynthParamArpOctaves, 2),
+            (SynthParamArpRate, 11), (SynthParamArpGate, 0.5),
         ], mods: [(ModSrcModWheel, ModDstCutoff, 0.4)])),
 
         FactoryPreset(name: "Arp Square", values: make([
@@ -575,6 +577,8 @@ enum FactoryPresets {
             (SynthParamAmpSustain, 0.0), (SynthParamAmpRelease, 0.25),
             (SynthParamVelToVolume, 1.0), (SynthParamVelToCutoff, 0.4),
             (SynthParamMasterGain, 0.7),
+            (SynthParamArpOn, 1), (SynthParamArpMode, 2), (SynthParamArpOctaves, 2),
+            (SynthParamArpRate, 11), (SynthParamArpGate, 0.4),
         ])),
 
         FactoryPreset(name: "Arp Sync", values: make([
@@ -598,6 +602,8 @@ enum FactoryPresets {
             (SynthParamAmpSustain, 0.0), (SynthParamAmpRelease, 0.12),
             (SynthParamVelToCutoff, 0.35), (SynthParamAnalogAmount, 0.25),
             (SynthParamMasterGain, 0.72),
+            (SynthParamArpOn, 1), (SynthParamArpMode, 0), (SynthParamArpOctaves, 3),
+            (SynthParamArpRate, 12), (SynthParamArpGate, 0.4),
         ], mods: [(ModSrcModWheel, ModDstCutoff, 0.4)])),
 
         FactoryPreset(name: "Arp Digital", values: make([

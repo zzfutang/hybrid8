@@ -38,7 +38,8 @@
     return (AUValue)_engine.getParameter((uint64_t)address);
 }
 
-- (AUInternalRenderBlock)internalRenderBlock {
+- (AUInternalRenderBlock)internalRenderBlockWithMusicalContext:
+    (AUHostMusicalContextBlock)musicalContext {
     // Capture a raw pointer to the C++ engine so the audio thread never does
     // ARC retain/release or ObjC message sends.
     synth::SynthEngine *engine = &_engine;
@@ -58,6 +59,17 @@
         if (outL == NULL) {
             return kAudioUnitErr_InvalidParameter;
         }
+
+        // Query the host once per render quantum. The block is explicitly
+        // supplied by AU hosts for real-time use; standalone falls back to 120.
+        double tempo = 120.0;
+        if (musicalContext != nil) {
+            double hostTempo = tempo;
+            if (musicalContext(&hostTempo, NULL, NULL, NULL, NULL, NULL)) {
+                tempo = hostTempo;
+            }
+        }
+        engine->setTempo(tempo);
 
         // --- Walk the event list, rendering the audio between events --------
         AUEventSampleTime now = (AUEventSampleTime)timestamp->mSampleTime;

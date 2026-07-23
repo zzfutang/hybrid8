@@ -8,6 +8,30 @@ import AudioToolbox
 
 enum SynthParameters {
 
+    static let syncDivisionStrings = [
+        "1/1", "1/2.", "1/2", "1/2T",
+        "1/4.", "1/4", "1/4T",
+        "1/8.", "1/8", "1/8T",
+        "1/16.", "1/16", "1/16T", "1/32"
+    ]
+
+    // Duration of each indexed division in quarter-note beats.
+    static let syncDivisionBeats: [Double] = [
+        4, 3, 2, 4.0 / 3.0,
+        1.5, 1, 2.0 / 3.0,
+        0.75, 0.5, 1.0 / 3.0,
+        0.375, 0.25, 1.0 / 6.0, 0.125
+    ]
+
+    static func nearestSyncDivision(beats: Double) -> Float {
+        let target = max(beats, 0.0001)
+        let index = syncDivisionBeats.indices.min {
+            abs(log(syncDivisionBeats[$0] / target))
+                < abs(log(syncDivisionBeats[$1] / target))
+        } ?? 0
+        return Float(index)
+    }
+
     private static let readWrite: AudioUnitParameterOptions =
         [.flag_IsReadable, .flag_IsWritable]
     private static let readWriteLog: AudioUnitParameterOptions =
@@ -213,6 +237,49 @@ enum SynthParameters {
                   min: 0, max: 1, value: 0),
         ])
 
+        // MARK: Arpeggiator
+        let arp = AUParameterTree.createGroup(
+            withIdentifier: "arp", name: "Arpeggiator", children: [
+            param(SynthParamArpOn, "arpOn", "Arp On",
+                  min: 0, max: 1, value: 0, unit: .indexed, strings: ["Off", "On"]),
+            param(SynthParamArpMode, "arpMode", "Arp Mode",
+                  min: 0, max: 3, value: 0, unit: .indexed,
+                  strings: ["Up", "Down", "Up/Down", "Random"]),
+            param(SynthParamArpOctaves, "arpOct", "Arp Octaves",
+                  min: 1, max: 4, value: 1, unit: .indexed,
+                  strings: ["1", "2", "3", "4"]),
+            param(SynthParamArpRate, "arpRate", "Arp Division",
+                  min: 0, max: 13, value: 11, unit: .indexed,
+                  strings: syncDivisionStrings),
+            param(SynthParamArpGate, "arpGate", "Arp Gate",
+                  min: 0.05, max: 1, value: 0.5),
+            param(SynthParamArpHold, "arpHold", "Arp Hold",
+                  min: 0, max: 1, value: 0, unit: .indexed, strings: ["Off", "On"]),
+        ])
+
+        // MARK: Effects
+        let effects = AUParameterTree.createGroup(
+            withIdentifier: "effects", name: "Effects", children: [
+            param(SynthParamChorusMix, "chorusMix", "Chorus Mix",
+                  min: 0, max: 1, value: 0),
+            param(SynthParamChorusRate, "chorusRate", "Chorus Division",
+                  min: 0, max: 13, value: 2, unit: .indexed,
+                  strings: syncDivisionStrings),
+            param(SynthParamChorusDepth, "chorusDepth", "Chorus Depth",
+                  min: 0, max: 1, value: 0.35),
+            param(SynthParamDelayMix, "delayMix", "Delay Mix",
+                  min: 0, max: 1, value: 0),
+            param(SynthParamDelayTime, "delayTime", "Delay Division",
+                  min: 0, max: 13, value: 7, unit: .indexed,
+                  strings: syncDivisionStrings),
+            param(SynthParamDelayFeedback, "delayFeedback", "Delay Feedback",
+                  min: 0, max: 0.94, value: 0.35),
+            param(SynthParamDelayTone, "delayTone", "Delay Tone",
+                  min: 0, max: 1, value: 0.65),
+            param(SynthParamDelayPingPong, "delayPingPong", "Delay Ping-Pong",
+                  min: 0, max: 1, value: 1),
+        ])
+
         // MARK: Global
         let global = AUParameterTree.createGroup(
             withIdentifier: "global", name: "Global", children: [
@@ -236,6 +303,7 @@ enum SynthParameters {
         ])
 
         return AUParameterTree.createTree(withChildren:
-            [osc, osc2, mixer, filter, ampEnv, filtEnv, lfo, matrix, velocity, global])
+            [osc, osc2, mixer, filter, ampEnv, filtEnv, lfo, matrix, arp,
+             effects, velocity, global])
     }
 }

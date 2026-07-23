@@ -1,9 +1,14 @@
 //
 //  Decimator.hpp
-//  2x -> 1x decimation filter (4th-order Butterworth low-pass, two biquads).
-//  Used to run the oscillator/cross-mod/sync path at double rate and then
-//  band-limit before dropping back to the host rate, which substantially
-//  reduces aliasing from hard sync and audio-rate FM.
+//  2x -> 1x decimation filter. The oscillator / cross-mod / hard-sync path runs
+//  at double rate; this low-pass band-limits before dropping to the host rate,
+//  removing the images that sync and audio-rate FM push above the host Nyquist.
+//
+//  It is an 11-tap linear-phase half-band FIR (Hamming-windowed sinc). Unlike a
+//  resonant IIR (which overshoots and rings at every oscillator discontinuity —
+//  audible as a per-cycle click on bright tones) a short windowed-sinc FIR has
+//  only a tiny, symmetric ripple, yet gives a real stopband (~-45 dB) above the
+//  fold instead of the mere -6 dB of a 3-tap binomial kernel.
 //
 
 #pragma once
@@ -11,61 +16,36 @@
 
 namespace synth {
 
-// RBJ biquad low-pass, transposed direct-form II (double state for stability).
-class Biquad {
-public:
-    void setLowpass(double fc, double sampleRate, double q) {
-        double w0 = kTwoPi * fc / sampleRate;
-        double cs = std::cos(w0);
-        double sn = std::sin(w0);
-        double alpha = sn / (2.0 * q);
-        double b0 = (1.0 - cs) * 0.5;
-        double b1 = 1.0 - cs;
-        double b2 = (1.0 - cs) * 0.5;
-        double a0 = 1.0 + alpha;
-        double a1 = -2.0 * cs;
-        double a2 = 1.0 - alpha;
-        b0_ = b0 / a0; b1_ = b1 / a0; b2_ = b2 / a0;
-        a1_ = a1 / a0; a2_ = a2 / a0;
-    }
-    void reset() { z1_ = 0.0; z2_ = 0.0; }
-
-    inline float process(float x) {
-        double y = b0_ * x + z1_;
-        z1_ = b1_ * x - a1_ * y + z2_;
-        z2_ = b2_ * x - a2_ * y;
-        return static_cast<float>(y);
-    }
-
-private:
-    double b0_ = 1.0, b1_ = 0.0, b2_ = 0.0, a1_ = 0.0, a2_ = 0.0;
-    double z1_ = 0.0, z2_ = 0.0;
-};
-
-// 2x -> 1x decimator. Uses an all-positive (ring-free) FIR half-band-style
-// kernel instead of a resonant IIR: a Butterworth/elliptic decimator overshoots
-// at every oscillator discontinuity, which is audible as a per-cycle click on
-// bright waveforms. This kernel never overshoots. The base oscillators are
-// already band-limited by PolyBLEP; the decimator's remaining job is to knock
-// down the extra images from sync / FM before dropping to the host rate.
 class Decimator2x {
 public:
     void setup(double /*baseSampleRate*/) {}
-    void reset() { z1_ = z2_ = 0.0f; }
+    void reset() { for (int i = 0; i < K; ++i) z_[i] = 0.0f; pos_ = 0; }
 
     // Feed both oversampled sub-samples per host sample; the value returned
-    // after the 2nd feed is the decimated output. Kernel is a 3-tap binomial
-    // low-pass (1 2 1)/4 — monotonic step response (no ringing / overshoot),
-    // a null at the 2x Nyquist, and only gentle high-end roll-off so bright
-    // tones stay bright.
+    // after the 2nd feed is the decimated host-rate output.
     inline float process(float x) {
-        float y = (x + 2.0f * z1_ + z2_) * 0.25f;
-        z2_ = z1_; z1_ = x;
-        return y;
+        z_[pos_] = x;
+        float acc = 0.0f;
+        int idx = pos_;
+        for (int k = 0; k < K; ++k) {
+            acc += h_[k] * z_[idx];
+            idx = (idx == 0) ? K - 1 : idx - 1;
+        }
+        pos_ = (pos_ + 1 == K) ? 0 : pos_ + 1;
+        return acc;
     }
 
 private:
-    float z1_ = 0.0f, z2_ = 0.0f;
+    static constexpr int K = 11;
+    // Half-band FIR: h[0]=0.5 centre, even taps zero, Hamming-windowed sinc,
+    // normalised to unity DC gain. Symmetric (linear phase).
+    static constexpr float h_[K] = {
+        0.005061f, 0.0f, -0.041966f, 0.0f, 0.288460f,
+        0.496890f,
+        0.288460f, 0.0f, -0.041966f, 0.0f, 0.005061f
+    };
+    float z_[K] = {0};
+    int   pos_ = 0;
 };
 
 } // namespace synth

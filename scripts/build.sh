@@ -24,14 +24,14 @@ CONFIG="${1:-Release}"
 
 echo "==> Building ($CONFIG)"
 xcodebuild \
-  -project Analog8.xcodeproj \
-  -scheme Analog8 \
+  -project Hybrid8.xcodeproj \
+  -scheme Hybrid8 \
   -configuration "$CONFIG" \
   -derivedDataPath build \
   CODE_SIGN_IDENTITY="-" \
   CODE_SIGN_STYLE=Manual \
   clean build
 
-APP="build/Build/Products/$CONFIG/Analog8.app"
+APP="build/Build/Products/$CONFIG/Hybrid8.app"
 echo "==> Built: $APP"
 ls -d "$APP"

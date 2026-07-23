@@ -122,9 +122,9 @@ public final class SynthAudioUnit: AUAudioUnit {
     }
 
     public override var internalRenderBlock: AUInternalRenderBlock {
-        kernel.internalRenderBlock()
+        kernel.internalRenderBlock(musicalContext: musicalContextBlock)
     }
 
-    // Report a modest tail so released voices are not cut off.
-    public override var tailTime: TimeInterval { 3.0 }
+    // Allow hosts to preserve long high-feedback delay tails.
+    public override var tailTime: TimeInterval { 45.0 }
 }

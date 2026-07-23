@@ -36,24 +36,27 @@ public:
         lastPhase_ = t;
         const double dt = phaseInc_;
         const double adt = dt < 0.0 ? -dt : dt; // |dt| for PolyBLEP width
-        // When through-zero FM drives the phase backwards the discontinuities
-        // flip sign, so the BLEP correction must flip with the direction.
-        const double s = (dt >= 0.0) ? 1.0 : -1.0;
+        // PolyBLEP is expressed in phase space and band-limits the waveform's
+        // fixed discontinuity at the cycle boundary. Running the phase backward
+        // (through-zero FM) already reverses the correction's temporal direction,
+        // so no sign flip is applied — flipping it would reinforce the step
+        // (driving reverse-running saw/pulse to +/-2 at the wrap) instead of
+        // smoothing it.
         float value = 0.0f;
 
         switch (wave_) {
             case OscWave::Saw: {
                 value = static_cast<float>(2.0 * t - 1.0);
-                value -= static_cast<float>(s) * polyBlep(t, adt);
+                value -= polyBlep(t, adt);
                 break;
             }
             case OscWave::Square:
             case OscWave::Pulse: {
                 const double w = (wave_ == OscWave::Square) ? 0.5 : pulseWidth_;
                 value = (t < w) ? 1.0f : -1.0f;
-                value += static_cast<float>(s) * polyBlep(t, adt);   // rising edge at 0
-                double tw = t - w; if (tw < 0.0) tw += 1.0;          // wrapped falling edge
-                value -= static_cast<float>(s) * polyBlep(tw, adt);
+                value += polyBlep(t, adt);                  // rising edge at 0
+                double tw = t - w; if (tw < 0.0) tw += 1.0; // wrapped falling edge
+                value -= polyBlep(tw, adt);
                 break;
             }
         }

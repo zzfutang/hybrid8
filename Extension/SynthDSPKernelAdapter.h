@@ -23,7 +23,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (AUValue)valueForParameter:(AUParameterAddress)address;
 
 /// The real-time render block handed to the AUAudioUnit.
-- (AUInternalRenderBlock)internalRenderBlock;
+- (AUInternalRenderBlock)internalRenderBlockWithMusicalContext:
+    (nullable AUHostMusicalContextBlock)musicalContext;
 
 @end
 
