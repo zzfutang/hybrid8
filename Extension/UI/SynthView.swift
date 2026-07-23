@@ -9,11 +9,17 @@ import SwiftUI
 import AudioToolbox
 
 struct SynthView: View {
+    // A wide hardware-panel aspect ratio gives the three synthesis columns and
+    // the arp/FX row enough horizontal room. The whole fascia still scales
+    // uniformly when a host supplies a smaller editor window.
+    private static let designSize = CGSize(width: 1360, height: 890)
+
     @ObservedObject var model: ParameterModel
     @StateObject private var presets: PresetStore
     @StateObject private var help = HelpModel()
     @State private var showingSave = false
     @State private var saveName = ""
+    @State private var lowerTab = 0
 
     init(model: ParameterModel) {
         _model = ObservedObject(wrappedValue: model)
@@ -21,6 +27,24 @@ struct SynthView: View {
     }
 
     var body: some View {
+        GeometryReader { geometry in
+            let widthScale = geometry.size.width / Self.designSize.width
+            let heightScale = geometry.size.height / Self.designSize.height
+            let scale = max(0.35, min(widthScale, heightScale))
+
+            ZStack {
+                fascia
+                    .frame(width: Self.designSize.width,
+                           height: Self.designSize.height)
+                    .scaleEffect(scale)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
+            .background(Palette.panelBottom)
+        }
+    }
+
+    private var fascia: some View {
         HStack(spacing: 0) {
             woodCheek
             panel
@@ -58,20 +82,20 @@ struct SynthView: View {
                     VStack(spacing: 10) {
                         ampEnvPanel.frame(height: 118)
                         filterEnvPanel.frame(height: 118)
-                        lfoPanel.frame(height: 244)
+                        lfoPanel.frame(height: 260)
                         Spacer(minLength: 0)
                     }
                     // Column 3 — Filter + Global (Vel Vol lives in Global)
                     VStack(spacing: 10) {
                         filterPanel.frame(height: 226)
-                        globalPanel.frame(height: 250)
+                        globalPanel.frame(height: 280)
                         Spacer(minLength: 0)
                     }
                 }
                 .frame(height: 516)
                 HStack(alignment: .top, spacing: 12) {
-                    arpPanel.frame(width: 420)
-                    effectsPanel.frame(maxWidth: .infinity)
+                    xModPanel.frame(width: 420)
+                    arpEffectsPanel.frame(maxWidth: .infinity)
                 }
                 .frame(height: 112)
                 modMatrixPanel.frame(height: 104)
@@ -261,12 +285,13 @@ struct SynthView: View {
                              model, accent: Palette.oscAccent)
         }) {
             VStack(alignment: .leading, spacing: 8) {
-                Selector("Octave", SynthParamOctave,
-                         ["-2", "-1", "0", "+1", "+2"], model, accent: Palette.oscAccent)
                 Selector("WT Table", SynthParamWavetable, ["Harm", "FM", "Choir", "Metal"],
                          model, accent: Palette.wtAccent)
                     .dimmed(!anyWT)
                 HStack(spacing: 0) {
+                    Knob("Octave", SynthParamOctave, model,
+                         accent: Palette.oscAccent, unit: "", integer: true)
+                        .frame(maxWidth: .infinity)
                     Knob("P.Width", SynthParamOscPulseWidth, model, accent: Palette.oscAccent)
                         .dimmed(isWT1).frame(maxWidth: .infinity)
                     Knob("Frame", SynthParamWTFrame, model, accent: Palette.wtAccent)
@@ -298,23 +323,15 @@ struct SynthView: View {
                              model, accent: Palette.osc2Accent)
         }) {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 10) {
-                    ToggleButton("Sync", SynthParamOsc2Sync, model, accent: Palette.osc2Accent)
-                        .dimmed(anyWT)
-                    ToggleButton("TZ", SynthParamOscCrossModTZ, model, accent: Palette.osc2Accent)
-                        .dimmed(anyWT)
-                    Spacer(minLength: 0)
-                }
-                Selector("Octave", SynthParamOsc2Octave,
-                         ["-2", "-1", "0", "+1", "+2"], model, accent: Palette.osc2Accent)
                 HStack(spacing: 0) {
+                    Knob("Octave", SynthParamOsc2Octave, model,
+                         accent: Palette.osc2Accent, unit: "", integer: true)
+                        .frame(maxWidth: .infinity)
                     Knob("Semi", SynthParamOsc2Semitone, model,
                          accent: Palette.osc2Accent, unit: "", integer: true).frame(maxWidth: .infinity)
                     Knob("Detune", SynthParamOsc2Detune, model, accent: Palette.osc2Accent, unit: "c").frame(maxWidth: .infinity)
                     Knob("P.Width", SynthParamOsc2PulseWidth, model, accent: Palette.osc2Accent)
                         .dimmed(isWT2).frame(maxWidth: .infinity)
-                    Knob("X-Mod", SynthParamOscCrossMod, model, accent: Palette.osc2Accent)
-                        .dimmed(anyWT).frame(maxWidth: .infinity)
                 }
             }
         }
@@ -400,7 +417,7 @@ struct SynthView: View {
                     Knob("Start", SynthParamGlideStart, model, accent: Palette.globalAccent, unit: "", integer: true).frame(maxWidth: .infinity)
                 }
                 HStack(spacing: 0) {
-                    Knob("Spread", SynthParamOscPhaseSpread, model, accent: Palette.globalAccent).frame(maxWidth: .infinity)
+                    Knob("Stereo", SynthParamStereoSpread, model, accent: Palette.globalAccent).frame(maxWidth: .infinity)
                     Knob("Analog", SynthParamAnalogAmount, model, accent: Palette.globalAccent).frame(maxWidth: .infinity)
                     Knob("Master", SynthParamMasterGain, model, accent: Palette.globalAccent).frame(maxWidth: .infinity)
                     Knob("Bend", SynthParamPitchBendRange, model, accent: Palette.globalAccent, unit: "st").frame(maxWidth: .infinity)
@@ -408,8 +425,8 @@ struct SynthView: View {
                 HStack(spacing: 0) {
                     // Vel -> Volume stays hardwired; Vel -> Cutoff/Reso/Drive
                     // are assigned in the Mod Matrix.
+                    Knob("Phase", SynthParamOscPhaseSpread, model, accent: Palette.globalAccent).frame(maxWidth: .infinity)
                     Knob("Vel Vol", SynthParamVelToVolume, model, accent: Palette.velAccent).frame(maxWidth: .infinity)
-                    Color.clear.frame(maxWidth: .infinity)
                     Color.clear.frame(maxWidth: .infinity)
                     Color.clear.frame(maxWidth: .infinity)
                 }
@@ -417,8 +434,74 @@ struct SynthView: View {
         }
     }
 
-    private var arpPanel: some View {
-        Panel(title: "Arpeggiator", accent: Palette.arpAccent) {
+    private var xModPanel: some View {
+        let w1 = Int((model.param(SynthParamOscWaveform)?.value ?? 0).rounded())
+        let w2 = Int((model.param(SynthParamOsc2Waveform)?.value ?? 0).rounded())
+        let anyWT = w1 == 3 || w2 == 3
+        return Panel(title: "X-MOD", accent: Palette.osc2Accent) {
+            HStack(alignment: .top, spacing: 8) {
+                ToggleButton("Sync", SynthParamOsc2Sync, model,
+                             accent: Palette.osc2Accent)
+                    .dimmed(anyWT)
+                ToggleButton("TZ", SynthParamOscCrossModTZ, model,
+                             accent: Palette.osc2Accent)
+                    .dimmed(anyWT)
+                Knob("Amount", SynthParamOscCrossMod, model,
+                     accent: Palette.osc2Accent)
+                    .dimmed(anyWT).frame(maxWidth: .infinity)
+                Knob("Env Pitch", SynthParamOsc2PitchEnv, model,
+                     accent: Palette.filtEnvAccent)
+                    .dimmed(anyWT).frame(maxWidth: .infinity)
+                Knob("LFO Amt", SynthParamLFOToCrossMod, model,
+                     accent: Palette.lfoAccent)
+                    .dimmed(anyWT).frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var arpEffectsPanel: some View {
+        Panel(title: lowerTab == 0 ? "Arpeggiator" : "Effects  ·  Chorus → Delay",
+              accent: lowerTab == 0 ? Palette.arpAccent : Palette.fxAccent,
+              trailing: {
+            HStack(spacing: 4) {
+                lowerTabButton("ARP", index: 0, accent: Palette.arpAccent)
+                lowerTabButton("EFFECTS", index: 1, accent: Palette.fxAccent)
+            }
+        }) {
+            if lowerTab == 0 {
+                arpControls
+            } else {
+                effectsControls
+            }
+        }
+    }
+
+    private func lowerTabButton(_ title: String, index: Int,
+                                accent: Color) -> some View {
+        let selected = lowerTab == index
+        return Button {
+            lowerTab = index
+        } label: {
+            Text(title)
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .tracking(0.6)
+                .foregroundColor(selected ? Palette.engrave : Palette.engraveDim)
+                .padding(.horizontal, 9).padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(selected ? accent.opacity(0.18)
+                                       : Color.black.opacity(0.22))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(selected ? accent.opacity(0.75)
+                                         : Color.white.opacity(0.08), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var arpControls: some View {
             HStack(alignment: .top, spacing: 8) {
                 ToggleButton("Arp", SynthParamArpOn, model, accent: Palette.arpAccent)
                 ToggleButton("Hold", SynthParamArpHold, model, accent: Palette.arpAccent)
@@ -431,7 +514,6 @@ struct SynthView: View {
                 Knob("Gate", SynthParamArpGate, model, accent: Palette.arpAccent)
                 Spacer(minLength: 0)
             }
-        }
     }
 
     private func arpDropdown(_ title: String, _ address: SynthParam,
@@ -447,8 +529,7 @@ struct SynthView: View {
         }
     }
 
-    private var effectsPanel: some View {
-        Panel(title: "Effects  ·  Chorus → Delay", accent: Palette.fxAccent) {
+    private var effectsControls: some View {
             HStack(alignment: .top, spacing: 0) {
                 Knob("Cho Mix", SynthParamChorusMix, model,
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
@@ -469,7 +550,6 @@ struct SynthView: View {
                 Knob("PingPong", SynthParamDelayPingPong, model,
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
             }
-        }
     }
 
     private func fxDivision(_ title: String, _ address: SynthParam) -> some View {
@@ -488,29 +568,25 @@ struct SynthView: View {
 
     // MARK: Mod matrix
 
-    static let modSources = ["None", "LFO 1", "LFO 2", "Filt Env", "Amp Env",
+    static let modSources = ["Src", "LFO 1", "LFO 2", "Filt Env", "Amp Env",
                              "Velocity", "Key Trk", "Mod Whl", "Aftertch", "Random"]
-    static let modDests   = ["None", "Osc Pitch", "Osc2 Pitch", "Pulse W", "Cutoff",
+    static let modDests   = ["Dest", "Osc Pitch", "Osc2 Pitch", "Pulse W", "Cutoff",
                              "Reso", "Drive", "WT Frame", "WT Live", "X-Mod", "Amp"]
 
     private func modSlot(_ n: Int, _ s: SynthParam, _ d: SynthParam, _ a: SynthParam) -> some View {
         HStack(spacing: 5) {
-            Text("\(n)")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(Palette.engraveDim)
-                .frame(width: 10)
             Dropdown(s, Self.modSources, model, accent: Palette.lfoAccent,
                      helpText: "Modulation source feeding slot \(n).")
-                .frame(width: 90)
+                .frame(width: 95)
             Image(systemName: "arrow.right")
                 .font(.system(size: 7, weight: .bold))
                 .foregroundColor(Palette.engraveDim)
             Dropdown(d, Self.modDests, model, accent: Palette.filterAccent,
                      helpText: "Destination that slot \(n) modulates.")
-                .frame(width: 88)
+                .frame(width: 93)
             AmountSlider(a, model, accent: Palette.lfoAccent,
                          helpText: "Bipolar modulation amount for slot \(n).")
-                .frame(width: 100)
+                .frame(width: 170)
         }
     }
 

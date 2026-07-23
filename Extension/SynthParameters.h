@@ -121,6 +121,9 @@ typedef enum SynthParam : unsigned long long {
     SynthParamDelayTone,       // 0..1 dark..bright feedback filtering
     SynthParamDelayPingPong,   // 0..1 stereo cross-feedback
 
+    // Appended to preserve every existing AU parameter address.
+    SynthParamStereoSpread,    // 0..1 scales fixed per-voice stereo positions
+
     SynthParamCount
 } SynthParam;
 

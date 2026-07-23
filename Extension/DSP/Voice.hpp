@@ -16,14 +16,36 @@
 
 namespace synth {
 
+// Fixed component tolerances for one physical-style VCF voice card. Values are
+// deterministic for a given voice seed, so sessions and offline bounces remain
+// repeatable. Summing three uniform draws gives a compact bell-shaped spread:
+// most filters cluster near nominal and very few reach the stated limits.
+struct VCFTolerance {
+    float cutoffCents = 0.0f;       // maximum +/-18 cents at Analog = 1
+    float resonanceScale = 0.0f;    // maximum +/-3%
+    float saturationScale = 0.0f;   // maximum +/-4%
+
+    static VCFTolerance fromSeed(uint64_t seed) {
+        FastRandom random(seed ^ 0xd6e8feb86659fd93ULL);
+        auto normalish = [&]() {
+            return (random.nextBipolar() + random.nextBipolar()
+                  + random.nextBipolar()) / 3.0f;
+        };
+        return {normalish() * 18.0f,
+                normalish() * 0.03f,
+                normalish() * 0.04f};
+    }
+};
+
 class Voice {
 public:
     static constexpr int kOversample = 2; // oscillator/FM/sync run at 2x
 
     void setSampleRate(double sr) {
         sampleRate_ = sr;
-        // Oscillators (and their sync/FM) run oversampled, everything else at
-        // the host rate. Decimator band-limits before dropping back down.
+        // Oscillators and the complete nonlinear filter path run oversampled.
+        // The decimator band-limits their combined output before returning to
+        // the host rate.
         osc_.setSampleRate(sr * kOversample);
         osc2_.setSampleRate(sr * kOversample);
         wtOsc1_.setSampleRate(sr * kOversample);
@@ -32,21 +54,44 @@ public:
         decimator_.setup(sr);
         ampEnv_.setSampleRate(sr);
         filtEnv_.setSampleRate(sr);
-        filter_.setSampleRate(sr);
+        filter_.setSampleRate(sr * kOversample);
         lfoLocal_.setSampleRate(sr);
         lfoFadeSamples_ = static_cast<int>(sr * 0.005); // 5 ms click-free start
         // Drift updated ~ every 32 samples; convert to a slow random-walk step.
         driftInc_ = 32.0;
     }
 
-    void seed(uint64_t s) { rng_ = FastRandom(s); }
+    void seed(uint64_t s) {
+        rng_ = FastRandom(s);
+        vcfTolerance_ = VCFTolerance::fromSeed(s);
+    }
 
-    bool  isActive() const { return ampEnv_.isActive(); }
-    int   note() const { return note_; }
+    bool  isActive() const { return pendingNote_ || ampEnv_.isActive(); }
+    int   note() const { return pendingNote_ ? pendingNoteNumber_ : note_; }
     bool  isHeld() const { return held_; }
     uint64_t age() const { return age_; }
 
     void noteOn(int note, float velocity, float phaseSpread, float startPitch) {
+        if (ampEnv_.isActive()) {
+            // Voice steal: preserve the old voice for a very short fade before
+            // resetting any discontinuous oscillator/filter state.
+            pendingNote_ = true;
+            pendingNoteNumber_ = note;
+            pendingVelocity_ = velocity;
+            pendingPhaseSpread_ = phaseSpread;
+            pendingStartPitch_ = startPitch;
+            pendingHeld_ = true;
+            held_ = true;
+            age_ = 0;
+            stealFadeTotal_ = std::max(1, static_cast<int>(sampleRate_ * 0.003));
+            stealFadeRemaining_ = stealFadeTotal_;
+            return;
+        }
+        startNote(note, velocity, phaseSpread, startPitch, true);
+    }
+
+    void startNote(int note, float velocity, float phaseSpread, float startPitch,
+                   bool resetEnvelopes) {
         note_ = note;
         targetPitch_ = static_cast<float>(note);
         glidePitch_ = startPitch;   // where the glide begins (semitones)
@@ -64,6 +109,10 @@ public:
         filter_.reset();
         lfoLocal_.reset();      // start LFO phase at 0 (used when key-triggered)
         lfoElapsed_ = 0;        // (re)start the LFO delay from this key press
+        if (resetEnvelopes) {
+            ampEnv_.resetHard();
+            filtEnv_.resetHard();
+        }
         ampEnv_.gate(true);
         filtEnv_.gate(true);
         drift_ = 0.0f;
@@ -72,6 +121,7 @@ public:
     }
 
     void noteOff() {
+        if (pendingNote_) pendingHeld_ = false;
         held_ = false;
         ampEnv_.gate(false);
         filtEnv_.gate(false);
@@ -86,6 +136,8 @@ public:
         filtEnv_.resetHard();
         filter_.reset();
         decimator_.reset();
+        pendingNote_ = false;
+        stealFadeRemaining_ = 0;
     }
 
     // Legato: retarget the pitch (glides from the current pitch) WITHOUT
@@ -107,6 +159,16 @@ public:
     // Render one sample. globalLfo is the free-running LFO from the engine,
     // used when key-trigger is off.
     inline float render(const Params& p, float globalLfo, float globalLfo2) {
+        if (pendingNote_ && stealFadeRemaining_ <= 0) {
+            const int note = pendingNoteNumber_;
+            const float velocity = pendingVelocity_;
+            const float phaseSpread = pendingPhaseSpread_;
+            const float startPitch = pendingStartPitch_;
+            const bool shouldHold = pendingHeld_;
+            pendingNote_ = false;
+            startNote(note, velocity, phaseSpread, startPitch, true);
+            if (!shouldHold) noteOff();
+        }
         ++age_;
 
         // --- Per-voice analogue pitch drift (two independent random walks so
@@ -237,7 +299,39 @@ public:
         const bool  fm = analogPair && cm > 0.0001f;
         const bool  doSync = analogPair && p.osc2Sync;
 
-        float oscSig = 0.0f;
+        // --- Filter cutoff modulation (envelope + keytrack + LFO + matrix) --
+        float envOct  = p.filterEnvAmt * env * 6.0f;                 // +/-6 oct range
+        float lfoOct  = lfo * p.lfoToCutoff * 4.0f;                  // +/-4 oct
+        float keyOct  = p.filterKeyTrack * (note_ - 60) / 12.0f;     // 1 oct / octave
+        float velOct  = p.velToCutoff * velocity_ * 5.0f;            // velocity opens filter
+        float matOct  = md[ModDstCutoff] * 4.0f;                     // matrix -> cutoff
+        double cutoff = p.cutoff * std::pow(2.0, envOct + lfoOct + keyOct + velOct + matOct);
+        // Each voice card has a fixed, subtle VCF calibration. Analog controls
+        // how much of the component spread is heard; at zero every voice is
+        // mathematically identical.
+        const float analog = clampf(p.analogAmount, 0.0f, 1.0f);
+        cutoff *= std::exp2(static_cast<double>(vcfTolerance_.cutoffCents * analog)
+                            / 1200.0);
+        // Keep the audible cutoff below the host Nyquist even though the
+        // internal filter itself runs at twice the host sample rate.
+        cutoff = clampf(static_cast<float>(cutoff), 20.0f,
+                        static_cast<float>(sampleRate_ * 0.45));
+
+        float reso = clampf(p.resonance + lfo * p.lfoToResonance * 0.5f
+                          + p.velToResonance * velocity_ * 0.7f
+                          + md[ModDstResonance] * 0.7f, 0.0f, 0.98f);
+        reso = clampf(reso * (1.0f + vcfTolerance_.resonanceScale * analog),
+                      0.0f, 0.98f);
+
+        float drive = clampf(p.filterDrive + p.velToDrive * velocity_
+                           + md[ModDstDrive], 0.0f, 1.0f);
+        drive = clampf(drive * (1.0f + vcfTolerance_.saturationScale * analog),
+                       0.0f, 1.0f);
+        const float filterAnalog = clampf(
+            analog * (1.0f + vcfTolerance_.saturationScale), 0.0f, 1.0f);
+        filter_.setParams(cutoff, reso, p.filterSlopeMix, filterAnalog, drive);
+
+        float filtered = 0.0f;
         for (int os = 0; os < kOversample; ++os) {
             // Process the modulator (osc 2) first so its sine can FM the carrier.
             float o2 = p.osc2IsWT ? wtOsc2_.process() : osc2_.process();
@@ -266,37 +360,22 @@ public:
             if (doSync && osc_.justWrapped()) osc2_.syncReset();
 
             float m = o1 * p.osc1Level + o2 * p.osc2Level;
-            oscSig = decimator_.process(m);
+            // Noise and every nonlinear filter operation also run at 2x.
+            float src = m + rng_.nextBipolar() * p.noiseLevel;
+            filtered = decimator_.process(filter_.process(src));
         }
-
-        // Noise mixed in at the host rate (own level).
-        float noiseSig = rng_.nextBipolar();
-        float src = oscSig + noiseSig * p.noiseLevel;
-
-        // --- Filter cutoff modulation (envelope + keytrack + LFO + matrix) --
-        float envOct  = p.filterEnvAmt * env * 6.0f;                 // +/-6 oct range
-        float lfoOct  = lfo * p.lfoToCutoff * 4.0f;                  // +/-4 oct
-        float keyOct  = p.filterKeyTrack * (note_ - 60) / 12.0f;     // 1 oct / octave
-        float velOct  = p.velToCutoff * velocity_ * 5.0f;            // velocity opens filter
-        float matOct  = md[ModDstCutoff] * 4.0f;                     // matrix -> cutoff
-        double cutoff = p.cutoff * std::pow(2.0, envOct + lfoOct + keyOct + velOct + matOct);
-        cutoff = clampf(static_cast<float>(cutoff), 20.0f,
-                        static_cast<float>(sampleRate_ * 0.45));
-
-        float reso = clampf(p.resonance + lfo * p.lfoToResonance * 0.5f
-                          + p.velToResonance * velocity_ * 0.7f
-                          + md[ModDstResonance] * 0.7f, 0.0f, 0.98f);
-
-        float drive = clampf(p.filterDrive + p.velToDrive * velocity_
-                           + md[ModDstDrive], 0.0f, 1.0f);
-        filter_.setParams(cutoff, reso, p.filterSlopeMix, p.analogAmount, drive);
-        float filtered = filter_.process(src);
 
         // --- VCA (velocity depth + matrix amplitude modulation / tremolo) ----
         float velGain = (1.0f - p.velToVolume) + p.velToVolume * velocity_;
         float ampMod  = clampf(1.0f + md[ModDstAmp], 0.0f, 2.0f);
         float amp = ampVal * velGain * ampMod;
-        return filtered * amp;
+        float output = filtered * amp;
+        if (stealFadeRemaining_ > 0) {
+            output *= static_cast<float>(stealFadeRemaining_)
+                    / static_cast<float>(stealFadeTotal_);
+            --stealFadeRemaining_;
+        }
+        return output;
     }
 
 private:
@@ -318,11 +397,21 @@ private:
 
     int   note_ = 60;
     float random_ = 0.0f;
+    VCFTolerance vcfTolerance_;
     float targetPitch_ = 60.0f;
     float glidePitch_ = 60.0f;
     float velocity_ = 1.0f;
     bool  held_ = false;
     uint64_t age_ = 0;
+
+    bool  pendingNote_ = false;
+    bool  pendingHeld_ = false;
+    int   pendingNoteNumber_ = 60;
+    float pendingVelocity_ = 1.0f;
+    float pendingPhaseSpread_ = 0.0f;
+    float pendingStartPitch_ = 60.0f;
+    int   stealFadeRemaining_ = 0;
+    int   stealFadeTotal_ = 1;
 
     float drift_ = 0.0f;
     float drift2_ = 0.0f;

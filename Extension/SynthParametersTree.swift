@@ -300,6 +300,8 @@ enum SynthParameters {
                   min: 0, max: 1, value: 0.7),
             param(SynthParamPitchBendRange, "bendRange", "Pitch Bend Range",
                   min: 0, max: 24, value: 2, unit: .relativeSemiTones),
+            param(SynthParamStereoSpread, "stereoSpread", "Stereo Spread",
+                  min: 0, max: 1, value: 0),
         ])
 
         return AUParameterTree.createTree(withChildren:

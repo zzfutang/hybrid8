@@ -272,6 +272,209 @@ int main() {
         check(resetPeak < 1e-6f, "I: resetting effects clears delay and chorus memory");
     }
 
+    // ---- Test J: maximum polyphony remains bounded at unity master --------
+    {
+        SynthEngine e; e.setSampleRate(sr);
+        e.setParameter(SynthParamMasterGain, 1.0f);
+        e.setParameter(SynthParamOsc1Level, 1.0f);
+        e.setParameter(SynthParamOsc2Level, 1.0f);
+        e.setParameter(SynthParamFilterCutoff, 20000.0f);
+        e.setParameter(SynthParamFilterResonance, 0.8f);
+        e.setParameter(SynthParamFilterDrive, 1.0f);
+        e.setParameter(SynthParamAmpSustain, 1.0f);
+        for (int n = 0; n < 8; ++n) e.noteOn(48 + n, 127);
+        std::vector<float> L(N), R(N);
+        e.render(L.data(), R.data(), N);
+        const float peak = peakAbs(L);
+        printf("Test J (8-voice gain): finite=%d  peak=%.3f\n",
+               (int)allFinite(L), peak);
+        check(allFinite(L), "J: full polyphony output finite");
+        check(peak <= 1.0f, "J: full polyphony remains within the soft ceiling");
+    }
+
+    // ---- Test K: 24 dB ladder enters bounded self-oscillation --------------
+    {
+        const double filterRate = sr * 2.0;
+        const int M = static_cast<int>(filterRate * 1.5);
+        LadderFilter filter;
+        filter.setSampleRate(filterRate);
+        filter.reset();
+        filter.setParams(1000.0, 0.98f, 1.0f, 0.0f, 0.0f);
+
+        double energy = 0.0;
+        int positiveCrossings = 0;
+        float previous = 0.0f;
+        float peak = 0.0f;
+        for (int n = 0; n < M; ++n) {
+            const float input = n == 0 ? 0.01f : 0.0f;
+            const float y = filter.process(input);
+            peak = std::max(peak, std::fabs(y));
+            if (n >= M / 2) {
+                energy += static_cast<double>(y) * y;
+                if (previous <= 0.0f && y > 0.0f) ++positiveCrossings;
+            }
+            previous = y;
+        }
+        const double rms = std::sqrt(energy / (M / 2));
+        const double measuredHz = positiveCrossings / 0.75;
+        printf("Test K (ladder self-osc): rms=%.5f  peak=%.3f  freq=%.1f Hz\n",
+               rms, peak, measuredHz);
+        check(rms > 0.001, "K: maximum ladder resonance sustains oscillation");
+        check(peak < 1.0f, "K: nonlinear ladder oscillation remains bounded");
+        check(measuredHz > 850.0 && measuredHz < 1150.0,
+              "K: self-oscillation tracks the requested cutoff");
+    }
+
+    // ---- Test L: nonlinear 12 dB feedback preserves its small-signal model -
+    {
+        const double filterRate = sr * 2.0;
+        const int M = static_cast<int>(filterRate * 0.25);
+        auto differenceRMS = [&](float amplitude) {
+            SVFStage clean, driven;
+            clean.setSampleRate(filterRate);
+            driven.setSampleRate(filterRate);
+            clean.setCoefficients(1200.0, 5.0, 0.0f, 0.0f);
+            driven.setCoefficients(1200.0, 5.0, 1.0f, 0.0f);
+            double difference = 0.0, reference = 0.0;
+            for (int n = 0; n < M; ++n) {
+                const float x = amplitude
+                              * std::sin(static_cast<float>(kTwoPi * 700.0 * n / filterRate));
+                const float a = clean.processLP(x);
+                const float b = driven.processLP(x);
+                if (n > M / 4) {
+                    difference += static_cast<double>(a - b) * (a - b);
+                    reference += static_cast<double>(a) * a;
+                }
+            }
+            return std::sqrt(difference / std::max(reference, 1.0e-20));
+        };
+        const double quietDifference = differenceRMS(0.001f);
+        const double loudDifference = differenceRMS(0.9f);
+        printf("Test L (12 dB nonlinearity): quietDiff=%.6f  loudDiff=%.4f\n",
+               quietDifference, loudDifference);
+        check(quietDifference < 0.001,
+              "L: Drive preserves the 12 dB small-signal response");
+        check(loudDifference > 0.01,
+              "L: Drive changes the 12 dB response at musical signal levels");
+    }
+
+    // ---- Test M: voice-card VCF tolerances are bounded and deterministic ---
+    {
+        bool bounded = true;
+        bool distinct = false;
+        const VCFTolerance first = VCFTolerance::fromSeed(0x1234ULL + 0x9e37U);
+        const VCFTolerance repeat = VCFTolerance::fromSeed(0x1234ULL + 0x9e37U);
+        for (int i = 0; i < 8; ++i) {
+            const VCFTolerance t =
+                VCFTolerance::fromSeed(0x1234ULL + 0x9e37U * (i + 1));
+            bounded = bounded
+                   && std::fabs(t.cutoffCents) <= 18.0f
+                   && std::fabs(t.resonanceScale) <= 0.03f
+                   && std::fabs(t.saturationScale) <= 0.04f;
+            if (i > 0 && std::fabs(t.cutoffCents - first.cutoffCents) > 0.01f)
+                distinct = true;
+        }
+        const bool deterministic =
+            first.cutoffCents == repeat.cutoffCents
+            && first.resonanceScale == repeat.resonanceScale
+            && first.saturationScale == repeat.saturationScale;
+        printf("Test M (VCF tolerances): firstCutoff=%+.2fc  bounded=%d  distinct=%d\n",
+               first.cutoffCents, (int)bounded, (int)distinct);
+        check(bounded, "M: individual VCF component tolerances stay subtle");
+        check(distinct, "M: the eight voice cards have distinct VCF calibration");
+        check(deterministic, "M: VCF character is repeatable across sessions");
+    }
+
+    // ---- Test N: stealing a releasing voice fades before state reset -------
+    {
+        SynthEngine e; e.setSampleRate(sr);
+        e.setParameter(SynthParamVoiceCount, 1.0f);
+        e.setParameter(SynthParamLegato, 0.0f);
+        e.setParameter(SynthParamOscPhaseSpread, 1.0f);
+        e.setParameter(SynthParamFilterCutoff, 16000.0f);
+        e.setParameter(SynthParamAmpAttack, normFromTime(0.001f));
+        e.setParameter(SynthParamAmpSustain, 1.0f);
+        e.setParameter(SynthParamAmpRelease, normFromTime(2.0f));
+        e.noteOn(60, 127);
+        std::vector<float> warm(4096), dummy(4096);
+        e.render(warm.data(), dummy.data(), 4096);
+        e.noteOff(60);
+        std::vector<float> release(256);
+        e.render(release.data(), dummy.data(), 256);
+        const float before = release.back();
+
+        e.noteOn(84, 127); // forced steal while the old note is still audible
+        std::vector<float> stolen(512), right(512);
+        e.render(stolen.data(), right.data(), 512);
+        const int fadeSamples = static_cast<int>(sr * 0.003);
+        float boundaryJump = std::fabs(stolen.front() - before);
+        float endOfFade = std::fabs(stolen[fadeSamples - 1]);
+        printf("Test N (voice steal): boundaryJump=%.5f  fadeEnd=%.6f\n",
+               boundaryJump, endOfFade);
+        check(boundaryJump < 0.03f,
+              "N: stealing does not reset an audible voice at the boundary");
+        check(endOfFade < 0.01f,
+              "N: the old voice fades near zero before retrigger");
+        check(allFinite(stolen), "N: voice-steal transition remains finite");
+    }
+
+    // ---- Test O: FX crossfades preserve power instead of dipping at 50% ---
+    {
+        const StereoSample midpoint =
+            equalPowerMix(1.0f, 0.0f, 0.0f, 1.0f, 0.5f);
+        const StereoSample dry =
+            equalPowerMix(1.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+        const StereoSample wet =
+            equalPowerMix(1.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+        const float midpointPower =
+            midpoint.l * midpoint.l + midpoint.r * midpoint.r;
+        printf("Test O (FX gain): midpointPower=%.6f  dry=(%.3f, %.3f)"
+               "  wet=(%.3f, %.3f)\n",
+               midpointPower, dry.l, dry.r, wet.l, wet.r);
+        check(std::fabs(midpointPower - 1.0f) < 1.0e-5f,
+              "O: the FX midpoint preserves power for decorrelated signals");
+        check(std::fabs(dry.l - 1.0f) < 1.0e-6f
+              && std::fabs(dry.r) < 1.0e-6f,
+              "O: zero mix is fully dry");
+        check(std::fabs(wet.l) < 1.0e-6f
+              && std::fabs(wet.r - 1.0f) < 1.0e-6f,
+              "O: full mix is fully wet");
+    }
+
+    // ---- Test P: voice-card spread pans voices without changing mono -------
+    {
+        auto renderVoice = [&](float spread) {
+            SynthEngine e; e.setSampleRate(sr);
+            e.setParameter(SynthParamVoiceCount, 1.0f);
+            e.setParameter(SynthParamStereoSpread, spread);
+            e.setParameter(SynthParamOscPhaseSpread, 0.0f);
+            e.setParameter(SynthParamFilterCutoff, 18000.0f);
+            e.setParameter(SynthParamAmpSustain, 1.0f);
+            e.noteOn(60, 127);
+            std::array<std::vector<float>, 2> output = {
+                std::vector<float>(4096), std::vector<float>(4096)
+            };
+            e.render(output[0].data(), output[1].data(), 4096);
+            return output;
+        };
+        const auto mono = renderVoice(0.0f);
+        const auto wide = renderVoice(1.0f);
+        double monoDifference = 0.0, wideL = 0.0, wideR = 0.0;
+        for (int n = 2048; n < 4096; ++n) {
+            monoDifference += std::fabs(mono[0][n] - mono[1][n]);
+            wideL += static_cast<double>(wide[0][n]) * wide[0][n];
+            wideR += static_cast<double>(wide[1][n]) * wide[1][n];
+        }
+        printf("Test P (voice spread): monoDiff=%.8f  wideL=%.4f  wideR=%.6f\n",
+               monoDifference, std::sqrt(wideL), std::sqrt(wideR));
+        check(monoDifference < 1.0e-5,
+              "P: zero stereo spread remains exactly centred");
+        check(wideL > wideR * 20.0,
+              "P: full spread places the first voice toward its calibrated side");
+        check(allFinite(wide[0]) && allFinite(wide[1]),
+              "P: stereo voice panning remains finite");
+    }
+
     printf("\n%s (%d failure%s)\n",
            g_failures == 0 ? "ALL TESTS PASSED" : "TESTS FAILED",
            g_failures, g_failures == 1 ? "" : "s");

@@ -15,6 +15,15 @@ struct StereoSample {
     float r = 0.0f;
 };
 
+inline StereoSample equalPowerMix(float dryL, float dryR,
+                                  float wetL, float wetR, float mix) {
+    const float amount = clampf(mix, 0.0f, 1.0f);
+    const float dryGain = std::cos(amount * static_cast<float>(kPi * 0.5));
+    const float wetGain = std::sin(amount * static_cast<float>(kPi * 0.5));
+    return {dryL * dryGain + wetL * wetGain,
+            dryR * dryGain + wetR * wetGain};
+}
+
 // Circular delay line with four-point cubic Hermite interpolation.
 class FractionalDelayLine {
 public:
@@ -64,13 +73,15 @@ class StereoChorus {
 public:
     void setup(double sampleRate) {
         sampleRate_ = sampleRate;
-        line_.setup(static_cast<int>(sampleRate * 0.060) + 8);
+        left_.setup(static_cast<int>(sampleRate * 0.060) + 8);
+        right_.setup(static_cast<int>(sampleRate * 0.060) + 8);
         smoothCoef_ = std::exp(-1.0 / (0.010 * sampleRate));
         reset();
     }
 
     void reset() {
-        line_.reset();
+        left_.reset();
+        right_.reset();
         phase_ = 0.0;
         driftPhase_ = 0.173;
         mix_ = mixTarget_;
@@ -84,21 +95,30 @@ public:
         depthTarget_ = clampf(depth, 0.0f, 1.0f);
     }
 
-    inline StereoSample process(float input) {
+    inline StereoSample process(float inputL, float inputR) {
         smooth();
-        line_.write(input);
+        left_.write(inputL);
+        right_.write(inputR);
 
         // Four independently moving voices. The secondary very-slow oscillator
         // prevents the main sweep from sounding perfectly repetitive.
         static constexpr double phases[4] = {0.0, 0.25, 0.5, 0.75};
         static constexpr double driftOffsets[4] = {0.11, 0.43, 0.71, 0.89};
-        float taps[4];
+        float tapsL[2], tapsR[2];
         const double base = 0.017 * sampleRate_;
         const double span = (0.0005 + 0.0045 * depth_) * sampleRate_;
-        for (int i = 0; i < 4; ++i) {
-            double mod = std::sin(kTwoPi * (phase_ + phases[i]));
-            double drift = 0.22 * std::sin(kTwoPi * (driftPhase_ + driftOffsets[i]));
-            taps[i] = line_.read(base + span * (mod + drift));
+        for (int i = 0; i < 2; ++i) {
+            const int leftVoice = i * 2;
+            const int rightVoice = leftVoice + 1;
+            double mod = std::sin(kTwoPi * (phase_ + phases[leftVoice]));
+            double drift = 0.22 * std::sin(
+                kTwoPi * (driftPhase_ + driftOffsets[leftVoice]));
+            tapsL[i] = left_.read(base + span * (mod + drift));
+
+            mod = std::sin(kTwoPi * (phase_ + phases[rightVoice]));
+            drift = 0.22 * std::sin(
+                kTwoPi * (driftPhase_ + driftOffsets[rightVoice]));
+            tapsR[i] = right_.read(base + span * (mod + drift));
         }
 
         phase_ += rate_ / sampleRate_;
@@ -107,10 +127,9 @@ public:
         if (driftPhase_ >= 1.0) driftPhase_ -= 1.0;
 
         // Cross-distribute the voices for width without polarity tricks.
-        float wetL = 0.5f * (taps[0] + taps[2]);
-        float wetR = 0.5f * (taps[1] + taps[3]);
-        return {input + (wetL - input) * mix_,
-                input + (wetR - input) * mix_};
+        float wetL = 0.5f * (tapsL[0] + tapsL[1]);
+        float wetR = 0.5f * (tapsR[0] + tapsR[1]);
+        return equalPowerMix(inputL, inputR, wetL, wetR, mix_);
     }
 
 private:
@@ -120,7 +139,7 @@ private:
         depth_ = depthTarget_ + (depth_ - depthTarget_) * smoothCoef_;
     }
 
-    FractionalDelayLine line_;
+    FractionalDelayLine left_, right_;
     double sampleRate_ = 44100.0;
     double phase_ = 0.0, driftPhase_ = 0.0;
     float mix_ = 0.0f, rate_ = 0.35f, depth_ = 0.35f;
@@ -192,8 +211,7 @@ public:
         left_.write(inputL + std::tanh(returnL * 1.15f) * feedback_);
         right_.write(inputR + std::tanh(returnR * 1.15f) * feedback_);
 
-        return {inputL + (delayedL - inputL) * mix_,
-                inputR + (delayedR - inputR) * mix_};
+        return equalPowerMix(inputL, inputR, delayedL, delayedR, mix_);
     }
 
 private:
@@ -239,10 +257,12 @@ public:
         delay_.setParams(delayMix, delayTime, delayFeedback, delayTone, delayPingPong);
     }
 
-    inline StereoSample process(float mono) {
-        StereoSample c = chorus_.process(mono);
+    inline StereoSample process(float inputL, float inputR) {
+        StereoSample c = chorus_.process(inputL, inputR);
         return delay_.process(c.l, c.r);
     }
+
+    inline StereoSample process(float mono) { return process(mono, mono); }
 
 private:
     StereoChorus chorus_;

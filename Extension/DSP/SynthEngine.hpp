@@ -17,6 +17,8 @@
 namespace synth {
 
 static constexpr int kNumVoices = 8;
+// Equal-power normalisation for a full eight-voice stack.
+static constexpr float kVoiceSumGain = 0.35f;
 
 class SynthEngine {
 public:
@@ -98,6 +100,7 @@ public:
         store_[SynthParamDelayFeedback].store(0.35f);
         store_[SynthParamDelayTone].store(0.65f);
         store_[SynthParamDelayPingPong].store(1.0f);
+        store_[SynthParamStereoSpread].store(0.0f);
 
         // Build the wavetable library up front (off the audio thread) so the
         // first note never triggers generation in the render callback.
@@ -125,6 +128,7 @@ public:
         driveSmoother_.setSampleRate(sr);    driveSmoother_.setTimeConstant(12.0);
         crossModSmoother_.setSampleRate(sr); crossModSmoother_.setTimeConstant(12.0);
         slopeSmoother_.setSampleRate(sr);    slopeSmoother_.setTimeConstant(15.0);
+        stereoSmoother_.setSampleRate(sr);   stereoSmoother_.setTimeConstant(15.0);
         snapSmoothers();
     }
 
@@ -348,6 +352,7 @@ public:
         driveSmoother_.setTarget(store_[SynthParamFilterDrive].load());
         crossModSmoother_.setTarget(store_[SynthParamOscCrossMod].load());
         slopeSmoother_.setTarget(store_[SynthParamFilterSlope].load());
+        stereoSmoother_.setTarget(store_[SynthParamStereoSpread].load());
 
         // Update envelope times on active voices once per block.
         for (auto& v : voices_) v.updateEnvelopes(p);
@@ -379,17 +384,35 @@ public:
             p.filterDrive = driveSmoother_.next();
             p.crossMod   = crossModSmoother_.next();
             p.filterSlopeMix = slopeSmoother_.next();
+            float stereoSpread = stereoSmoother_.next();
             float gain   = gainSmoother_.next();
 
             float lfoVal  = lfo_.process();
             float lfo2Val = lfo2_.process();
 
-            float mix = 0.0f;
-            for (auto& v : voices_) {
-                if (v.isActive()) mix += v.render(p, lfoVal, lfo2Val);
+            // Physical-style voice-card panning. The fixed, alternating
+            // positions keep successive notes balanced across the stage.
+            static constexpr float voicePan[kNumVoices] = {
+                -1.0f, 1.0f, -0.714f, 0.714f,
+                -0.429f, 0.429f, -0.143f, 0.143f
+            };
+            float mixL = 0.0f, mixR = 0.0f;
+            for (int i = 0; i < kNumVoices; ++i) {
+                Voice& v = voices_[i];
+                if (!v.isActive()) continue;
+                const float sample = v.render(p, lfoVal, lfo2Val);
+                const float pan = voicePan[i] * stereoSpread;
+                const float angle =
+                    (pan + 1.0f) * static_cast<float>(kPi * 0.25);
+                // sqrt(2) keeps the existing centre position at unity per
+                // channel while maintaining constant total stereo power.
+                mixL += sample * std::cos(angle) * 1.41421356f;
+                mixR += sample * std::sin(angle) * 1.41421356f;
             }
-            // Head-room scaling for 8 stacked voices, then soft ceiling.
-            StereoSample fx = effects_.process(mix * 0.22f);
+            // Equal-power scaling for eight voices, followed by a bounded soft
+            // ceiling for correlated stacks and resonant transients.
+            StereoSample fx = effects_.process(mixL * kVoiceSumGain,
+                                               mixR * kVoiceSumGain);
             outL[n] = softClip(fx.l) * gain;
             if (outR != outL) outR[n] = softClip(fx.r) * gain;
         }
@@ -506,6 +529,7 @@ private:
         driveSmoother_.snap(store_[SynthParamFilterDrive].load());
         crossModSmoother_.snap(store_[SynthParamOscCrossMod].load());
         slopeSmoother_.snap(store_[SynthParamFilterSlope].load());
+        stereoSmoother_.snap(store_[SynthParamStereoSpread].load());
     }
 
     double syncSeconds(float rawIndex) const {
@@ -533,6 +557,7 @@ private:
     OnePoleSmoother pw2Smoother_, wtFrameSmoother_;
     OnePoleSmoother osc1LevelSmoother_, osc2LevelSmoother_, noiseLevelSmoother_;
     OnePoleSmoother driveSmoother_, crossModSmoother_, slopeSmoother_;
+    OnePoleSmoother stereoSmoother_;
     float pitchBendSemis_ = 0.0f;
     float lastNote_ = 60.0f;
     bool  hasLastNote_ = false;

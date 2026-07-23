@@ -23,6 +23,7 @@ enum SynthHelp {
         a(SynthParamOscPulseWidth): "Oscillator 1 pulse width (used by the pulse wave; a PWM target).",
         a(SynthParamOsc2PulseWidth):"Oscillator 2 pulse width (independent from oscillator 1).",
         a(SynthParamOscPhaseSpread):"Per-voice start-phase randomisation — 0 = tight/hard, 1 = loose analog.",
+        a(SynthParamStereoSpread):  "OB-style voice-card panning — 0 = mono, 1 = full alternating stereo stage.",
         a(SynthParamOctave):        "Oscillator 1 octave.",
         a(SynthParamOsc1Level):     "Osc 1 level in the mixer (osc 1 is the FM carrier).",
         a(SynthParamOsc2Level):     "Osc 2 level in the mixer (osc 2 is the FM modulator / sync slave).",
