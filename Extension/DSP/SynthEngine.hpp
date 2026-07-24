@@ -118,6 +118,20 @@ public:
         store_[SynthParamCompressorAttack].store(0.010f);
         store_[SynthParamCompressorRelease].store(0.120f);
         store_[SynthParamCompressorMakeup].store(0.0f);
+        store_[SynthParamLFO1Polarity].store(0.0f);
+        store_[SynthParamLFO1Phase].store(0.0f);
+        store_[SynthParamLFO2Delay].store(0.0f);
+        store_[SynthParamLFO2Polarity].store(0.0f);
+        store_[SynthParamLFO2Phase].store(0.0f);
+        store_[SynthParamLFO3Waveform].store(0.0f);
+        store_[SynthParamLFO3Rate].store(1.0f);
+        store_[SynthParamLFO3Delay].store(0.0f);
+        store_[SynthParamLFO3Polarity].store(0.0f);
+        store_[SynthParamLFO3Phase].store(0.0f);
+        store_[SynthParamLFO1Mode].store(0.0f);
+        store_[SynthParamLFO2Mode].store(0.0f);
+        store_[SynthParamLFO3Mode].store(0.0f);
+        store_[SynthParamVibratoLFO].store(0.0f);
         for (int i = 0; i < SynthParamCount; ++i)
             effective_[i].store(store_[i].load(std::memory_order_relaxed),
                                 std::memory_order_relaxed);
@@ -131,6 +145,10 @@ public:
         sampleRate_ = sr;
         lfo_.setSampleRate(sr);
         lfo2_.setSampleRate(sr);
+        lfo3_.setSampleRate(sr);
+        lfo_.reset();
+        lfo2_.reset();
+        lfo3_.reset();
         effects_.setup(sr);
         for (int i = 0; i < kNumVoices; ++i) {
             voices_[i].setSampleRate(sr);
@@ -493,10 +511,28 @@ public:
         p.filtR = timeFromNorm(store_[SynthParamFilterRelease].load());
         p.filterEnvAmt   = store_[SynthParamFilterEnvAmount].load();
         p.filterKeyTrack = store_[SynthParamFilterKeyTrack].load();
-        p.lfoWave    = static_cast<LFOWave>(clampInt(store_[SynthParamLFOWaveform].load(), 0, 2));
+        p.lfoWave    = static_cast<LFOWave>(clampInt(store_[SynthParamLFOWaveform].load(), 0, 4));
         p.lfoRate    = store_[SynthParamLFORate].load();
         p.lfoKeyTrigger = store_[SynthParamLFOKeyTrigger].load() >= 0.5f;
         p.lfoDelay   = store_[SynthParamLFODelay].load();
+        p.lfo1Unipolar = store_[SynthParamLFO1Polarity].load() >= 0.5f;
+        p.lfo1Phase = store_[SynthParamLFO1Phase].load();
+        p.lfo2Delay = store_[SynthParamLFO2Delay].load();
+        p.lfo3Delay = store_[SynthParamLFO3Delay].load();
+        p.vibratoLFO = clampInt(store_[SynthParamVibratoLFO].load(), 0, 2);
+        // Legacy LFO1 key-trigger folds into Loop/Trig if no explicit mode set.
+        p.lfo1Mode = std::max(clampInt(store_[SynthParamLFO1Mode].load(), 0, 2),
+                              p.lfoKeyTrigger ? 1 : 0);
+        p.lfo2Mode = clampInt(store_[SynthParamLFO2Mode].load(), 0, 2);
+        p.lfo3Mode = clampInt(store_[SynthParamLFO3Mode].load(), 0, 2);
+        p.lfo2Wave = static_cast<LFOWave>(clampInt(store_[SynthParamLFO2Waveform].load(), 0, 4));
+        p.lfo2Rate = store_[SynthParamLFO2Rate].load();
+        p.lfo2Unipolar = store_[SynthParamLFO2Polarity].load() >= 0.5f;
+        p.lfo2Phase = store_[SynthParamLFO2Phase].load();
+        p.lfo3Wave = static_cast<LFOWave>(clampInt(store_[SynthParamLFO3Waveform].load(), 0, 4));
+        p.lfo3Rate = store_[SynthParamLFO3Rate].load();
+        p.lfo3Unipolar = store_[SynthParamLFO3Polarity].load() >= 0.5f;
+        p.lfo3Phase = store_[SynthParamLFO3Phase].load();
         p.lfoToOscFreq    = store_[SynthParamLFOToOscFreq].load();
         p.lfoToPulseWidth = store_[SynthParamLFOToPulseWidth].load();
         p.lfoToCutoff     = store_[SynthParamLFOToCutoff].load();
@@ -526,8 +562,16 @@ public:
 
         lfo_.setWave(p.lfoWave);
         lfo_.setRate(p.lfoRate);
-        lfo2_.setWave(static_cast<LFOWave>(clampInt(store_[SynthParamLFO2Waveform].load(), 0, 2)));
+        lfo_.setPolarity(p.lfo1Unipolar);
+        lfo_.setPhase(p.lfo1Phase);
+        lfo2_.setWave(static_cast<LFOWave>(clampInt(store_[SynthParamLFO2Waveform].load(), 0, 4)));
         lfo2_.setRate(store_[SynthParamLFO2Rate].load());
+        lfo2_.setPolarity(store_[SynthParamLFO2Polarity].load() >= 0.5f);
+        lfo2_.setPhase(store_[SynthParamLFO2Phase].load());
+        lfo3_.setWave(static_cast<LFOWave>(clampInt(store_[SynthParamLFO3Waveform].load(), 0, 4)));
+        lfo3_.setRate(store_[SynthParamLFO3Rate].load());
+        lfo3_.setPolarity(store_[SynthParamLFO3Polarity].load() >= 0.5f);
+        lfo3_.setPhase(store_[SynthParamLFO3Phase].load());
         const double chorusSeconds = syncSeconds(store_[SynthParamChorusRate].load());
         const double delaySeconds = syncSeconds(store_[SynthParamDelayTime].load());
         effects_.setParams(store_[SynthParamChorusMix].load(),
@@ -603,6 +647,7 @@ public:
 
             float lfoVal  = lfo_.process();
             float lfo2Val = lfo2_.process();
+            float lfo3Val = lfo3_.process();
 
             // Physical-style voice-card panning. The fixed, alternating
             // positions keep successive notes balanced across the stage.
@@ -614,7 +659,7 @@ public:
             for (int i = 0; i < kNumVoices; ++i) {
                 Voice& v = voices_[i];
                 if (!v.isActive()) continue;
-                const float sample = v.render(p, lfoVal, lfo2Val);
+                const float sample = v.render(p, lfoVal, lfo2Val, lfo3Val);
                 const float pan = clampf(voicePan[i] * stereoSpread
                                        + v.panModulation(), -1.0f, 1.0f);
                 const float angle =
@@ -842,6 +887,7 @@ private:
     std::array<Voice, kNumVoices> voices_;
     LFO lfo_;
     LFO lfo2_;
+    LFO lfo3_;
     GlobalEffects effects_;
     std::atomic<float> modWheel_{0.0f};
     std::atomic<float> aftertouch_{0.0f};

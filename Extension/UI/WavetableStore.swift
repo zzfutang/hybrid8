@@ -107,10 +107,15 @@ final class WavetableStore: ObservableObject {
                     return Float(0.72 * sin(phase)
                                + 0.20 * sin(phase * 2)
                                + 0.08 * sin(phase * (3 + position * 3)))
-                default:
+                case 3:
                     return Float(0.65 * sin(phase)
                                + 0.28 * sin(phase * 3)
                                + 0.18 * sin(phase * (9 + position * 12)))
+                default:  // Piano: fundamental + strong octave morphing in
+                    return Float(0.7 * sin(phase)
+                               + (0.35 + position * 0.5) * sin(phase * 2)
+                               + 0.12 * sin(phase * 3)
+                               + (0.22 - position * 0.15) * sin(phase * 4))
                 }
             }
         }
@@ -139,7 +144,7 @@ final class WavetableStore: ObservableObject {
         guard let data = try? Data(contentsOf: manifestURL),
               let decoded = try? JSONDecoder().decode(
                 [WavetableManifestEntry].self, from: data) else { return }
-        manifests = decoded.filter { $0.slot >= 4 && $0.slot < 256 }
+        manifests = decoded.filter { $0.slot >= 5 && $0.slot < 256 }
         for manifest in manifests {
             let url = tablesDirectory.appendingPathComponent(manifest.fileName)
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -171,7 +176,7 @@ final class WavetableStore: ObservableObject {
 
     private func persistAndInstall(sourceURL: URL, samples: [Float],
                                    frameLength: Int) throws {
-        guard let slot = (4..<256).first(where: { candidate in
+        guard let slot = (5..<256).first(where: { candidate in
             !manifests.contains(where: { $0.slot == candidate })
                 && !retiredSlots.contains(candidate)
         }) else { throw ImportError.libraryFull }
@@ -322,6 +327,9 @@ final class WavetableStore: ObservableObject {
                        previews: []),
         WavetableEntry(slot: 3, name: "Metallic", frameCount: 32,
                        isFactory: true, fileName: nil, frameLength: 1024,
+                       previews: []),
+        WavetableEntry(slot: 4, name: "Piano", frameCount: 32,
+                       isFactory: true, fileName: nil, frameLength: 1024,
                        previews: [])
     ]
 
@@ -336,7 +344,7 @@ final class WavetableStore: ObservableObject {
             case .decodeFailed:
                 return "The audio file could not be decoded as PCM audio."
             case .libraryFull:
-                return "All 252 user wavetable slots are in use."
+                return "All 251 user wavetable slots are in use."
             }
         }
     }

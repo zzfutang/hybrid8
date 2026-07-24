@@ -24,6 +24,7 @@ typedef enum SynthModSource : int {
     ModSrcModWheel,
     ModSrcAftertouch,
     ModSrcRandom,
+    ModSrcLFO3,          // appended: preserve existing preset source indices
     ModSrcCount
 } SynthModSource;
 

@@ -147,6 +147,25 @@ typedef enum SynthParam : unsigned long long {
     SynthParamCompressorRelease,  // 0.02..1 s
     SynthParamCompressorMakeup,   // 0..18 dB
 
+    // Unified three-LFO controls. Appended for AU/preset compatibility.
+    SynthParamLFO1Polarity,       // 0=bipolar, 1=unipolar
+    SynthParamLFO1Phase,          // 0..1 cycle phase offset
+    SynthParamLFO2Delay,          // 0..2 s after note-on
+    SynthParamLFO2Polarity,       // 0=bipolar, 1=unipolar
+    SynthParamLFO2Phase,          // 0..1 cycle phase offset
+    SynthParamLFO3Waveform,       // 0=sine,1=square,2=saw up,3=saw down,4=S&H
+    SynthParamLFO3Rate,           // Hz
+    SynthParamLFO3Delay,          // 0..2 s after note-on
+    SynthParamLFO3Polarity,       // 0=bipolar, 1=unipolar
+    SynthParamLFO3Phase,          // 0..1 cycle phase offset
+    SynthParamVibratoLFO,         // 0=LFO1, 1=LFO2, 2=LFO3
+
+    // Per-LFO run mode: 0=Loop (free-running), 1=Trig (reset phase on key press,
+    // then loop), 2=One-Shot (reset on key press, play one cycle, then hold).
+    SynthParamLFO1Mode,
+    SynthParamLFO2Mode,
+    SynthParamLFO3Mode,
+
     SynthParamCount
 } SynthParam;
 

@@ -98,6 +98,14 @@ public:
         // Slightly exceed the theoretical k=4 onset at the top of the control
         // so maximum resonance produces a musically stable sine oscillator.
         k_ = 4.35 * static_cast<double>(clampf(resonance, 0.0f, 1.0f));
+        // Passband makeup. A ladder's linear DC gain is 1/(1+k), so without
+        // compensation the 24 dB mode is 3 dB quieter than the 12 dB SVF at low
+        // resonance and ~10 dB quieter at high resonance. Scaling the output by
+        // (1+k) restores unity passband (matching the SVF) and lets the
+        // resonant peak rise above it, exactly like the SVF's peak. Damped a
+        // touch at the very top so self-oscillation stays musical rather than
+        // slamming the VCA.
+        makeup_ = 1.0 + k_ * (k_ > 3.6 ? 0.9 : 1.0);
     }
 
     inline FilterOutputs process(float input) {
@@ -129,14 +137,15 @@ public:
         z4_ = 2.0 * y4 - z4_;
         const double hp = x - 4.0 * y1 + 6.0 * y2 - 4.0 * y3 + y4;
         const double bp = 8.0 * (y2 - 2.0 * y3 + y4);
-        return {static_cast<float>(y4), static_cast<float>(bp),
-                static_cast<float>(hp)};
+        return {static_cast<float>(y4 * makeup_), static_cast<float>(bp * makeup_),
+                static_cast<float>(hp * makeup_)};
     }
 
 private:
     double sampleRate_ = 44100.0;
     double G_ = 0.0;
     double k_ = 0.0;
+    double makeup_ = 1.0;
     double z1_ = 1.0e-6, z2_ = 0.0, z3_ = 0.0, z4_ = 0.0;
 };
 

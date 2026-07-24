@@ -799,9 +799,10 @@ int main() {
                     + 0.08 * frame * std::sin(phase * (frame + 2)));
             }
         }
+        const int userSlot = WT_NUM_SETS;   // first user slot (after the factory sets)
         const bool installed = wtInstallImportedTable(
-            4, source.data(), static_cast<int>(source.size()), frameLength);
-        const WavetableSet* table = wtTableAt(4);
+            userSlot, source.data(), static_cast<int>(source.size()), frameLength);
+        const WavetableSet* table = wtTableAt(userSlot);
         WavetableOscillator osc;
         osc.setSampleRate(sr);
         osc.reset(0.0f, 0.0f);
@@ -878,6 +879,74 @@ int main() {
         printf("Test Z (WT route precedence): frame=%.4f\n", frame);
         check(frame > 0.69f && frame <= 0.701f,
               "Z: explicit matrix route replaces hidden legacy WT-frame route");
+    }
+
+    // ---- Test AA: expanded LFO waves, phase and polarity -------------------
+    {
+        LFO lfo;
+        lfo.setSampleRate(100.0);
+        lfo.setRate(10.0);
+        lfo.setWave(LFOWave::SawDown);
+        lfo.setPhase(0.25f);
+        lfo.setPolarity(false);
+        lfo.reset();
+        const float bipolar = lfo.process();
+
+        lfo.reset();
+        lfo.setPolarity(true);
+        const float unipolar = lfo.process();
+
+        lfo.reset();
+        lfo.setPhase(0.0f);
+        lfo.setPolarity(false);
+        lfo.setWave(LFOWave::SampleHold);
+        const float held = lfo.process();
+        bool stableHold = true;
+        for (int i = 0; i < 8; ++i)
+            stableHold &= lfo.process() == held;
+        lfo.process(); // wrap the 10-sample cycle and choose a new held value
+        const float nextHold = lfo.process();
+
+        printf("Test AA (expanded LFO): bi=%.3f uni=%.3f holdChanged=%d\n",
+               bipolar, unipolar, (int)(nextHold != held));
+        check(std::fabs(bipolar - 0.5f) < 0.001f
+              && std::fabs(unipolar - 0.75f) < 0.001f,
+              "AA: phase and polarity produce the expected LFO range");
+        check(stableHold && nextHold != held,
+              "AA: sample-and-hold stays constant for one LFO cycle");
+        check(ModSrcLFO3 == 10,
+              "AA: LFO 3 is appended without renumbering existing sources");
+    }
+
+    // ---- Test AB: wavetable liveness remains frame-coherent ---------------
+    {
+        const WTSpectrum frame0 = wtSpectrumPiano(0);
+        const WTSpectrum frame1 = wtSpectrumPiano(1);
+        float maxPhaseStep = 0.0f;
+        float maxFrameDeltaError = 0.0f;
+        for (int variant = 0; variant < WT_NUM_VARIANTS; ++variant) {
+            const int next = (variant + 1) % WT_NUM_VARIANTS;
+            const WTSpectrum a0 = wtVariant(frame0, variant, 124);
+            const WTSpectrum b0 = wtVariant(frame0, next, 124);
+            const WTSpectrum a1 = wtVariant(frame1, variant, 124);
+            for (int harmonic = 1; harmonic < (int)frame0.phase.size(); ++harmonic) {
+                maxPhaseStep = std::max(
+                    maxPhaseStep,
+                    std::fabs(b0.phase[harmonic] - a0.phase[harmonic]));
+                const float delta0 =
+                    a0.phase[harmonic] - frame0.phase[harmonic];
+                const float delta1 =
+                    a1.phase[harmonic] - frame1.phase[harmonic];
+                maxFrameDeltaError = std::max(
+                    maxFrameDeltaError, std::fabs(delta0 - delta1));
+            }
+        }
+        printf("Test AB (WT liveness): variants=%d maxStep=%.3f frameError=%.7f\n",
+               WT_NUM_VARIANTS, maxPhaseStep, maxFrameDeltaError);
+        check(WT_NUM_VARIANTS >= 4 && maxPhaseStep <= 0.61f,
+              "AB: adjacent liveness variants use small phase steps");
+        check(maxFrameDeltaError < 1.0e-6f,
+              "AB: liveness phase trajectory is coherent across frames");
     }
 
     printf("\n%s (%d failure%s)\n",

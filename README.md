@@ -19,7 +19,7 @@ Coding by claude and codex.
 | **Mixer** | Independent Osc 1 / Osc 2 / Noise levels |
 | **Filter** | Analogue-modelled **12 dB TPT state-variable** and **24 dB four-pole ladder** topologies; LP / BP / HP modes, stable self-oscillation, nonlinear Drive, key tracking and per-voice VCF tolerances |
 | **Envelopes** | Dedicated ADSR for the VCA and for the filter (bipolar filter-env amount) |
-| **LFO 1 / LFO 2** | Sine / Square / Saw; LFO 1 has key-trigger + delay and a hardwired vibrato route; LFO 2 is a matrix source |
+| **LFO 1 / 2 / 3** | Three modulation sources with Sine, Square, Saw Up, Saw Down and Sample & Hold; independent rate, delay, bipolar/unipolar polarity and phase; selectable global vibrato source |
 | **Mod matrix** | 6 assignable slots — sources: LFO 1/2, Filter/Amp Env, Velocity, Key Track, **Mod Wheel**, **Aftertouch**, Random → destinations: pitch, PW, cutoff, reso, drive, WT frame/liveness, cross-mod, amp |
 | **Arpeggiator** | Up / Down / Up-Down / Random, 1–4 octave range, free-running rate, gate length, **Hold** latch (early-80s Roland style) |
 | **Effects** | FX chain with Compressor, Four-voice stereo chorus followed by a filtered, saturated stereo/ping-pong delay and ending with reverb |

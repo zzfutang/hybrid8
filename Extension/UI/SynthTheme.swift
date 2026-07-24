@@ -9,34 +9,79 @@
 import SwiftUI
 import AudioToolbox
 import Foundation
+#if canImport(AppKit)
+import AppKit
+#endif
 
+extension Color {
+    init(hex: UInt32) {
+        self.init(.sRGB,
+                  red:   Double((hex >> 16) & 0xff) / 255.0,
+                  green: Double((hex >> 8)  & 0xff) / 255.0,
+                  blue:  Double(hex & 0xff) / 255.0,
+                  opacity: 1.0)
+    }
+    // Perceived luminance — used to pick dark vs. cream text on an accent chip.
+    var isLight: Bool {
+        // Approximate from sRGB components via NSColor.
+        #if canImport(AppKit)
+        let ns = NSColor(self).usingColorSpace(.sRGB) ?? .white
+        return (0.299 * ns.redComponent + 0.587 * ns.greenComponent + 0.114 * ns.blueComponent) > 0.6
+        #else
+        return true
+        #endif
+    }
+}
+
+// Warm brushed-brass / charcoal palette from the "Hybrid 8 Redesign".
 enum Palette {
-    static let panelTop    = Color(red: 0.16, green: 0.16, blue: 0.18)
-    static let panelBottom = Color(red: 0.10, green: 0.10, blue: 0.115)
-    static let sectionBG   = Color(red: 0.13, green: 0.13, blue: 0.145)
-    static let engrave     = Color(red: 0.90, green: 0.87, blue: 0.79)   // cream legend
-    static let engraveDim  = Color(red: 0.62, green: 0.60, blue: 0.55)
-    static let lcd         = Color(red: 0.56, green: 0.93, blue: 0.74)   // blue-green LCD
-    static let capTop      = Color(red: 0.24, green: 0.24, blue: 0.26)
-    static let capBottom   = Color(red: 0.09, green: 0.09, blue: 0.10)
-    static let track       = Color.white.opacity(0.10)
-    static let woodLight   = Color(red: 0.52, green: 0.34, blue: 0.18)
-    static let woodDark    = Color(red: 0.30, green: 0.18, blue: 0.09)
+    // Chassis + panels
+    static let panelTop      = Color(hex: 0x211e17)   // outer fascia top
+    static let panelBottom   = Color(hex: 0x17150f)   // outer fascia bottom
+    static let sectionTop    = Color(hex: 0x27231a)   // section panel top
+    static let sectionBottom = Color(hex: 0x1d1a13)   // section panel bottom
+    static let sectionBG     = Color(hex: 0x221f18)
+    static let lcdBg         = Color(hex: 0x0c160c)   // dark green-black readout well
+    static let comboBg       = Color(hex: 0x161310)   // inset combo / slider well
+    static let btnOff        = Color(hex: 0x201d17)   // unlit segment
+    static let btnOnTop      = Color(hex: 0x3d372c)   // lit segment gradient
+    static let btnOnBottom   = Color(hex: 0x2b261d)
 
-    // Oberheim-ish section accents.
-    static let oscAccent    = Color(red: 0.93, green: 0.64, blue: 0.24)  // amber
-    static let osc2Accent   = Color(red: 0.92, green: 0.45, blue: 0.36)  // coral
-    static let filterAccent = Color(red: 0.26, green: 0.78, blue: 0.80)  // cyan
-    static let ampAccent    = Color(red: 0.53, green: 0.80, blue: 0.36)  // green
-    static let filtEnvAccent = Color(red: 0.34, green: 0.74, blue: 0.62) // teal-green
-    static let lfoAccent    = Color(red: 0.80, green: 0.46, blue: 0.85)  // magenta
-    static let globalAccent = Color(red: 0.40, green: 0.58, blue: 0.95)  // blue
-    static let velAccent    = Color(red: 0.93, green: 0.45, blue: 0.55)  // rose
-    static let mixerAccent  = Color(red: 0.72, green: 0.74, blue: 0.80)  // silver
-    static let wtAccent     = Color(red: 0.60, green: 0.52, blue: 0.92)  // violet
-    static let arpAccent    = Color(red: 0.95, green: 0.78, blue: 0.32)  // gold
-    static let chordAccent  = Color(red: 0.48, green: 0.83, blue: 0.62)  // mint
-    static let fxAccent     = Color(red: 0.42, green: 0.74, blue: 0.96)  // sky blue
+    // Text / legends
+    static let engrave       = Color(hex: 0xd8cdb0)   // main cream text
+    static let engraveDim    = Color(hex: 0x7a715a)   // dim legend
+    static let textLabel     = Color(hex: 0xb3a884)   // control labels
+    static let textOff       = Color(hex: 0x8a8168)   // unlit button text
+    static let textActive    = Color(hex: 0xf0e6cc)   // lit button text
+    static let titleCream    = Color(hex: 0xece2c6)
+
+    // LCD greens
+    static let lcd           = Color(hex: 0x8fe07a)   // bright readout
+    static let lcdMed        = Color(hex: 0x7db86a)
+    static let lcdDim        = Color(hex: 0x5c8a4f)
+
+    static let ledOff        = Color(hex: 0x3a352b)
+    static let capTop        = Color(hex: 0x4b4436)
+    static let capBottom     = Color(hex: 0x201d16)
+    static let track         = Color(hex: 0xd8cdb0).opacity(0.26)
+    static let woodLight     = Color(hex: 0x6b4a2c)
+    static let woodMid       = Color(hex: 0x5a3d24)
+    static let woodDark      = Color(hex: 0x4d3319)
+
+    // Section accents.
+    static let oscAccent    = Color(hex: 0xd98a3c)  // amber
+    static let osc2Accent   = Color(hex: 0xc85a44)  // coral
+    static let filterAccent = Color(hex: 0x3f9aa8)  // cyan
+    static let ampAccent    = Color(hex: 0x5fa96b)  // green
+    static let filtEnvAccent = Color(hex: 0x5fa96b) // green
+    static let lfoAccent    = Color(hex: 0x9a5fa0)  // magenta
+    static let globalAccent = Color(hex: 0x4a7bb0)  // blue
+    static let velAccent    = Color(hex: 0x4a7bb0)  // blue (Vel lives in Global)
+    static let mixerAccent  = Color(hex: 0x8f887a)  // warm gray
+    static let wtAccent     = Color(hex: 0xd98a3c)  // amber (WT lives in Osc 1)
+    static let arpAccent    = Color(hex: 0xd9a63c)  // amber-gold
+    static let chordAccent  = Color(hex: 0x5fa96b)  // green
+    static let fxAccent     = Color(hex: 0x4a7bb0)  // blue
 }
 
 // MARK: - Audio meters
@@ -118,8 +163,9 @@ struct WavetableWaveform: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.black.opacity(0.30))
+                // Dark green-black phosphor well.
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Palette.lcdBg)
                 Path { path in
                     guard samples.count > 1 else {
                         path.move(to: CGPoint(x: 0, y: geometry.size.height / 2))
@@ -131,17 +177,19 @@ struct WavetableWaveform: View {
                         let x = geometry.size.width
                               * CGFloat(index) / CGFloat(samples.count - 1)
                         let y = geometry.size.height * 0.5
-                              - CGFloat(samples[index]) * geometry.size.height * 0.43
+                              - CGFloat(samples[index]) * geometry.size.height * 0.40
                         if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
                         else { path.addLine(to: CGPoint(x: x, y: y)) }
                     }
                 }
-                .stroke(accent, style: StrokeStyle(lineWidth: 1.2,
+                .stroke(accent, style: StrokeStyle(lineWidth: 1.6,
                                                    lineJoin: .round))
-                .shadow(color: accent.opacity(0.45), radius: 1)
+                .shadow(color: accent.opacity(0.6), radius: 2)   // phosphor glow
             }
-            .overlay(RoundedRectangle(cornerRadius: 3)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.black.opacity(0.55), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(hex: 0xd8cdb0).opacity(0.06), lineWidth: 1).padding(1))
         }
     }
 }
@@ -166,6 +214,7 @@ struct Knob: View {
     @EnvironmentObject private var help: HelpModel
     @State private var value: Float
     @State private var startNorm: CGFloat?
+    @State private var hovering = false
 
     private let lo: Float
     private let hi: Float
@@ -184,51 +233,44 @@ struct Knob: View {
     }
 
     var body: some View {
-        VStack(spacing: 2) {
-            Text(title.uppercased())
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
-                .tracking(0.5)
-                .foregroundColor(Palette.engrave)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-
+        VStack(spacing: 7) {
             ZStack {
-                KnobTicks()
-                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                    .frame(width: 44, height: 44)
-
+                // 270-degree track + value arc.
                 KnobArc(fraction: 1)
-                    .stroke(Palette.track, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .frame(width: 38, height: 38)
+                    .stroke(Palette.track, style: StrokeStyle(lineWidth: 2.5, lineCap: .butt))
+                    .frame(width: 40, height: 40)
                 KnobArc(fraction: normFor(value))
-                    .stroke(accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .frame(width: 38, height: 38)
-                    .shadow(color: accent.opacity(0.6), radius: 2)
+                    .stroke(accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .butt))
+                    .frame(width: 40, height: 40)
+                    .shadow(color: accent.opacity(0.55), radius: 2)
                 let effectiveNorm = normFor(model.effectiveValue(addr))
-                let baseNorm = normFor(value)
                 if startNorm == nil
                     && model.supportsModulationIndicator(addr)
-                    && abs(effectiveNorm - baseNorm) > 0.002 {
+                    && abs(effectiveNorm - normFor(value)) > 0.002 {
                     KnobArc(fraction: effectiveNorm)
-                        .trim(from: max(0, effectiveNorm - 0.018),
-                              to: effectiveNorm)
-                        .stroke(Color.white,
-                                style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                        .frame(width: 38, height: 38)
-                        .shadow(color: Color.black.opacity(0.9), radius: 1)
+                        .trim(from: max(0, effectiveNorm - 0.02), to: effectiveNorm)
+                        .stroke(Color.white, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                        .frame(width: 40, height: 40)
+                        .shadow(color: .black.opacity(0.9), radius: 1)
                 }
 
-                // Cap
+                // Machined metal cap: brushed conic ring + domed radial centre.
                 Circle()
-                    .fill(LinearGradient(colors: [Palette.capTop, Palette.capBottom],
-                                         startPoint: .top, endPoint: .bottom))
-                    .frame(width: 30, height: 30)
-                    .overlay(Circle().stroke(Color.black.opacity(0.6), lineWidth: 1))
-                    .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                    .fill(AngularGradient(colors: [
+                        Color(hex: 0x2c281f), Color(hex: 0x443d30), Color(hex: 0x201d16),
+                        Color(hex: 0x3c352a), Color(hex: 0x2c281f)], center: .center))
+                    .frame(width: 32, height: 32)
+                    .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
+                Circle()
+                    .fill(RadialGradient(colors: [Palette.capTop, Palette.capBottom],
+                                         center: UnitPoint(x: 0.5, y: 0.30),
+                                         startRadius: 1, endRadius: 17))
+                    .frame(width: 28, height: 28)
+                    .overlay(Circle().stroke(Color(hex: 0xd8cdb0).opacity(0.14), lineWidth: 0.5))
 
                 KnobPointer(norm: normFor(value))
                     .stroke(accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    .frame(width: 27, height: 27)
+                    .frame(width: 26, height: 26)
             }
             .frame(width: 46, height: 46)
             .contentShape(Rectangle())
@@ -245,15 +287,28 @@ struct Knob: View {
                     .onEnded { _ in startNorm = nil }
             )
 
-            Text(displayString)
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundColor(Palette.lcd)
-                .lineLimit(1)
+            // Label by default; on hover it flips to the green LCD value.
+            ZStack {
+                Text(title.uppercased())
+                    .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                    .tracking(1.0)
+                    .foregroundColor(Palette.textLabel)
+                    .opacity(hovering ? 0 : 1)
+                Text(displayString)
+                    .font(.system(size: 11, weight: .regular, design: .monospaced))
+                    .foregroundColor(Palette.lcd)
+                    .shadow(color: Palette.lcd.opacity(0.5), radius: 3)
+                    .opacity(hovering ? 1 : 0)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(height: 12)
         }
         .frame(width: 52)
-        .onHover { hovering in
-            let h = SynthHelp.text(for: AUParameterAddress(addr.rawValue))
-            if hovering { help.set(h) } else { help.clear(ifMatches: h) }
+        .onHover { h in
+            hovering = h
+            let t = SynthHelp.text(for: AUParameterAddress(addr.rawValue))
+            if h { help.set(t) } else { help.clear(ifMatches: t) }
         }
         .onChange(of: model.version) { _ in
             // Local gesture state avoids host-observer feedback interrupting a
@@ -299,7 +354,76 @@ struct Knob: View {
     }
 }
 
-// MARK: - Membrane-style selector (lit buttons)
+// MARK: - Lit segment chip (shared by selectors / toggles)
+
+struct SegChip: View {
+    let text: String
+    let on: Bool
+    let accent: Color
+    var showLED: Bool = true
+    private let radius: CGFloat = 5
+    var body: some View {
+        HStack(spacing: 6) {
+            if showLED {
+                Circle()
+                    .fill(on ? accent : Palette.ledOff)
+                    .frame(width: 6, height: 6)
+                    .overlay(   // tiny specular pip on the lit dot
+                        Circle().fill(Color.white.opacity(on ? 0.35 : 0))
+                            .frame(width: 2, height: 2).offset(x: -0.6, y: -0.6))
+                    .shadow(color: on ? accent.opacity(0.9) : .clear, radius: on ? 3.5 : 0)
+            }
+            Text(text.uppercased())
+                .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                .tracking(0.5)
+                .foregroundColor(on ? Palette.textActive : Palette.textOff)
+                .lineLimit(1)
+                .fixedSize()
+                .frame(minWidth: 26)   // uniform button width; never stretches to fill
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        // Every segment reads as a raised button; the lit one is warmer.
+        .background(
+            RoundedRectangle(cornerRadius: radius).fill(
+                on ? AnyShapeStyle(LinearGradient(colors: [Palette.btnOnTop, Palette.btnOnBottom],
+                                                  startPoint: .top, endPoint: .bottom))
+                   : AnyShapeStyle(LinearGradient(colors: [Color(hex: 0x2a261e), Palette.btnOff],
+                                                  startPoint: .top, endPoint: .bottom)))
+        )
+        // Rounded bevel: a soft top highlight and a dark base edge, warmer when lit.
+        .overlay(
+            RoundedRectangle(cornerRadius: radius)
+                .stroke(on ? accent.opacity(0.35) : Color.black.opacity(0.55), lineWidth: 1)
+        )
+        .overlay(alignment: .top) {
+            RoundedRectangle(cornerRadius: radius)
+                .stroke(Color(hex: 0xd8cdb0).opacity(on ? 0.16 : 0.06), lineWidth: 1)
+                .padding(0.5)
+                .mask(LinearGradient(colors: [.black, .clear],
+                                     startPoint: .top, endPoint: .center))
+        }
+    }
+}
+
+// Dark inset well that groups a row of segment chips.
+struct SegGroup<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+    var body: some View {
+        HStack(spacing: 4) { content() }
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(Palette.comboBg)
+                    .shadow(color: .black.opacity(0.4), radius: 1.5, y: 1)   // inset feel
+            )
+            .overlay(RoundedRectangle(cornerRadius: 7)
+                .stroke(Color.black.opacity(0.6), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 7)
+                .stroke(Color(hex: 0xd8cdb0).opacity(0.05), lineWidth: 1).padding(1))
+    }
+}
+
+// MARK: - Segmented selector
 
 struct Selector: View {
     let title: String
@@ -321,14 +445,20 @@ struct Selector: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title.uppercased())
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
-                .tracking(0.6)
-                .foregroundColor(Palette.engrave)
-            HStack(spacing: 3) {
+                .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                .tracking(1.3)
+                .foregroundColor(Palette.textLabel)
+            SegGroup {
                 ForEach(options.indices, id: \.self) { i in
-                    button(i)
+                    Button {
+                        index = i
+                        model.set(addr, Float(i + minV))
+                    } label: {
+                        SegChip(text: options[i], on: i == index, accent: accent)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -336,35 +466,6 @@ struct Selector: View {
             let h = SynthHelp.text(for: AUParameterAddress(addr.rawValue))
             if hovering { help.set(h) } else { help.clear(ifMatches: h) }
         }
-    }
-
-    private func button(_ i: Int) -> some View {
-        let on = i == index
-        return Button {
-            index = i
-            model.set(addr, Float(i + minV))
-        } label: {
-            HStack(spacing: 3) {
-                Circle()
-                    .fill(on ? accent : Color.black.opacity(0.55))
-                    .frame(width: 5, height: 5)
-                    .shadow(color: on ? accent.opacity(0.9) : .clear, radius: on ? 2.5 : 0)
-                Text(options[i])
-                    .font(.system(size: 9, weight: on ? .bold : .regular, design: .rounded))
-                    .foregroundColor(on ? Palette.engrave : Palette.engraveDim)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 6).padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(on ? Color.white.opacity(0.08) : Color.black.opacity(0.25))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(on ? accent.opacity(0.7) : Color.white.opacity(0.08), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -384,31 +485,18 @@ struct ToggleButton: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title.uppercased())
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
-                .tracking(0.6)
-                .foregroundColor(Palette.engrave)
-            Button {
-                on.toggle()
-                model.set(addr, on ? 1 : 0)
-            } label: {
-                HStack(spacing: 3) {
-                    Circle()
-                        .fill(on ? accent : Color.black.opacity(0.55))
-                        .frame(width: 5, height: 5)
-                        .shadow(color: on ? accent.opacity(0.9) : .clear, radius: on ? 2.5 : 0)
-                    Text(on ? "On" : "Off")
-                        .font(.system(size: 9, weight: on ? .bold : .regular, design: .rounded))
-                        .foregroundColor(on ? Palette.engrave : Palette.engraveDim)
+                .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                .tracking(1.3)
+                .foregroundColor(Palette.textLabel)
+            SegGroup {
+                Button { on.toggle(); model.set(addr, on ? 1 : 0) } label: {
+                    SegChip(text: on ? "On" : "Off", on: on, accent: accent)
+                        .frame(minWidth: 40)
                 }
-                .padding(.horizontal, 7).padding(.vertical, 4)
-                .background(RoundedRectangle(cornerRadius: 4)
-                    .fill(on ? Color.white.opacity(0.08) : Color.black.opacity(0.25)))
-                .overlay(RoundedRectangle(cornerRadius: 4)
-                    .stroke(on ? accent.opacity(0.7) : Color.white.opacity(0.08), lineWidth: 1))
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .onHover { hovering in
             let h = SynthHelp.text(for: AUParameterAddress(addr.rawValue))
@@ -455,9 +543,9 @@ struct Dropdown: View {
                     .font(.system(size: 6, weight: .bold))
                     .foregroundColor(Palette.engraveDim)
             }
-            .padding(.horizontal, 6).padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.28)))
-            .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.white.opacity(0.08), lineWidth: 1))
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Palette.comboBg))
+            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.black.opacity(0.5), lineWidth: 1))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -493,15 +581,21 @@ struct AmountSlider: View {
                 let frac = CGFloat((value - lo) / (hi - lo))            // 0..1
                 let zero = CGFloat((0 - lo) / (hi - lo))                // centre
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.black.opacity(0.35)).frame(height: 4)
-                    Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 10)
+                    Capsule().fill(Palette.comboBg).frame(height: 4)
+                        .overlay(Capsule().stroke(Color.black.opacity(0.5), lineWidth: 1))
+                    Rectangle().fill(Palette.engrave.opacity(0.2)).frame(width: 1, height: 10)
                         .offset(x: zero * w - 0.5)
-                    Rectangle().fill(accent)
+                    Capsule().fill(accent)
                         .frame(width: max(1, abs(frac - zero) * w), height: 4)
                         .offset(x: min(frac, zero) * w)
-                    Circle().fill(accent).frame(width: 11, height: 11)
-                        .shadow(color: accent.opacity(0.7), radius: 2)
-                        .offset(x: frac * w - 5.5)
+                    Circle()
+                        .fill(RadialGradient(colors: [Palette.capTop, Palette.capBottom],
+                                             center: UnitPoint(x: 0.5, y: 0.32),
+                                             startRadius: 0, endRadius: 8))
+                        .frame(width: 14, height: 14)
+                        .overlay(Circle().stroke(accent, lineWidth: 1.5))
+                        .shadow(color: accent.opacity(0.6), radius: 2)
+                        .offset(x: frac * w - 7)
                 }
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
@@ -542,13 +636,13 @@ struct Panel<Content: View, Trailing: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(accent)
-                    .frame(width: 16, height: 4)
                 Text(title.uppercased())
-                    .font(.system(size: 11, weight: .heavy, design: .rounded))
-                    .tracking(1.4)
-                    .foregroundColor(Palette.engrave)
+                    .font(.system(size: 10.5, weight: .heavy, design: .rounded))
+                    .tracking(1.6)
+                    .foregroundColor(accent.isLight ? Color(hex: 0x1b1813) : Palette.textActive)
+                    .padding(.horizontal, 11).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(accent))
+                    .shadow(color: .black.opacity(0.4), radius: 1, y: 1)
                 Spacer(minLength: 8)
                 trailing
             }
@@ -559,13 +653,15 @@ struct Panel<Content: View, Trailing: View>: View {
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Palette.sectionBG)
-                .overlay(RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.black.opacity(0.55), lineWidth: 1))
-                .overlay(RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.white.opacity(0.05), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 6)
+                .fill(LinearGradient(colors: [Palette.sectionTop, Palette.sectionBottom],
+                                     startPoint: .top, endPoint: .bottom))
+                .overlay(RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.black.opacity(0.5), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color(hex: 0xd8cdb0).opacity(0.06), lineWidth: 1)
                     .padding(1))
+                .shadow(color: .black.opacity(0.4), radius: 4, y: 2)
         )
     }
 }
@@ -593,22 +689,14 @@ struct InlineWaveSelect: View {
     }
 
     var body: some View {
-        HStack(spacing: 3) {
+        SegGroup {
             ForEach(options.indices, id: \.self) { i in
-                let on = i == index
                 Button {
                     index = i
                     model.set(addr, Float(i))
                     model.forceRefresh()   // re-evaluate which controls are dimmed
                 } label: {
-                    Text(options[i])
-                        .font(.system(size: 9, weight: on ? .bold : .regular, design: .rounded))
-                        .foregroundColor(on ? Palette.engrave : Palette.engraveDim)
-                        .padding(.horizontal, 6).padding(.vertical, 3)
-                        .background(RoundedRectangle(cornerRadius: 4)
-                            .fill(on ? Color.white.opacity(0.10) : Color.black.opacity(0.25)))
-                        .overlay(RoundedRectangle(cornerRadius: 4)
-                            .stroke(on ? accent.opacity(0.8) : Color.white.opacity(0.08), lineWidth: 1))
+                    SegChip(text: options[i], on: i == index, accent: accent)
                 }
                 .buttonStyle(.plain)
             }

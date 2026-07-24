@@ -62,10 +62,10 @@ struct SynthView: View {
     // MARK: Wood side panels
 
     private var woodCheek: some View {
-        LinearGradient(colors: [Palette.woodLight, Palette.woodDark, Palette.woodLight],
+        LinearGradient(colors: [Palette.woodMid, Palette.woodLight, Palette.woodDark, Palette.woodMid],
                        startPoint: .leading, endPoint: .trailing)
             .frame(width: 18)
-            .overlay(Rectangle().stroke(Color.black.opacity(0.5), lineWidth: 1))
+            .overlay(Rectangle().stroke(Color.black.opacity(0.55), lineWidth: 1))
     }
 
     // MARK: Main panel
@@ -75,26 +75,26 @@ struct SynthView: View {
             header
             helpBar               // kept near the top so it stays on-screen as the panel grows
             VStack(spacing: 12) {
+                // Three columns on a shared grid: every column is exactly 516
+                // tall, and the primary interior seam lands on the same line in
+                // all three (Osc1|Osc2, FiltEnv|LFO, Filter|Global all at 256),
+                // with tops and bottoms aligned. Heights per column sum to 516.
                 HStack(alignment: .top, spacing: 12) {
-                    // Column 1 — Oscillators + Mixer
+                    // Column 1 — Oscillators + Mixer  (246 + 130 + 120 + 2·10)
                     VStack(spacing: 10) {
-                        oscillatorPanel.frame(height: 186)
-                        osc2Panel.frame(height: 192)
-                        mixerPanel.frame(height: 118)
-                        Spacer(minLength: 0)
+                        oscillatorPanel.frame(height: 246)
+                        osc2Panel.frame(height: 130)
+                        mixerPanel.frame(height: 120)
                     }
-                    // Column 2 — Envelopes + LFO
+                    // Column 2 — Envelopes (Amp + Filter) + LFO  (246 + 260 + 1·10)
                     VStack(spacing: 10) {
-                        ampEnvPanel.frame(height: 118)
-                        filterEnvPanel.frame(height: 118)
+                        envelopePanel.frame(height: 246)
                         lfoPanel.frame(height: 260)
-                        Spacer(minLength: 0)
                     }
-                    // Column 3 — Filter + Global (Vel Vol lives in Global)
+                    // Column 3 — Filter + Global  (246 + 260 + 1·10)
                     VStack(spacing: 10) {
-                        filterPanel.frame(height: 226)
-                        globalPanel.frame(height: 280)
-                        Spacer(minLength: 0)
+                        filterPanel.frame(height: 246)
+                        globalPanel.frame(height: 260)
                     }
                 }
                 .frame(height: 516)
@@ -117,24 +117,26 @@ struct SynthView: View {
 
     // Hover-help readout, bottom-left.
     private var helpBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Circle()
-                .fill(help.text.isEmpty ? Palette.engraveDim.opacity(0.5) : Palette.lcd)
+                .fill(Palette.lcd)
                 .frame(width: 6, height: 6)
-            Text(help.text.isEmpty ? "Hover a control for a description." : help.text)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundColor(help.text.isEmpty ? Palette.engraveDim : Palette.engrave)
+                .shadow(color: Palette.lcd.opacity(0.7), radius: 3)
+            Text(help.text.isEmpty ? "HOVER ANY CONTROL TO SEE ITS VALUE AND DESCRIPTION."
+                                   : help.text.uppercased())
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .tracking(0.4)
+                .foregroundColor(Palette.lcdMed)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12).padding(.vertical, 8)
+        .padding(.horizontal, 14).padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.black.opacity(0.28))
-                .overlay(RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.white.opacity(0.06), lineWidth: 1))
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Palette.lcdBg)
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.black, lineWidth: 1))
         )
     }
 
@@ -144,14 +146,14 @@ struct SynthView: View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("HYBRID 8")
-                    .font(.system(size: 26, weight: .black, design: .rounded))
-                    .tracking(2)
-                    .foregroundColor(Palette.engrave)
+                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .tracking(3)
+                    .foregroundColor(Palette.titleCream)
                     .fixedSize()
                 Text("ANALOG · WAVETABLE POLYSYNTH")
                     .font(.system(size: 9, weight: .semibold, design: .rounded))
                     .tracking(3)
-                    .foregroundColor(Palette.engraveDim)
+                    .foregroundColor(Palette.textLabel)
                     .fixedSize()
             }
             HStack(spacing: 3) {
@@ -283,21 +285,30 @@ struct SynthView: View {
     private var oscillatorPanel: some View {
         let w1 = Int((model.param(SynthParamOscWaveform)?.value ?? 0).rounded())
         let w2 = Int((model.param(SynthParamOsc2Waveform)?.value ?? 0).rounded())
-        let isWT1 = w1 == 3
+        let isPulse1 = w1 == 2              // only Pulse uses the width knob
         let anyWT = w1 == 3 || w2 == 3      // WT table/frame/live are shared
         return Panel(title: "Osc 1", accent: Palette.oscAccent, trailing: {
             InlineWaveSelect(SynthParamOscWaveform, ["Saw", "Squ", "Pls", "WT"],
                              model, accent: Palette.oscAccent)
         }) {
             VStack(alignment: .leading, spacing: 8) {
-                wavetablePicker
-                    .dimmed(!anyWT)
+                HStack(spacing: 8) {
+                    wavetablePickerButton
+                        .frame(maxWidth: .infinity)
+                    LiveWavetablePreview(store: wavetables,
+                                         entry: wavetables.entry(slot: wavetables.selectedSlot),
+                                         initialFrame: model.param(SynthParamWTFrame)?.value ?? 0)
+                        .frame(maxWidth: .infinity, maxHeight: 42)
+                }
+                .frame(height: 42)
+                .dimmed(!anyWT)
+                Spacer(minLength: 0)
                 HStack(spacing: 0) {
                     Knob("Octave", SynthParamOctave, model,
                          accent: Palette.oscAccent, unit: "", integer: true)
                         .frame(maxWidth: .infinity)
                     Knob("P.Width", SynthParamOscPulseWidth, model, accent: Palette.oscAccent)
-                        .dimmed(isWT1).frame(maxWidth: .infinity)
+                        .dimmed(!isPulse1).frame(maxWidth: .infinity)
                     Knob("Frame", SynthParamWTFrame, model, accent: Palette.wtAccent)
                         .dimmed(!anyWT).frame(maxWidth: .infinity)
                     Knob("Live", SynthParamWTLiveness, model, accent: Palette.wtAccent)
@@ -307,34 +318,40 @@ struct SynthView: View {
         }
     }
 
-    private var wavetablePicker: some View {
+    private var wavetablePickerButton: some View {
         let entry = wavetables.entry(slot: wavetables.selectedSlot)
-        let frame = model.param(SynthParamWTFrame)?.value ?? 0
-        return HStack(spacing: 8) {
-            Button {
-                showingWavetableBrowser = true
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "waveform")
-                    Text(entry.name)
-                        .lineLimit(1)
-                    Spacer(minLength: 2)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
-                }
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
-                .foregroundColor(Palette.engrave)
-                .padding(.horizontal, 8)
-                .frame(width: 128, height: 26)
-                .background(RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.black.opacity(0.25)))
-                .overlay(RoundedRectangle(cornerRadius: 4)
-                    .stroke(Palette.wtAccent.opacity(0.55), lineWidth: 1))
+        return Button {
+            showingWavetableBrowser = true
+        } label: {
+            HStack(spacing: 6) {
+                Text(entry.name)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(Palette.engrave)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Spacer(minLength: 4)
+                // Raised drop-arrow well on the right edge.
+                Image(systemName: "arrowtriangle.down.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(Palette.engrave.opacity(0.85))
+                    .frame(width: 26)
+                    .frame(maxHeight: .infinity)
+                    .background(
+                        Rectangle().fill(Color.white.opacity(0.04))
+                            .overlay(alignment: .leading) {
+                                Rectangle().fill(Color.black.opacity(0.4)).frame(width: 1)
+                            })
             }
-            .buttonStyle(.plain)
-            LiveWavetablePreview(store: wavetables, entry: entry,
-                                 initialFrame: frame)
+            .padding(.leading, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Palette.comboBg))
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.black.opacity(0.55), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(hex: 0xd8cdb0).opacity(0.06), lineWidth: 1).padding(1))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
+        .buttonStyle(.plain)
         .sheet(isPresented: $showingWavetableBrowser) {
             WavetableBrowser(store: wavetables, model: model,
                              isPresented: $showingWavetableBrowser)
@@ -353,10 +370,8 @@ struct SynthView: View {
     }
 
     private var osc2Panel: some View {
-        let w1 = Int((model.param(SynthParamOscWaveform)?.value ?? 0).rounded())
         let w2 = Int((model.param(SynthParamOsc2Waveform)?.value ?? 0).rounded())
-        let isWT2 = w2 == 3
-        let anyWT = w1 == 3 || w2 == 3      // cross-mod & sync need both analog
+        let isPulse2 = w2 == 2              // only Pulse uses the width knob
         return Panel(title: "Osc 2", accent: Palette.osc2Accent, trailing: {
             InlineWaveSelect(SynthParamOsc2Waveform, ["Saw", "Squ", "Pls", "WT"],
                              model, accent: Palette.osc2Accent)
@@ -370,7 +385,7 @@ struct SynthView: View {
                          accent: Palette.osc2Accent, unit: "", integer: true).frame(maxWidth: .infinity)
                     Knob("Detune", SynthParamOsc2Detune, model, accent: Palette.osc2Accent, unit: "c").frame(maxWidth: .infinity)
                     Knob("P.Width", SynthParamOsc2PulseWidth, model, accent: Palette.osc2Accent)
-                        .dimmed(isWT2).frame(maxWidth: .infinity)
+                        .dimmed(!isPulse2).frame(maxWidth: .infinity)
                 }
             }
         }
@@ -402,51 +417,98 @@ struct SynthView: View {
 
     private var lfoPanel: some View {
         Panel(title: "LFO", accent: Palette.lfoAccent) {
-            VStack(alignment: .leading, spacing: 10) {
-                // LFO 1 — its Pitch route (vibrato) is hardwired; every other
-                // LFO 1 destination is assigned in the Mod Matrix below.
-                HStack(alignment: .top, spacing: 10) {
-                    Selector("LFO 1 Wave", SynthParamLFOWaveform, ["Sin", "Squ", "Saw"],
-                             model, accent: Palette.lfoAccent)
-                    ToggleButton("Key Trig", SynthParamLFOKeyTrigger, model, accent: Palette.lfoAccent)
-                }
-                HStack(spacing: 0) {
-                    Knob("Rate", SynthParamLFORate, model,
-                         accent: Palette.lfoAccent, unit: "", log: true).frame(maxWidth: .infinity)
-                    Knob("Delay", SynthParamLFODelay, model, accent: Palette.lfoAccent, unit: "s").frame(maxWidth: .infinity)
-                    Knob("Vibrato", SynthParamLFOToOscFreq, model, accent: Palette.lfoAccent).frame(maxWidth: .infinity)
-                }
+            VStack(spacing: 5) {
+                lfoRow("LFO 1", wave: SynthParamLFOWaveform,
+                       rate: SynthParamLFORate, delay: SynthParamLFODelay,
+                       polarity: SynthParamLFO1Polarity,
+                       phase: SynthParamLFO1Phase, mode: SynthParamLFO1Mode)
                 Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
-                // LFO 2 — a matrix-only source.
-                HStack(alignment: .top, spacing: 10) {
-                    Selector("LFO 2 Wave", SynthParamLFO2Waveform, ["Sin", "Squ", "Saw"],
-                             model, accent: Palette.lfoAccent)
-                    Knob("LFO 2 Rate", SynthParamLFO2Rate, model,
-                         accent: Palette.lfoAccent, unit: "", log: true)
-                }
+                lfoRow("LFO 2", wave: SynthParamLFO2Waveform,
+                       rate: SynthParamLFO2Rate, delay: SynthParamLFO2Delay,
+                       polarity: SynthParamLFO2Polarity,
+                       phase: SynthParamLFO2Phase, mode: SynthParamLFO2Mode)
+                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+                lfoRow("LFO 3", wave: SynthParamLFO3Waveform,
+                       rate: SynthParamLFO3Rate, delay: SynthParamLFO3Delay,
+                       polarity: SynthParamLFO3Polarity,
+                       phase: SynthParamLFO3Phase, mode: SynthParamLFO3Mode)
             }
         }
     }
 
-    private var ampEnvPanel: some View {
-        Panel(title: "Amp Envelope", accent: Palette.ampAccent) {
-            HStack(spacing: 0) {
-                Knob("Attack", SynthParamAmpAttack, model, accent: Palette.ampAccent, timeMapped: true).frame(maxWidth: .infinity)
-                Knob("Decay", SynthParamAmpDecay, model, accent: Palette.ampAccent, timeMapped: true).frame(maxWidth: .infinity)
-                Knob("Sustain", SynthParamAmpSustain, model, accent: Palette.ampAccent).frame(maxWidth: .infinity)
-                Knob("Release", SynthParamAmpRelease, model, accent: Palette.ampAccent, timeMapped: true).frame(maxWidth: .infinity)
+    private func lfoRow(_ name: String, wave: SynthParam, rate: SynthParam,
+                        delay: SynthParam, polarity: SynthParam,
+                        phase: SynthParam, mode: SynthParam) -> some View {
+        HStack(alignment: .top, spacing: 5) {
+            Text(name)
+                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                .foregroundColor(Palette.engrave)
+                .frame(width: 34, height: 58, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("WAVE")
+                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    .foregroundColor(Palette.engrave)
+                Dropdown(wave, ["Sin", "Squ", "Saw↑", "Saw↓", "S&H"],
+                         model, accent: Palette.lfoAccent,
+                         helpText: SynthHelp.text(
+                            for: AUParameterAddress(wave.rawValue)))
+                    .frame(width: 70)
+            }
+            Knob("Rate", rate, model, accent: Palette.lfoAccent,
+                 unit: "", log: true)
+            Knob("Delay", delay, model, accent: Palette.lfoAccent, unit: "s")
+            VStack(alignment: .leading, spacing: 3) {
+                Text("POLARITY")
+                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    .foregroundColor(Palette.engrave)
+                Dropdown(polarity, ["Bi", "Uni"], model,
+                         accent: Palette.lfoAccent,
+                         helpText: SynthHelp.text(
+                            for: AUParameterAddress(polarity.rawValue)))
+                    .frame(width: 48)
+            }
+            Knob("Phase", phase, model, accent: Palette.lfoAccent)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("MODE")
+                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    .foregroundColor(Palette.engrave)
+                Dropdown(mode, ["Loop", "Trig", "1-Shot"], model,
+                         accent: Palette.lfoAccent,
+                         helpText: SynthHelp.text(
+                            for: AUParameterAddress(mode.rawValue)))
+                    .frame(width: 62)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // Amp and Filter envelopes share one panel: two accent-labelled ADSR rows.
+    private var envelopePanel: some View {
+        Panel(title: "Envelopes", accent: Palette.ampAccent) {
+            VStack(spacing: 8) {
+                envRow("Amp", accent: Palette.ampAccent,
+                       a: SynthParamAmpAttack, d: SynthParamAmpDecay,
+                       s: SynthParamAmpSustain, r: SynthParamAmpRelease)
+                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+                envRow("Filter", accent: Palette.filtEnvAccent,
+                       a: SynthParamFilterAttack, d: SynthParamFilterDecay,
+                       s: SynthParamFilterSustain, r: SynthParamFilterRelease)
             }
         }
     }
 
-    private var filterEnvPanel: some View {
-        Panel(title: "Filter Envelope", accent: Palette.filtEnvAccent) {
-            HStack(spacing: 0) {
-                Knob("Attack", SynthParamFilterAttack, model, accent: Palette.filtEnvAccent, timeMapped: true).frame(maxWidth: .infinity)
-                Knob("Decay", SynthParamFilterDecay, model, accent: Palette.filtEnvAccent, timeMapped: true).frame(maxWidth: .infinity)
-                Knob("Sustain", SynthParamFilterSustain, model, accent: Palette.filtEnvAccent).frame(maxWidth: .infinity)
-                Knob("Release", SynthParamFilterRelease, model, accent: Palette.filtEnvAccent, timeMapped: true).frame(maxWidth: .infinity)
-            }
+    private func envRow(_ name: String, accent: Color, a: SynthParam,
+                        d: SynthParam, s: SynthParam, r: SynthParam) -> some View {
+        HStack(alignment: .center, spacing: 4) {
+            Text(name.uppercased())
+                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                .tracking(0.5)
+                .foregroundColor(accent)
+                .frame(width: 38, alignment: .leading)
+            Knob("Attack", a, model, accent: accent, timeMapped: true).frame(maxWidth: .infinity)
+            Knob("Decay", d, model, accent: accent, timeMapped: true).frame(maxWidth: .infinity)
+            Knob("Sustain", s, model, accent: accent).frame(maxWidth: .infinity)
+            Knob("Release", r, model, accent: accent, timeMapped: true).frame(maxWidth: .infinity)
         }
     }
 
@@ -475,6 +537,22 @@ struct SynthView: View {
                     Knob("Vel Vol", SynthParamVelToVolume, model, accent: Palette.velAccent).frame(maxWidth: .infinity)
                     ToggleButton("Unison", SynthParamUnison, model, accent: Palette.globalAccent).frame(maxWidth: .infinity)
                     Knob("Uni Det", SynthParamUnisonDetune, model, accent: Palette.globalAccent).frame(maxWidth: .infinity)
+                    Knob("Vibrato", SynthParamLFOToOscFreq, model,
+                         accent: Palette.globalAccent).frame(maxWidth: .infinity)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("VIB SOURCE")
+                            .font(.system(size: 8, weight: .semibold,
+                                         design: .rounded))
+                            .foregroundColor(Palette.engrave)
+                        Dropdown(SynthParamVibratoLFO,
+                                 ["LFO 1", "LFO 2", "LFO 3"], model,
+                                 accent: Palette.globalAccent,
+                                 helpText: SynthHelp.text(for:
+                                    AUParameterAddress(
+                                        SynthParamVibratoLFO.rawValue)))
+                            .frame(width: 62)
+                    }
+                        .frame(maxWidth: .infinity)
                 }
             }
         }
@@ -529,8 +607,8 @@ struct SynthView: View {
 
     private var lowerPanelTitle: String {
         if lowerTab == 0 { return "Arpeggiator" }
-        if lowerTab == 1 { return "Chord Trigger  ·  Before Arpeggiator" }
-        return "Effects  ·  Compressor → Chorus → Delay → Reverb"
+        if lowerTab == 1 { return "Chord Trigger" }
+        return "Effects chain "
     }
 
     private func lowerTabButton(_ title: String, index: Int,
@@ -615,10 +693,10 @@ struct SynthView: View {
     private var effectsControls: some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(spacing: 2) {
-                effectTabButton("COMP", index: 0)
-                effectTabButton("CHORUS", index: 1)
-                effectTabButton("DELAY", index: 2)
-                effectTabButton("REVERB", index: 3)
+                effectTabButton("Compressor", index: 0)
+                effectTabButton("Chorus", index: 1)
+                effectTabButton("Delay", index: 2)
+                effectTabButton("Reverb", index: 3)
             }
             .frame(width: 62)
             Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1, height: 70)
@@ -685,20 +763,20 @@ struct SynthView: View {
 
     private var chorusControls: some View {
         HStack(alignment: .top, spacing: 0) {
-                Knob("Cho Mix", SynthParamChorusMix, model,
+                Knob("Mix", SynthParamChorusMix, model,
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
                 fxDivision("Cho Sync", SynthParamChorusRate)
                     .frame(maxWidth: .infinity)
-                Knob("Cho Depth", SynthParamChorusDepth, model,
+                Knob("Depth", SynthParamChorusDepth, model,
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
         }
     }
 
     private var delayControls: some View {
         HStack(alignment: .top, spacing: 0) {
-                Knob("Dly Mix", SynthParamDelayMix, model,
+                Knob("Mix", SynthParamDelayMix, model,
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
-                fxDivision("Dly Sync", SynthParamDelayTime)
+                fxDivision("Sync", SynthParamDelayTime)
                     .frame(maxWidth: .infinity)
                 Knob("Feedback", SynthParamDelayFeedback, model,
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
@@ -711,7 +789,7 @@ struct SynthView: View {
 
     private var reverbControls: some View {
         HStack(alignment: .top, spacing: 0) {
-            Knob("Rev Mix", SynthParamReverbMix, model,
+            Knob("Mix", SynthParamReverbMix, model,
                  accent: Palette.fxAccent).frame(maxWidth: .infinity)
             Knob("Size", SynthParamReverbSize, model,
                  accent: Palette.fxAccent).frame(maxWidth: .infinity)
@@ -741,7 +819,8 @@ struct SynthView: View {
     // MARK: Mod matrix
 
     static let modSources = ["Src", "LFO 1", "LFO 2", "Filt Env", "Amp Env",
-                             "Velocity", "Key Trk", "Mod Whl", "Aftertch", "Random"]
+                             "Velocity", "Key Trk", "Mod Whl", "Aftertch",
+                             "Random", "LFO 3"]
     static let modDests   = ["Dest", "Osc Pitch", "Osc2 Pitch", "Pulse W", "Cutoff",
                              "Reso", "Drive", "WT Frame", "WT Live", "X-Mod", "Amp",
                              "Osc1 Pitch", "Osc1 Level", "Osc2 Level", "Noise",
@@ -798,16 +877,16 @@ private struct LiveWavetablePreview: View {
         let frameIndex = min(entry.frameCount - 1,
                              max(0, Int((frame
                                  * Float(entry.frameCount - 1)).rounded())))
-        HStack(spacing: 8) {
-            WavetableWaveform(
-                samples: store.preview(for: entry, normalizedFrame: frame),
-                accent: Palette.wtAccent)
-                .frame(maxWidth: .infinity, minHeight: 24, maxHeight: 24)
-            Text("\(frameIndex + 1)/\(entry.frameCount)")
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                .foregroundColor(Palette.lcd)
-                .frame(width: 40, alignment: .trailing)
-        }
+        WavetableWaveform(
+            samples: store.preview(for: entry, normalizedFrame: frame),
+            accent: Palette.lcd)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottomTrailing) {
+                Text("\(frameIndex + 1)/\(entry.frameCount)")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundColor(Palette.lcdMed)
+                    .padding(.horizontal, 7).padding(.vertical, 5)
+            }
         .onReceive(NotificationCenter.default.publisher(
             for: .hybrid8WavetableFrameChanged)) { notification in
                 if let value = notification.object as? Float {

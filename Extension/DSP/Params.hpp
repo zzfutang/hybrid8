@@ -55,8 +55,26 @@ struct Params {
 
     LFOWave lfoWave       = LFOWave::Sine;
     float   lfoRate       = 5.0f;
-    bool    lfoKeyTrigger = false;  // reset LFO phase on note-on
+    bool    lfoKeyTrigger = false;  // legacy: reset LFO1 phase on note-on
     float   lfoDelay      = 0.0f;   // seconds before LFO fades in
+    bool    lfo1Unipolar  = false;
+    float   lfo1Phase     = 0.0f;
+    float   lfo2Delay     = 0.0f;
+    float   lfo3Delay     = 0.0f;
+    int     vibratoLFO    = 0;
+    // Per-LFO run mode: 0=Loop, 1=Trig (key reset), 2=One-Shot.
+    int     lfo1Mode      = 0;
+    int     lfo2Mode      = 0;
+    int     lfo3Mode      = 0;
+    // Full LFO 2 / 3 config (so a voice can run its own key-triggered copy).
+    LFOWave lfo2Wave      = LFOWave::Sine;
+    float   lfo2Rate      = 2.0f;
+    bool    lfo2Unipolar  = false;
+    float   lfo2Phase     = 0.0f;
+    LFOWave lfo3Wave      = LFOWave::Sine;
+    float   lfo3Rate      = 1.0f;
+    bool    lfo3Unipolar  = false;
+    float   lfo3Phase     = 0.0f;
     float   lfoToOscFreq  = 0.0f;
     float   lfoToPulseWidth = 0.0f;
     float   lfoToCutoff   = 0.0f;

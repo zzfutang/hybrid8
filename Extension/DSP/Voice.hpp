@@ -66,6 +66,8 @@ public:
         filtEnv_.setSampleRate(sr);
         filter_.setSampleRate(sr * kOversample);
         lfoLocal_.setSampleRate(sr);
+        lfo2Local_.setSampleRate(sr);
+        lfo3Local_.setSampleRate(sr);
         lfoFadeSamples_ = static_cast<int>(sr * 0.005); // 5 ms click-free start
         // Drift updated ~ every 32 samples; convert to a slow random-walk step.
         driftInc_ = 32.0;
@@ -127,6 +129,8 @@ public:
         decimator_.reset();
         filter_.reset();
         lfoLocal_.reset();      // start LFO phase at 0 (used when key-triggered)
+        lfo2Local_.reset();
+        lfo3Local_.reset();
         lfoElapsed_ = 0;        // (re)start the LFO delay from this key press
         if (resetEnvelopes) {
             ampEnv_.resetHard();
@@ -177,7 +181,8 @@ public:
 
     // Render one sample. globalLfo is the free-running LFO from the engine,
     // used when key-trigger is off.
-    inline float render(const Params& p, float globalLfo, float globalLfo2) {
+    inline float render(const Params& p, float globalLfo, float globalLfo2,
+                        float globalLfo3) {
         if (pendingNote_ && stealFadeRemaining_ <= 0) {
             const int note = pendingNoteNumber_;
             const float velocity = pendingVelocity_;
@@ -213,30 +218,40 @@ public:
         glidePitch_ += (targetPitch_ - glidePitch_) * p.glideCoef;
 
         // --- LFO (per-voice): optional key-trigger reset + delayed fade-in ---
-        float lfo;
-        {
-            int delaySamp = static_cast<int>(p.lfoDelay * sampleRate_);
-            float amp;
-            if (lfoElapsed_ < delaySamp) {
-                amp = 0.0f;
-            } else if (lfoFadeSamples_ > 0) {
-                amp = clampf(static_cast<float>(lfoElapsed_ - delaySamp)
-                             / static_cast<float>(lfoFadeSamples_), 0.0f, 1.0f);
-            } else {
-                amp = 1.0f;
-            }
+        auto delayedAmplitude = [&](float seconds) {
+            const int delaySamples = static_cast<int>(seconds * sampleRate_);
+            if (lfoElapsed_ < delaySamples) return 0.0f;
+            return lfoFadeSamples_ > 0
+                ? clampf(static_cast<float>(lfoElapsed_ - delaySamples)
+                         / static_cast<float>(lfoFadeSamples_), 0.0f, 1.0f)
+                : 1.0f;
+        };
+        // Each LFO: Loop (0) uses the shared free-running engine LFO; Trig (1)
+        // and One-Shot (2) use a per-voice copy reset on this key press (Trig
+        // loops, One-Shot plays a single cycle then holds).
+        auto voiceLfo = [&](LFO& local, int mode, LFOWave wave, double rate,
+                            bool uni, float phase, float globalVal, float delaySec) -> float {
+            int delaySamp = static_cast<int>(delaySec * sampleRate_);
+            float amp = delayedAmplitude(delaySec);
             float src;
-            if (p.lfoKeyTrigger) {
-                lfoLocal_.setWave(p.lfoWave);
-                lfoLocal_.setRate(p.lfoRate);
+            if (mode >= 1) {
+                local.setWave(wave); local.setRate(rate);
+                local.setPolarity(uni); local.setPhase(phase);
+                local.setOneShot(mode == 2);
                 // Hold at the reset phase until the delay elapses, then run.
-                src = (lfoElapsed_ >= delaySamp) ? lfoLocal_.process() : 0.0f;
+                src = (lfoElapsed_ >= delaySamp) ? local.process() : 0.0f;
             } else {
-                src = globalLfo;    // free-running, shared across voices
+                src = globalVal;    // free-running, shared across voices
             }
-            if (lfoElapsed_ < (1 << 30)) ++lfoElapsed_;
-            lfo = src * amp;
-        }
+            return src * amp;
+        };
+        float lfo  = voiceLfo(lfoLocal_,  p.lfo1Mode, p.lfoWave,  p.lfoRate,
+                              p.lfo1Unipolar, p.lfo1Phase, globalLfo,  p.lfoDelay);
+        float lfo2 = voiceLfo(lfo2Local_, p.lfo2Mode, p.lfo2Wave, p.lfo2Rate,
+                              p.lfo2Unipolar, p.lfo2Phase, globalLfo2, p.lfo2Delay);
+        float lfo3 = voiceLfo(lfo3Local_, p.lfo3Mode, p.lfo3Wave, p.lfo3Rate,
+                              p.lfo3Unipolar, p.lfo3Phase, globalLfo3, p.lfo3Delay);
+        if (lfoElapsed_ < (1 << 30)) ++lfoElapsed_;
 
         // --- Modulation matrix: gather the sources, then accumulate each
         //     slot's (source * amount) onto its destination. Applied below at
@@ -244,7 +259,7 @@ public:
         float srcv[ModSrcCount];
         srcv[ModSrcNone]       = 0.0f;
         srcv[ModSrcLFO1]       = lfo;
-        srcv[ModSrcLFO2]       = globalLfo2;
+        srcv[ModSrcLFO2]       = lfo2;
         srcv[ModSrcFilterEnv]  = env;
         srcv[ModSrcAmpEnv]     = ampVal;
         srcv[ModSrcVelocity]   = velocity_;
@@ -252,6 +267,7 @@ public:
         srcv[ModSrcModWheel]   = p.modWheel;
         srcv[ModSrcAftertouch] = p.aftertouch;
         srcv[ModSrcRandom]     = random_;                // per-note S&H, -1..1
+        srcv[ModSrcLFO3]       = lfo3;
         float md[ModDstCount] = {0.0f};
         bool matrixLfo1ToWTFrame = false;
         bool matrixFilterEnvToWTFrame = false;
@@ -267,7 +283,10 @@ public:
         }
 
         // --- Shared pitch modulation: octave + bend + vibrato(LFO) + matrix --
-        const float vibrato = lfo * p.lfoToOscFreq * 2.0f; // up to +/-2 semis
+        const float vibratoSource =
+            p.vibratoLFO == 1 ? lfo2 : (p.vibratoLFO == 2 ? lfo3 : lfo);
+        const float vibrato =
+            vibratoSource * p.lfoToOscFreq * 2.0f; // up to +/-2 semis
         const double baseSemis = static_cast<double>(glidePitch_)
                                + tuningOffsetSemis_
                                + p.pitchBendSemis
@@ -466,6 +485,8 @@ private:
     ADSR       filtEnv_;
     LadderFilter filter_;
     LFO        lfoLocal_;
+    LFO        lfo2Local_;
+    LFO        lfo3Local_;
     int        lfoElapsed_ = 0;
     int        lfoFadeSamples_ = 240;
     FastRandom rng_{0x9e3779b97f4a7c15ULL};

@@ -52,6 +52,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0849F4EBC3B7AC32F39479EF /* WavetablePianoData.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = WavetablePianoData.hpp; sourceTree = "<group>"; };
 		120104614B6CF8293F99DD17 /* Hybrid8Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Hybrid8Extension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		16FD64C1B93199CB47D8C0D1 /* ADSR.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = ADSR.hpp; sourceTree = "<group>"; };
 		17E900F2930F9791B5F6CA56 /* Params.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Params.hpp; sourceTree = "<group>"; };
@@ -103,6 +104,7 @@
 				BF92ACF59C7B54B50729D9A3 /* Utils.hpp */,
 				39AA2E2B16CF7967B4E89D95 /* Voice.hpp */,
 				3B3CE22CA2EAB15CE13EC26C /* Wavetable.hpp */,
+				0849F4EBC3B7AC32F39479EF /* WavetablePianoData.hpp */,
 			);
 			path = DSP;
 			sourceTree = "<group>";

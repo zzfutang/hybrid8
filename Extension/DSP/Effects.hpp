@@ -88,9 +88,12 @@ public:
 
     float gainReductionDb() const {
         // Remove makeup from the displayed gain so the meter reports only
-        // attenuation performed by the compressor.
-        return std::max(0.0f, -20.0f * std::log10(std::max(gain_, 1.0e-9f))
-                              + makeup_);
+        // attenuation performed by the compressor. The detector keeps running
+        // even while bypassed, so scale by bypassMix_ — the same factor that
+        // gates the audio — so the meter reads 0 when the compressor is off.
+        const float reduction = std::max(0.0f,
+            -20.0f * std::log10(std::max(gain_, 1.0e-9f)) + makeup_);
+        return reduction * bypassMix_;
     }
 
 private:
