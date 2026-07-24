@@ -8,6 +8,11 @@
 import SwiftUI
 import AudioToolbox
 
+extension Notification.Name {
+    static let hybrid8WavetableFrameChanged =
+        Notification.Name("Hybrid8WavetableFrameChanged")
+}
+
 final class ParameterModel: ObservableObject {
     let tree: AUParameterTree
     @Published private(set) var version: Int = 0
@@ -29,8 +34,15 @@ final class ParameterModel: ObservableObject {
         self.tree = tree
         self.effectiveProvider = effectiveProvider
         self.meterProvider = meterProvider
-        token = tree.token(byAddingParameterObserver: { [weak self] _, _ in
-            DispatchQueue.main.async { self?.version &+= 1 }
+        token = tree.token(byAddingParameterObserver: { [weak self] address, value in
+            DispatchQueue.main.async {
+                self?.version &+= 1
+                if address == AUParameterAddress(SynthParamWTFrame.rawValue) {
+                    NotificationCenter.default.post(
+                        name: .hybrid8WavetableFrameChanged,
+                        object: Float(value))
+                }
+            }
         })
         if effectiveProvider != nil || meterProvider != nil {
             timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0,
@@ -88,6 +100,11 @@ final class ParameterModel: ObservableObject {
     /// not echoed back to us as an "external" change.
     func set(_ address: SynthParam, _ value: Float) {
         param(address)?.setValue(value, originator: token)
+        if address == SynthParamWTFrame {
+            NotificationCenter.default.post(
+                name: .hybrid8WavetableFrameChanged,
+                object: value)
+        }
     }
 
     // MARK: - Whole-state capture / apply (used by the preset system)
@@ -116,7 +133,9 @@ final class ParameterModel: ObservableObject {
         let p = param(address)
         return Binding(
             get: { p?.value ?? 0 },
-            set: { [weak self] newValue in p?.setValue(newValue, originator: self?.token) }
+            set: { [weak self] newValue in
+                p?.setValue(newValue, originator: self?.token)
+            }
         )
     }
 

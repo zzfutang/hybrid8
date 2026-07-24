@@ -60,7 +60,7 @@ public:
         osc2_.setSampleRate(sr * kOversample);
         wtOsc1_.setSampleRate(sr * kOversample);
         wtOsc2_.setSampleRate(sr * kOversample);
-        lib_ = &wtLibrary();   // built on first call, off the audio thread
+        wtLibrary();           // force factory construction off the audio thread
         decimator_.setup(sr);
         ampEnv_.setSampleRate(sr);
         filtEnv_.setSampleRate(sr);
@@ -253,9 +253,17 @@ public:
         srcv[ModSrcAftertouch] = p.aftertouch;
         srcv[ModSrcRandom]     = random_;                // per-note S&H, -1..1
         float md[ModDstCount] = {0.0f};
+        bool matrixLfo1ToWTFrame = false;
+        bool matrixFilterEnvToWTFrame = false;
         for (int s = 0; s < SYNTH_MOD_SLOTS; ++s) {
             int sr = p.modSource[s], ds = p.modDest[s];
-            if (sr > 0 && ds > 0) md[ds] += srcv[sr] * p.modAmount[s];
+            if (sr > 0 && ds > 0) {
+                md[ds] += srcv[sr] * p.modAmount[s];
+                if (ds == ModDstWTFrame) {
+                    matrixLfo1ToWTFrame |= sr == ModSrcLFO1;
+                    matrixFilterEnvToWTFrame |= sr == ModSrcFilterEnv;
+                }
+            }
         }
 
         // --- Shared pitch modulation: octave + bend + vibrato(LFO) + matrix --
@@ -301,20 +309,27 @@ public:
         // --- Wavetable setup (per-osc; frequency is constant across the block
         //     because a wavetable oscillator does not support FM). The morph
         //     frame is modulated by the LFO and the filter envelope. ---------
+        // The two fixed WT-frame routes predate the modulation matrix and are
+        // retained for old sessions. An explicit equivalent matrix route takes
+        // precedence so a hidden legacy amount cannot be summed accidentally.
+        const float legacyLfoFrame =
+            matrixLfo1ToWTFrame ? 0.0f : lfo * p.lfoToWTFrame;
+        const float legacyEnvFrame =
+            matrixFilterEnvToWTFrame ? 0.0f : env * p.wtFrameEnv;
         const float wtFrameMod = clampf(p.wtFrame
-                                        + lfo * p.lfoToWTFrame
-                                        + env * p.wtFrameEnv
+                                        + legacyLfoFrame
+                                        + legacyEnvFrame
                                         + md[ModDstWTFrame], 0.0f, 1.0f);
         const float wtLivenessMod = clampf(p.wtLiveness + md[ModDstWTLiveness],
                                            0.0f, 1.0f);
-        if (p.osc1IsWT && lib_) {
-            wtOsc1_.setTable(&lib_->sets[p.wtTable]);
+        if (p.osc1IsWT) {
+            wtOsc1_.setTable(wtTableAt(p.wtTable));
             wtOsc1_.setFrame(wtFrameMod);
             wtOsc1_.setLiveness(wtLivenessMod);
             wtOsc1_.setFrequency(baseF1);
         }
-        if (p.osc2IsWT && lib_) {
-            wtOsc2_.setTable(&lib_->sets[p.wtTable]);
+        if (p.osc2IsWT) {
+            wtOsc2_.setTable(wtTableAt(p.wtTable));
             wtOsc2_.setFrame(wtFrameMod);
             wtOsc2_.setLiveness(wtLivenessMod);
             wtOsc2_.setFrequency(baseF2);
@@ -446,7 +461,6 @@ private:
     Oscillator osc2_;
     WavetableOscillator wtOsc1_;
     WavetableOscillator wtOsc2_;
-    const WavetableLibrary* lib_ = nullptr;
     Decimator2x decimator_;
     ADSR       ampEnv_;
     ADSR       filtEnv_;

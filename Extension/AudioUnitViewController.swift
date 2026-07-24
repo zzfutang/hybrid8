@@ -39,7 +39,9 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
             tree: tree,
             effectiveProvider: { synthAudioUnit.effectiveValue(for: $0) },
             meterProvider: { synthAudioUnit.meterValues() })
-        let host = NSHostingView(rootView: SynthView(model: model))
+        let wavetables = WavetableStore(model: model, audioUnit: synthAudioUnit)
+        let host = NSHostingView(rootView:
+            SynthView(model: model, wavetables: wavetables))
         host.frame = view.bounds
         host.autoresizingMask = [.width, .height]
         view.addSubview(host)

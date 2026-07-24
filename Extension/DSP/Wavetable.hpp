@@ -17,6 +17,10 @@
 #include "Utils.hpp"
 #include <vector>
 #include <array>
+#include <atomic>
+#include <complex>
+#include <memory>
+#include <mutex>
 
 namespace synth {
 
@@ -27,6 +31,7 @@ static constexpr int    WT_NUM_FRAMES   = 32;     // timbre axis resolution
 static constexpr int    WT_NUM_VARIANTS = 2;      // liveness axis resolution
 static constexpr int    WT_NUM_LEVELS   = 10;     // mip levels
 static constexpr int    WT_NUM_SETS     = 4;      // Harmonic / FM / Choir / Metallic
+static constexpr int    WT_MAX_SLOTS    = 256;    // 0..3 factory, 4..255 user
 static constexpr double WT_F_MIN        = 20.0;
 static constexpr double WT_AUDIBLE_MAX  = 20000.0; // band-limit ceiling (Hz)
 
@@ -38,6 +43,7 @@ struct WTMip {
 struct WTPyramid { std::array<WTMip, WT_NUM_LEVELS> levels; };
 struct WavetableSet {
     std::vector<WTPyramid> pyramids;  // WT_NUM_FRAMES * WT_NUM_VARIANTS
+    int frameCount = WT_NUM_FRAMES;
     const WTPyramid& at(int frame, int variant) const {
         return pyramids[frame * WT_NUM_VARIANTS + variant];
     }
@@ -266,6 +272,7 @@ inline WTSpectrum wtSpectrumMetallic(int frame) {
 inline WavetableLibrary wtBuildLibrary() {
     WavetableLibrary lib;
     for (int set = 0; set < WT_NUM_SETS; ++set) {
+        lib.sets[set].frameCount = WT_NUM_FRAMES;
         lib.sets[set].pyramids.resize(WT_NUM_FRAMES * WT_NUM_VARIANTS);
         for (int f = 0; f < WT_NUM_FRAMES; ++f) {
             WTSpectrum base;
@@ -291,6 +298,124 @@ inline const WavetableLibrary& wtLibrary() {
     return lib;
 }
 
+// Radix-2 FFT used only during import, never by the render thread.
+inline void wtFFT(std::vector<std::complex<float>>& a) {
+    const int n = static_cast<int>(a.size());
+    for (int i = 1, j = 0; i < n; ++i) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) std::swap(a[i], a[j]);
+    }
+    for (int len = 2; len <= n; len <<= 1) {
+        const float angle = static_cast<float>(-kTwoPi / len);
+        const std::complex<float> step(std::cos(angle), std::sin(angle));
+        for (int i = 0; i < n; i += len) {
+            std::complex<float> w(1.0f, 0.0f);
+            for (int j = 0; j < len / 2; ++j) {
+                const auto u = a[i + j];
+                const auto v = a[i + j + len / 2] * w;
+                a[i + j] = u + v;
+                a[i + j + len / 2] = u - v;
+                w *= step;
+            }
+        }
+    }
+}
+
+inline WTSpectrum wtSpectrumFromCycle(const float* input, int length) {
+    std::vector<std::complex<float>> fft(WT_BASE_LEN);
+    double mean = 0.0;
+    for (int i = 0; i < length; ++i) mean += input[i];
+    mean /= std::max(1, length);
+    // Periodic linear resampling to the internal analysis length.
+    for (int n = 0; n < WT_BASE_LEN; ++n) {
+        const double pos = static_cast<double>(n) * length / WT_BASE_LEN;
+        const int i0 = static_cast<int>(pos) % length;
+        const int i1 = (i0 + 1) % length;
+        const float frac = static_cast<float>(pos - std::floor(pos));
+        const float sample = input[i0] + frac * (input[i1] - input[i0]);
+        fft[n] = std::complex<float>(sample - static_cast<float>(mean), 0.0f);
+    }
+    wtFFT(fft);
+    const int maxH = wtMaxHarmonic(0);
+    WTSpectrum spectrum;
+    spectrum.mag.assign(maxH + 1, 0.0f);
+    spectrum.phase.assign(maxH + 1, 0.0f);
+    for (int k = 1; k <= maxH; ++k) {
+        spectrum.mag[k] = 2.0f * std::abs(fft[k]) / WT_BASE_LEN;
+        spectrum.phase[k] = std::arg(fft[k]);
+    }
+    return spectrum;
+}
+
+inline std::unique_ptr<WavetableSet>
+wtBuildImportedSet(const float* samples, int sampleCount, int frameLength) {
+    if (!samples || frameLength < 32 || sampleCount < frameLength
+        || sampleCount % frameLength != 0) return nullptr;
+    const int frames = sampleCount / frameLength;
+    auto set = std::make_unique<WavetableSet>();
+    set->frameCount = frames;
+    set->pyramids.resize(frames * WT_NUM_VARIANTS);
+    for (int frame = 0; frame < frames; ++frame) {
+        const WTSpectrum base =
+            wtSpectrumFromCycle(samples + frame * frameLength, frameLength);
+        for (int variant = 0; variant < WT_NUM_VARIANTS; ++variant) {
+            const WTSpectrum spectrum = wtVariant(base, variant, 10000 + frame);
+            set->pyramids[frame * WT_NUM_VARIANTS + variant] =
+                wtBuildPyramid(spectrum);
+        }
+    }
+    return set;
+}
+
+// Fixed-slot registry: construction happens on a non-audio thread and the
+// finished immutable table becomes visible in one release-store operation.
+class WavetableRegistry {
+public:
+    WavetableRegistry() {
+        for (auto& slot : userSlots_) slot.store(nullptr);
+    }
+    const WavetableSet* table(int slot) const {
+        if (slot >= 0 && slot < WT_NUM_SETS) return &wtLibrary().sets[slot];
+        if (slot < WT_NUM_SETS || slot >= WT_MAX_SLOTS) return &wtLibrary().sets[0];
+        const WavetableSet* result =
+            userSlots_[slot - WT_NUM_SETS].load(std::memory_order_acquire);
+        return result ? result : &wtLibrary().sets[0];
+    }
+    bool install(int slot, std::unique_ptr<WavetableSet> table) {
+        if (slot < WT_NUM_SETS || slot >= WT_MAX_SLOTS || !table) return false;
+        std::lock_guard<std::mutex> lock(ownerMutex_);
+        auto& owner = owners_[slot - WT_NUM_SETS];
+        // Slots are stable for the process lifetime. Replacing an active table
+        // would invalidate voice pointers, so duplicate startup loads are no-op.
+        if (owner) return true;
+        owner = std::move(table);
+        userSlots_[slot - WT_NUM_SETS].store(owner.get(),
+                                             std::memory_order_release);
+        return true;
+    }
+private:
+    std::array<std::atomic<const WavetableSet*>,
+               WT_MAX_SLOTS - WT_NUM_SETS> userSlots_;
+    std::array<std::unique_ptr<WavetableSet>,
+               WT_MAX_SLOTS - WT_NUM_SETS> owners_;
+    std::mutex ownerMutex_;
+};
+
+inline WavetableRegistry& wtRegistry() {
+    static WavetableRegistry registry;
+    return registry;
+}
+inline const WavetableSet* wtTableAt(int slot) {
+    return wtRegistry().table(slot);
+}
+inline bool wtInstallImportedTable(int slot, const float* samples,
+                                   int sampleCount, int frameLength) {
+    return wtRegistry().install(
+        slot, wtBuildImportedSet(samples, sampleCount, frameLength));
+}
+
 // ---- Runtime oscillator --------------------------------------------------
 class WavetableOscillator {
 public:
@@ -310,7 +435,8 @@ public:
         levelF_ = wtLevelForFreqF(f);
     }
     inline void setFrame(float frame01) {
-        framePos_ = clampf(frame01, 0.0f, 1.0f) * (WT_NUM_FRAMES - 1);
+        const int count = set_ ? std::max(1, set_->frameCount) : 1;
+        framePos_ = clampf(frame01, 0.0f, 1.0f) * (count - 1);
     }
     inline void setLiveness(float depth) { liveness_ = clampf(depth, 0.0f, 1.0f); }
 
@@ -352,7 +478,9 @@ private:
     // Trilinear read: frame x variant x mip level. Crossfading the two adjacent
     // octave mips keeps the timbre continuous across octave boundaries.
     inline float read(float framePos, double variantPos, float levelF, double phase) const {
-        int f0 = (int)framePos, f1 = std::min(f0 + 1, WT_NUM_FRAMES - 1);
+        const int frameCount = std::max(1, set_->frameCount);
+        int f0 = std::min((int)framePos, frameCount - 1);
+        int f1 = std::min(f0 + 1, frameCount - 1);
         float ff = framePos - f0;
         int vint = (int)variantPos;
         int v0 = vint % WT_NUM_VARIANTS, v1 = (v0 + 1) % WT_NUM_VARIANTS;

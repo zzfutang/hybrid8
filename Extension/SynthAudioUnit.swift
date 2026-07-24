@@ -135,6 +135,13 @@ public final class SynthAudioUnit: AUAudioUnit {
          kernel.outputMeterRight())
     }
 
+    func installWavetable(slot: Int, samples: [Float],
+                          frameLength: Int) -> Bool {
+        let data = samples.withUnsafeBytes { Data($0) }
+        return kernel.installWavetable(atSlot: slot, samples: data,
+                                       frameLength: frameLength)
+    }
+
     // Allow hosts to preserve long high-feedback delay tails.
     public override var tailTime: TimeInterval { 45.0 }
 }

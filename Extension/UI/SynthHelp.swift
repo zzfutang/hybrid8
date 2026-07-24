@@ -16,7 +16,7 @@ final class HelpModel: ObservableObject {
 enum SynthHelp {
     private static let table: [AUParameterAddress: String] = [
         a(SynthParamOscWaveform):   "Oscillator 1 waveform — saw, square, pulse, or WT (wavetable).",
-        a(SynthParamWavetable):     "Wavetable to use in WT mode: Harmonic, FM, Choir or Metallic (shared by both oscillators).",
+        a(SynthParamWavetable):     "Wavetable used by both oscillators in WT mode. Open the browser to search or import WAV/AIFF tables.",
         a(SynthParamWTFrame):       "Wavetable timbre morph — sweeps through the frames of the table.",
         a(SynthParamWTLiveness):    "Wavetable liveness — slow phase drift so held notes shimmer instead of looping.",
         a(SynthParamWTFrameEnv):    "Filter envelope → WT frame (bipolar) — sweeps the wavetable timbre on each note.",

@@ -472,7 +472,7 @@ public:
         p.osc2IsWT = (w2 == 3);
         p.osc2Wave = static_cast<OscWave>(std::min(w2, 2));
         p.osc2Octave = clampInt(store_[SynthParamOsc2Octave].load(), -4, 4);
-        p.wtTable      = clampInt(store_[SynthParamWavetable].load(), 0, WT_NUM_SETS - 1);
+        p.wtTable      = clampInt(store_[SynthParamWavetable].load(), 0, WT_MAX_SLOTS - 1);
         p.wtLiveness   = store_[SynthParamWTLiveness].load();
         p.lfoToWTFrame = store_[SynthParamLFOToWTFrame].load();
         p.wtFrameEnv   = store_[SynthParamWTFrameEnv].load();

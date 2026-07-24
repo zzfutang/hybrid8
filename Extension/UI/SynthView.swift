@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AudioToolbox
+import UniformTypeIdentifiers
 
 struct SynthView: View {
     // A wide hardware-panel aspect ratio gives the three synthesis columns and
@@ -15,15 +16,18 @@ struct SynthView: View {
     private static let designSize = CGSize(width: 1360, height: 890)
 
     @ObservedObject var model: ParameterModel
+    @StateObject private var wavetables: WavetableStore
     @StateObject private var presets: PresetStore
     @StateObject private var help = HelpModel()
     @State private var showingSave = false
     @State private var saveName = ""
     @State private var lowerTab = 0
     @State private var effectsTab = 0
+    @State private var showingWavetableBrowser = false
 
-    init(model: ParameterModel) {
+    init(model: ParameterModel, wavetables: WavetableStore) {
         _model = ObservedObject(wrappedValue: model)
+        _wavetables = StateObject(wrappedValue: wavetables)
         _presets = StateObject(wrappedValue: PresetStore(model: model))
     }
 
@@ -286,8 +290,7 @@ struct SynthView: View {
                              model, accent: Palette.oscAccent)
         }) {
             VStack(alignment: .leading, spacing: 8) {
-                Selector("WT Table", SynthParamWavetable, ["Harm", "FM", "Choir", "Metal"],
-                         model, accent: Palette.wtAccent)
+                wavetablePicker
                     .dimmed(!anyWT)
                 HStack(spacing: 0) {
                     Knob("Octave", SynthParamOctave, model,
@@ -301,6 +304,41 @@ struct SynthView: View {
                         .dimmed(!anyWT).frame(maxWidth: .infinity)
                 }
             }
+        }
+    }
+
+    private var wavetablePicker: some View {
+        let entry = wavetables.entry(slot: wavetables.selectedSlot)
+        let frame = model.param(SynthParamWTFrame)?.value ?? 0
+        return HStack(spacing: 8) {
+            Button {
+                showingWavetableBrowser = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "waveform")
+                    Text(entry.name)
+                        .lineLimit(1)
+                    Spacer(minLength: 2)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                }
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .foregroundColor(Palette.engrave)
+                .padding(.horizontal, 8)
+                .frame(width: 128, height: 26)
+                .background(RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.black.opacity(0.25)))
+                .overlay(RoundedRectangle(cornerRadius: 4)
+                    .stroke(Palette.wtAccent.opacity(0.55), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            LiveWavetablePreview(store: wavetables, entry: entry,
+                                 initialFrame: frame)
+        }
+        .sheet(isPresented: $showingWavetableBrowser) {
+            WavetableBrowser(store: wavetables, model: model,
+                             isPresented: $showingWavetableBrowser)
+                .frame(width: 620, height: 500)
         }
     }
 
@@ -742,5 +780,195 @@ struct SynthView: View {
                 }
             }
         }
+    }
+}
+
+private struct LiveWavetablePreview: View {
+    @ObservedObject var store: WavetableStore
+    let entry: WavetableEntry
+    @State private var frame: Float
+
+    init(store: WavetableStore, entry: WavetableEntry, initialFrame: Float) {
+        self.store = store
+        self.entry = entry
+        _frame = State(initialValue: initialFrame)
+    }
+
+    var body: some View {
+        let frameIndex = min(entry.frameCount - 1,
+                             max(0, Int((frame
+                                 * Float(entry.frameCount - 1)).rounded())))
+        HStack(spacing: 8) {
+            WavetableWaveform(
+                samples: store.preview(for: entry, normalizedFrame: frame),
+                accent: Palette.wtAccent)
+                .frame(maxWidth: .infinity, minHeight: 24, maxHeight: 24)
+            Text("\(frameIndex + 1)/\(entry.frameCount)")
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .foregroundColor(Palette.lcd)
+                .frame(width: 40, alignment: .trailing)
+        }
+        .onReceive(NotificationCenter.default.publisher(
+            for: .hybrid8WavetableFrameChanged)) { notification in
+                if let value = notification.object as? Float {
+                    frame = value
+                }
+            }
+    }
+}
+
+private struct WavetableBrowser: View {
+    @ObservedObject var store: WavetableStore
+    @ObservedObject var model: ParameterModel
+    @Binding var isPresented: Bool
+    @State private var search = ""
+    @State private var pendingDelete: WavetableEntry?
+    @State private var showingFileImporter = false
+
+    private var filtered: [WavetableEntry] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty { return store.entries }
+        return store.entries.filter {
+            $0.name.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("WAVETABLE LIBRARY")
+                    .font(.system(size: 14, weight: .heavy, design: .rounded))
+                    .tracking(1.2)
+                    .foregroundColor(Palette.engrave)
+                Spacer()
+                Button {
+                    showingFileImporter = true
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "plus")
+                        Text(store.isImporting ? "IMPORTING…" : "IMPORT WAV…")
+                    }
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundColor(Palette.panelBottom)
+                    .padding(.horizontal, 11)
+                    .frame(height: 28)
+                    .background(RoundedRectangle(cornerRadius: 5)
+                        .fill(Palette.wtAccent))
+                }
+                .buttonStyle(.plain)
+                    .disabled(store.isImporting)
+                Button {
+                    isPresented = false
+                } label: {
+                    Text("DONE")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(Palette.engrave)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(RoundedRectangle(cornerRadius: 5)
+                            .fill(Color.white.opacity(0.08)))
+                        .overlay(RoundedRectangle(cornerRadius: 5)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(Palette.engraveDim)
+                TextField("Search tables", text: $search)
+                    .textFieldStyle(.plain)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .background(RoundedRectangle(cornerRadius: 5)
+                .fill(Color.black.opacity(0.25)))
+
+            ScrollView {
+                LazyVStack(spacing: 5) {
+                    ForEach(filtered) { entry in
+                        browserRow(entry)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Palette.panelBottom)
+        .fileImporter(isPresented: $showingFileImporter,
+                      allowedContentTypes: [.wav, .aiff, .audio],
+                      allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    store.importAudioFile(at: url)
+                }
+            case .failure(let error):
+                store.errorMessage = error.localizedDescription
+            }
+        }
+        .alert("Delete Wavetable?", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } })) {
+                Button("Cancel", role: .cancel) { pendingDelete = nil }
+                Button("Delete", role: .destructive) {
+                    if let entry = pendingDelete { store.delete(entry) }
+                    pendingDelete = nil
+                }
+            } message: {
+                Text("The imported audio file will be removed from Hybrid 8’s library.")
+            }
+        .alert("Import Error", isPresented: Binding(
+            get: { store.errorMessage != nil },
+            set: { if !$0 { store.errorMessage = nil } })) {
+                Button("OK") { store.errorMessage = nil }
+            } message: {
+                Text(store.errorMessage ?? "")
+            }
+    }
+
+    private func browserRow(_ entry: WavetableEntry) -> some View {
+        let selected = entry.slot == store.selectedSlot
+        let frame = model.param(SynthParamWTFrame)?.value ?? 0
+        return Button {
+            store.select(entry)
+            isPresented = false
+        } label: {
+            HStack(spacing: 12) {
+                WavetableWaveform(
+                    samples: store.preview(for: entry, normalizedFrame: frame),
+                    accent: selected ? Palette.wtAccent : Palette.engraveDim)
+                    .frame(width: 150, height: 42)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(entry.name)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(Palette.engrave)
+                    Text("\(entry.isFactory ? "FACTORY" : "USER")  ·  \(entry.frameCount) FRAMES  ·  \(entry.frameLength) SAMPLES")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundColor(Palette.engraveDim)
+                }
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(Palette.wtAccent)
+                }
+                if !entry.isFactory {
+                    Button {
+                        pendingDelete = entry
+                    } label: {
+                        Image(systemName: "trash")
+                            .foregroundColor(Palette.engraveDim)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 58)
+            .background(RoundedRectangle(cornerRadius: 6)
+                .fill(selected ? Palette.wtAccent.opacity(0.13)
+                               : Palette.sectionBG))
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .stroke(selected ? Palette.wtAccent.opacity(0.65)
+                                 : Color.white.opacity(0.06), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -786,6 +786,100 @@ int main() {
               "W: compressor output remains finite");
     }
 
+    // ---- Test X: imported tables retain dynamic frame counts and tuning ----
+    {
+        constexpr int frameLength = 256;
+        constexpr int frameCount = 5;
+        std::vector<float> source(frameLength * frameCount);
+        for (int frame = 0; frame < frameCount; ++frame) {
+            for (int n = 0; n < frameLength; ++n) {
+                const double phase = kTwoPi * n / frameLength;
+                source[frame * frameLength + n] =
+                    static_cast<float>(std::sin(phase)
+                    + 0.08 * frame * std::sin(phase * (frame + 2)));
+            }
+        }
+        const bool installed = wtInstallImportedTable(
+            4, source.data(), static_cast<int>(source.size()), frameLength);
+        const WavetableSet* table = wtTableAt(4);
+        WavetableOscillator osc;
+        osc.setSampleRate(sr);
+        osc.reset(0.0f, 0.0f);
+        osc.setTable(table);
+        osc.setFrame(1.0f);
+        osc.setLiveness(0.0f);
+        osc.setFrequency(440.0);
+        std::vector<float> rendered(N);
+        for (float& sample : rendered) sample = osc.process();
+        const double fundamental = magAt(rendered, 440.0, sr);
+        printf("Test X (WT import): installed=%d frames=%d mag440=%.5f\n",
+               (int)installed, table->frameCount, fundamental);
+        check(installed && table->frameCount == frameCount,
+              "X: imported wavetable preserves its dynamic frame count");
+        check(allFinite(rendered) && fundamental > 0.1,
+              "X: imported wavetable is finite and remains correctly tuned");
+    }
+
+    // ---- Test Y: bipolar LFO modulation stays centred on WT Frame ----------
+    {
+        SynthEngine e; e.setSampleRate(sr);
+        e.setParameter(SynthParamOscWaveform, 3.0f);
+        e.setParameter(SynthParamWTFrame, 0.6f);
+        e.setParameter(SynthParamLFO2Waveform, 0.0f); // sine, bipolar
+        e.setParameter(SynthParamLFO2Rate, 5.0f);
+        e.setParameter(SynthParamMod1Source, ModSrcLFO2);
+        e.setParameter(SynthParamMod1Dest, ModDstWTFrame);
+        e.setParameter(SynthParamMod1Amount, 0.1f);
+        e.setParameter(SynthParamAmpSustain, 1.0f);
+        e.noteOn(60, 100);
+
+        std::vector<float> L(64), R(64);
+        // Let the 20 ms anti-click smoother reach the knob value before
+        // measuring the bipolar modulation range.
+        for (int block = 0; block < 32; ++block)
+            e.render(L.data(), R.data(), 64);
+        float lo = 1.0f, hi = 0.0f;
+        for (int block = 0; block < 300; ++block) {
+            e.render(L.data(), R.data(), 64);
+            const float frame = e.getEffectiveParameter(SynthParamWTFrame);
+            lo = std::min(lo, frame);
+            hi = std::max(hi, frame);
+        }
+        const float centre = 0.5f * (lo + hi);
+        printf("Test Y (WT frame centre): lo=%.4f hi=%.4f centre=%.4f\n",
+               lo, hi, centre);
+        check(std::fabs(centre - 0.6f) < 0.01f,
+              "Y: sine WT-frame modulation is centred on the knob value");
+        check(lo < 0.51f && hi > 0.69f,
+              "Y: WT-frame modulation has equal positive and negative depth");
+    }
+
+    // ---- Test Z: matrix WT-frame route replaces its hidden legacy route ----
+    {
+        SynthEngine e; e.setSampleRate(sr);
+        e.setParameter(SynthParamOscWaveform, 3.0f);
+        e.setParameter(SynthParamWTFrame, 0.4f);
+        // Simulate an old saved patch containing the hidden fixed route.
+        e.setParameter(SynthParamWTFrameEnv, -0.6f);
+        e.setParameter(SynthParamMod1Source, ModSrcFilterEnv);
+        e.setParameter(SynthParamMod1Dest, ModDstWTFrame);
+        e.setParameter(SynthParamMod1Amount, 0.3f);
+        e.setParameter(SynthParamFilterAttack, 0.0f);
+        e.setParameter(SynthParamFilterDecay, 0.0f);
+        e.setParameter(SynthParamFilterSustain, 1.0f);
+        e.setParameter(SynthParamAmpSustain, 1.0f);
+
+        std::vector<float> L(64), R(64);
+        for (int block = 0; block < 128; ++block)
+            e.render(L.data(), R.data(), 64); // settle frame smoother
+        e.noteOn(60, 100);
+        e.render(L.data(), R.data(), 64);
+        const float frame = e.getEffectiveParameter(SynthParamWTFrame);
+        printf("Test Z (WT route precedence): frame=%.4f\n", frame);
+        check(frame > 0.69f && frame <= 0.701f,
+              "Z: explicit matrix route replaces hidden legacy WT-frame route");
+    }
+
     printf("\n%s (%d failure%s)\n",
            g_failures == 0 ? "ALL TESTS PASSED" : "TESTS FAILED",
            g_failures, g_failures == 1 ? "" : "s");

@@ -54,6 +54,16 @@
     return (AUValue)_engine.outputMeterRight();
 }
 
+- (BOOL)installWavetableAtSlot:(NSInteger)slot
+                       samples:(NSData *)samples
+                   frameLength:(NSInteger)frameLength {
+    if (samples.length == 0 || samples.length % sizeof(float) != 0) return NO;
+    const float *values = (const float *)samples.bytes;
+    const int count = (int)(samples.length / sizeof(float));
+    return synth::wtInstallImportedTable((int)slot, values, count,
+                                         (int)frameLength) ? YES : NO;
+}
+
 - (AUInternalRenderBlock)internalRenderBlockWithMusicalContext:
     (AUHostMusicalContextBlock)musicalContext {
     // Capture a raw pointer to the C++ engine so the audio thread never does

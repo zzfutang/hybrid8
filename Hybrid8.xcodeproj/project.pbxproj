@@ -19,6 +19,7 @@
 		8EC40184DF9C738BEADBB0AF /* ParameterModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E278E8B3AFB116734B0AF070 /* ParameterModel.swift */; };
 		986F35527D787FE98E1483EC /* Hybrid8App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D2A41C1C9551453765E809A /* Hybrid8App.swift */; };
 		A1F8C8D70F94068A4FF2DB6B /* FactoryPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30348A168347EA9A2A7B5095 /* FactoryPresets.swift */; };
+		AC0DC491EDD4B9DE49058803 /* WavetableStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D054E8BF99F8796D67F830E6 /* WavetableStore.swift */; };
 		B49FF5B0CD00C178BCB8FDE8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CBC5D8B70379456237CDEA /* ContentView.swift */; };
 		C042951BAA0025B7C2160D94 /* SynthAudioUnit.swift in Sources */ = {isa = PBXBuildFile; fileRef = B03850F9ED8AC10D7B9481FA /* SynthAudioUnit.swift */; };
 		C72F5D3039604622BED6A6D5 /* SynthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F516362934563D869871E8AC /* SynthView.swift */; };
@@ -78,6 +79,7 @@
 		B03850F9ED8AC10D7B9481FA /* SynthAudioUnit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthAudioUnit.swift; sourceTree = "<group>"; };
 		B969D4EA2487259367B0EEB7 /* SynthDSPKernelAdapter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SynthDSPKernelAdapter.mm; sourceTree = "<group>"; };
 		BF92ACF59C7B54B50729D9A3 /* Utils.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Utils.hpp; sourceTree = "<group>"; };
+		D054E8BF99F8796D67F830E6 /* WavetableStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WavetableStore.swift; sourceTree = "<group>"; };
 		DE0A2823181C214D850EE6FA /* Extension-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Extension-Bridging-Header.h"; sourceTree = "<group>"; };
 		E278E8B3AFB116734B0AF070 /* ParameterModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParameterModel.swift; sourceTree = "<group>"; };
 		EC7E11D10EAACE898A3DC8D7 /* SynthDSPKernelAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SynthDSPKernelAdapter.h; sourceTree = "<group>"; };
@@ -135,6 +137,7 @@
 				AA3098E2CA53815C28DFBDFF /* SynthTheme.swift */,
 				90C36064148CBB1BA047620D /* SynthTimeMapping.swift */,
 				F516362934563D869871E8AC /* SynthView.swift */,
+				D054E8BF99F8796D67F830E6 /* WavetableStore.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -272,6 +275,7 @@
 				19BED8CE50B96437C6B03166 /* SynthTheme.swift in Sources */,
 				8A427ACBDE97F9D01CCF711D /* SynthTimeMapping.swift in Sources */,
 				C72F5D3039604622BED6A6D5 /* SynthView.swift in Sources */,
+				AC0DC491EDD4B9DE49058803 /* WavetableStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

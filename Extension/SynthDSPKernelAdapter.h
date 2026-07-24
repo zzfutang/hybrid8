@@ -26,6 +26,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (AUValue)outputMeterLeft;
 - (AUValue)outputMeterRight;
 
+/// Build and publish an imported wavetable. This performs offline allocation
+/// and spectral processing and must never be called from the render thread.
+- (BOOL)installWavetableAtSlot:(NSInteger)slot
+                       samples:(NSData *)samples
+                   frameLength:(NSInteger)frameLength;
+
 /// The real-time render block handed to the AUAudioUnit.
 - (AUInternalRenderBlock)internalRenderBlockWithMusicalContext:
     (nullable AUHostMusicalContextBlock)musicalContext;

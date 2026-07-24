@@ -111,6 +111,41 @@ struct StereoOutputMeter: View {
     }
 }
 
+struct WavetableWaveform: View {
+    let samples: [Float]
+    let accent: Color
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.black.opacity(0.30))
+                Path { path in
+                    guard samples.count > 1 else {
+                        path.move(to: CGPoint(x: 0, y: geometry.size.height / 2))
+                        path.addLine(to: CGPoint(x: geometry.size.width,
+                                                y: geometry.size.height / 2))
+                        return
+                    }
+                    for index in samples.indices {
+                        let x = geometry.size.width
+                              * CGFloat(index) / CGFloat(samples.count - 1)
+                        let y = geometry.size.height * 0.5
+                              - CGFloat(samples[index]) * geometry.size.height * 0.43
+                        if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                        else { path.addLine(to: CGPoint(x: x, y: y)) }
+                    }
+                }
+                .stroke(accent, style: StrokeStyle(lineWidth: 1.2,
+                                                   lineJoin: .round))
+                .shadow(color: accent.opacity(0.45), radius: 1)
+            }
+            .overlay(RoundedRectangle(cornerRadius: 3)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1))
+        }
+    }
+}
+
 // MARK: - Rotary knob
 
 struct Knob: View {
@@ -219,6 +254,13 @@ struct Knob: View {
         .onHover { hovering in
             let h = SynthHelp.text(for: AUParameterAddress(addr.rawValue))
             if hovering { help.set(h) } else { help.clear(ifMatches: h) }
+        }
+        .onChange(of: model.version) { _ in
+            // Local gesture state avoids host-observer feedback interrupting a
+            // drag, but must follow presets and host automation once idle.
+            if startNorm == nil, let parameter = model.param(addr) {
+                value = parameter.value
+            }
         }
     }
 
