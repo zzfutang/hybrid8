@@ -12,6 +12,12 @@
 
 namespace synth {
 
+struct FilterOutputs {
+    float lp = 0.0f;
+    float bp = 0.0f;
+    float hp = 0.0f;
+};
+
 // Nonlinear 2-pole TPT state-variable low-pass stage. The band-pass damping
 // feedback is saturated and solved without a unit delay; at small signal the
 // tanh normalisation reduces exactly to the familiar linear TPT SVF.
@@ -33,7 +39,7 @@ public:
                            + static_cast<double>(analog) * 0.5;
     }
 
-    inline float processLP(float input) {
+    inline FilterOutputs process(float input) {
         const double u = static_cast<double>(input);
 
         // Linear closed-form solution is the Newton starting point.
@@ -54,8 +60,11 @@ public:
         const double lp = g_ * bp + ic2eq_;
         ic1eq_ = 2.0 * bp - ic1eq_;
         ic2eq_ = 2.0 * lp - ic2eq_;
-        return static_cast<float>(lp);
+        return {static_cast<float>(lp), static_cast<float>(bp),
+                static_cast<float>(hp)};
     }
+
+    inline float processLP(float input) { return process(input).lp; }
 
 private:
     double sampleRate_ = 44100.0;
@@ -91,7 +100,7 @@ public:
         k_ = 4.35 * static_cast<double>(clampf(resonance, 0.0f, 1.0f));
     }
 
-    inline float process(float input) {
+    inline FilterOutputs process(float input) {
         const double oneMinusG = 1.0 - G_;
         const double g2 = G_ * G_;
         const double gamma = g2 * g2;
@@ -118,7 +127,10 @@ public:
         z2_ = 2.0 * y2 - z2_;
         z3_ = 2.0 * y3 - z3_;
         z4_ = 2.0 * y4 - z4_;
-        return static_cast<float>(y4);
+        const double hp = x - 4.0 * y1 + 6.0 * y2 - 4.0 * y3 + y4;
+        const double bp = 8.0 * (y2 - 2.0 * y3 + y4);
+        return {static_cast<float>(y4), static_cast<float>(bp),
+                static_cast<float>(hp)};
     }
 
 private:
@@ -138,13 +150,14 @@ public:
 
     // slopeMix: 0 = 12 dB/oct .. 1 = 24 dB/oct (cross-faded, click-free).
     inline void setParams(double cutoffHz, float resonance, float slopeMix,
-                          float analog, float drive) {
+                          float analog, float drive, float mode = 0.0f) {
         // The 12 dB SVF uses Q; the 24 dB ladder maps the same control to its
         // four-pole feedback coefficient.
         double q = 0.5 + static_cast<double>(resonance) * resonance * 9.5;
         s1_.setCoefficients(cutoffHz, q, drive, analog);
         ladder_.setCoefficients(cutoffHz, resonance);
         slopeMix_ = clampf(slopeMix, 0.0f, 1.0f);
+        mode_ = clampf(mode, 0.0f, 2.0f);
         analog_ = analog;
         drive_  = drive;
         // Overdrive gain grows exponentially for a musical taper; makeup gain
@@ -171,15 +184,23 @@ public:
         }
 
         // Both topologies always run (no stale state), then cross-fade.
-        float y2p = s1_.processLP(x);          // 2-pole / 12 dB
-        float y4p = ladder_.process(x);         // nonlinear 4-pole / 24 dB
-        return y2p + (y4p - y2p) * slopeMix_;
+        const FilterOutputs two = s1_.process(x);
+        const FilterOutputs four = ladder_.process(x);
+        const FilterOutputs slope = {
+            two.lp + (four.lp - two.lp) * slopeMix_,
+            two.bp + (four.bp - two.bp) * slopeMix_,
+            two.hp + (four.hp - two.hp) * slopeMix_
+        };
+        if (mode_ <= 1.0f)
+            return slope.lp + (slope.bp - slope.lp) * mode_;
+        return slope.bp + (slope.hp - slope.bp) * (mode_ - 1.0f);
     }
 
 private:
     SVFStage s1_;
     FourPoleLadder ladder_;
     float slopeMix_ = 0.0f;
+    float mode_ = 0.0f;
     float analog_ = 0.0f;
     float drive_  = 0.0f;
     float driveGain_ = 1.0f;

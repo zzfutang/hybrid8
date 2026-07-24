@@ -22,6 +22,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setParameter:(AUParameterAddress)address value:(AUValue)value;
 - (AUValue)valueForParameter:(AUParameterAddress)address;
 - (AUValue)effectiveValueForParameter:(AUParameterAddress)address;
+- (AUValue)compressorGainReductionDB;
+- (AUValue)outputMeterLeft;
+- (AUValue)outputMeterRight;
 
 /// The real-time render block handed to the AUAudioUnit.
 - (AUInternalRenderBlock)internalRenderBlockWithMusicalContext:

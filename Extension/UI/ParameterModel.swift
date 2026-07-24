@@ -12,19 +12,27 @@ final class ParameterModel: ObservableObject {
     let tree: AUParameterTree
     @Published private(set) var version: Int = 0
     @Published private(set) var modulationVersion: Int = 0
+    @Published private(set) var compressorGainReductionDB: Float = 0
+    @Published private(set) var outputLevelL: Float = 0
+    @Published private(set) var outputLevelR: Float = 0
     private var token: AUParameterObserverToken?
     private var timer: Timer?
     private let effectiveProvider: ((AUParameterAddress) -> Float)?
+    private let meterProvider: (() -> (gainReductionDB: Float,
+                                       outputL: Float, outputR: Float))?
     private var effectiveValues: [AUParameterAddress: Float] = [:]
 
     init(tree: AUParameterTree,
-         effectiveProvider: ((AUParameterAddress) -> Float)? = nil) {
+         effectiveProvider: ((AUParameterAddress) -> Float)? = nil,
+         meterProvider: (() -> (gainReductionDB: Float,
+                                outputL: Float, outputR: Float))? = nil) {
         self.tree = tree
         self.effectiveProvider = effectiveProvider
+        self.meterProvider = meterProvider
         token = tree.token(byAddingParameterObserver: { [weak self] _, _ in
             DispatchQueue.main.async { self?.version &+= 1 }
         })
-        if effectiveProvider != nil {
+        if effectiveProvider != nil || meterProvider != nil {
             timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0,
                                          repeats: true) { [weak self] _ in
                 self?.pollEffectiveValues()
@@ -35,9 +43,15 @@ final class ParameterModel: ObservableObject {
     deinit { timer?.invalidate() }
 
     private func pollEffectiveValues() {
-        guard let provider = effectiveProvider else { return }
-        for parameter in tree.allParameters {
-            effectiveValues[parameter.address] = provider(parameter.address)
+        if let provider = effectiveProvider {
+            for parameter in tree.allParameters {
+                effectiveValues[parameter.address] = provider(parameter.address)
+            }
+        }
+        if let meters = meterProvider?() {
+            compressorGainReductionDB = meters.gainReductionDB
+            outputLevelL = meters.outputL
+            outputLevelR = meters.outputR
         }
         modulationVersion &+= 1
     }
@@ -45,6 +59,25 @@ final class ParameterModel: ObservableObject {
     func effectiveValue(_ address: SynthParam) -> Float {
         let raw = AUParameterAddress(address.rawValue)
         return effectiveValues[raw] ?? param(address)?.value ?? 0
+    }
+
+    /// Parameters for which the DSP publishes a genuinely modulated value.
+    /// Keeping this explicit prevents ordinary UI/automation latency from
+    /// looking like modulation on source and envelope controls.
+    func supportsModulationIndicator(_ address: SynthParam) -> Bool {
+        switch address {
+        case SynthParamOctave, SynthParamOsc2Octave,
+             SynthParamOscPulseWidth, SynthParamOsc2PulseWidth,
+             SynthParamWTFrame, SynthParamWTLiveness,
+             SynthParamOscCrossMod, SynthParamFilterCutoff,
+             SynthParamFilterResonance, SynthParamFilterDrive,
+             SynthParamMasterGain, SynthParamOsc1Level,
+             SynthParamOsc2Level, SynthParamNoiseLevel,
+             SynthParamFilterSlope, SynthParamFilterMode:
+            return true
+        default:
+            return false
+        }
     }
 
     func param(_ address: SynthParam) -> AUParameter? {

@@ -150,6 +150,9 @@ enum SynthParameters {
             param(SynthParamFilterSlope, "slope", "Slope",
                   min: 0, max: 1, value: 0, unit: .indexed,
                   strings: ["12 dB/oct", "24 dB/oct"]),
+            param(SynthParamFilterMode, "filterMode", "Filter Mode",
+                  min: 0, max: 2, value: 0, unit: .indexed,
+                  strings: ["Low-Pass", "Band-Pass", "High-Pass"]),
             param(SynthParamFilterKeyTrack, "keyTrack", "Key Track",
                   min: 0, max: 1, value: 0),
         ])
@@ -203,7 +206,10 @@ enum SynthParameters {
         let modSources = ["None", "LFO 1", "LFO 2", "Filt Env", "Amp Env",
                           "Velocity", "Key Trk", "Mod Whl", "Aftertch", "Random"]
         let modDests   = ["None", "Osc Pitch", "Osc2 Pitch", "Pulse W", "Cutoff",
-                          "Reso", "Drive", "WT Frame", "WT Live", "X-Mod", "Amp"]
+                          "Reso", "Drive", "WT Frame", "WT Live", "X-Mod", "Amp",
+                          "Osc1 Pitch", "Osc1 Level", "Osc2 Level", "Noise",
+                          "Voice Pan", "Filt Slope", "Filt Mode", "Osc1 PW",
+                          "Osc2 PW"]
         func modSlot(_ n: Int, _ srcA: SynthParam, _ dstA: SynthParam, _ amtA: SynthParam) -> [AUParameter] {
             [param(srcA, "mod\(n)Src", "Mod \(n) Source",
                    min: 0, max: AUValue(modSources.count - 1), value: 0,
@@ -257,9 +263,39 @@ enum SynthParameters {
                   min: 0, max: 1, value: 0, unit: .indexed, strings: ["Off", "On"]),
         ])
 
+        // MARK: Chord Trigger
+        let chord = AUParameterTree.createGroup(
+            withIdentifier: "chord", name: "Chord Trigger", children: [
+            param(SynthParamChordOn, "chordOn", "Chord Trigger",
+                  min: 0, max: 1, value: 0, unit: .indexed,
+                  strings: ["Off", "On"]),
+            param(SynthParamChordType, "chordType", "Chord Type",
+                  min: 0, max: 8, value: 0, unit: .indexed,
+                  strings: ["Major", "Minor", "Major 7", "Minor 7",
+                            "Dominant 7", "Sus 2", "Sus 4",
+                            "Diminished", "Augmented"]),
+            param(SynthParamChordInversion, "chordInversion", "Chord Inversion",
+                  min: 0, max: 3, value: 0, unit: .indexed,
+                  strings: ["Root", "First", "Second", "Third"]),
+        ])
+
         // MARK: Effects
         let effects = AUParameterTree.createGroup(
             withIdentifier: "effects", name: "Effects", children: [
+            param(SynthParamCompressorOn, "compressorOn", "Compressor",
+                  min: 0, max: 1, value: 0, unit: .indexed,
+                  strings: ["Off", "On"]),
+            param(SynthParamCompressorThreshold, "compressorThreshold",
+                  "Compressor Threshold",
+                  min: -36, max: 0, value: -18, unit: .decibels),
+            param(SynthParamCompressorRatio, "compressorRatio", "Compressor Ratio",
+                  min: 1, max: 20, value: 4),
+            param(SynthParamCompressorAttack, "compressorAttack", "Compressor Attack",
+                  min: 0.001, max: 0.1, value: 0.01, unit: .seconds, log: true),
+            param(SynthParamCompressorRelease, "compressorRelease", "Compressor Release",
+                  min: 0.02, max: 1, value: 0.12, unit: .seconds, log: true),
+            param(SynthParamCompressorMakeup, "compressorMakeup", "Compressor Makeup",
+                  min: 0, max: 18, value: 0, unit: .decibels),
             param(SynthParamChorusMix, "chorusMix", "Chorus Mix",
                   min: 0, max: 1, value: 0),
             param(SynthParamChorusRate, "chorusRate", "Chorus Division",
@@ -278,6 +314,16 @@ enum SynthParameters {
                   min: 0, max: 1, value: 0.65),
             param(SynthParamDelayPingPong, "delayPingPong", "Delay Ping-Pong",
                   min: 0, max: 1, value: 1),
+            param(SynthParamReverbMix, "reverbMix", "Reverb Mix",
+                  min: 0, max: 1, value: 0),
+            param(SynthParamReverbSize, "reverbSize", "Reverb Size",
+                  min: 0, max: 1, value: 0.55),
+            param(SynthParamReverbDecay, "reverbDecay", "Reverb Decay",
+                  min: 0.2, max: 12, value: 2.4, unit: .seconds, log: true),
+            param(SynthParamReverbTone, "reverbTone", "Reverb Tone",
+                  min: 0, max: 1, value: 0.55),
+            param(SynthParamReverbPreDelay, "reverbPreDelay", "Reverb Pre-Delay",
+                  min: 0, max: 0.2, value: 0.015, unit: .seconds),
         ])
 
         // MARK: Global
@@ -302,10 +348,15 @@ enum SynthParameters {
                   min: 0, max: 24, value: 2, unit: .relativeSemiTones),
             param(SynthParamStereoSpread, "stereoSpread", "Stereo Spread",
                   min: 0, max: 1, value: 0),
+            param(SynthParamUnison, "unison", "Unison",
+                  min: 0, max: 1, value: 0, unit: .indexed,
+                  strings: ["Off", "On"]),
+            param(SynthParamUnisonDetune, "unisonDetune", "Unison Detune",
+                  min: 0, max: 1, value: 0.25),
         ])
 
         return AUParameterTree.createTree(withChildren:
-            [osc, osc2, mixer, filter, ampEnv, filtEnv, lfo, matrix, arp,
+            [osc, osc2, mixer, filter, ampEnv, filtEnv, lfo, matrix, arp, chord,
              effects, velocity, global])
     }
 }

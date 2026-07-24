@@ -39,9 +39,12 @@ struct VCFTolerance {
 
 struct VoiceTelemetry {
     float osc1Octave = 0.0f, osc2Octave = 0.0f;
-    float pulseWidth = 0.5f, wtFrame = 0.0f, wtLiveness = 0.0f;
+    float pulseWidth = 0.5f, osc2PulseWidth = 0.5f;
+    float wtFrame = 0.0f, wtLiveness = 0.0f;
     float crossMod = 0.0f, cutoff = 6000.0f;
     float resonance = 0.0f, drive = 0.0f, amplitude = 1.0f;
+    float osc1Level = 1.0f, osc2Level = 0.0f, noiseLevel = 0.0f;
+    float filterSlope = 0.0f, filterMode = 0.0f, panOffset = 0.0f;
 };
 
 class Voice {
@@ -78,8 +81,10 @@ public:
     bool  isHeld() const { return held_; }
     uint64_t age() const { return age_; }
     const VoiceTelemetry& telemetry() const { return telemetry_; }
+    float panModulation() const { return telemetry_.panOffset; }
 
-    void noteOn(int note, float velocity, float phaseSpread, float startPitch) {
+    void noteOn(int note, float velocity, float phaseSpread, float startPitch,
+                float tuningOffsetSemis = 0.0f, float voiceGain = 1.0f) {
         if (ampEnv_.isActive()) {
             // Voice steal: preserve the old voice for a very short fade before
             // resetting any discontinuous oscillator/filter state.
@@ -88,6 +93,8 @@ public:
             pendingVelocity_ = velocity;
             pendingPhaseSpread_ = phaseSpread;
             pendingStartPitch_ = startPitch;
+            pendingTuningOffsetSemis_ = tuningOffsetSemis;
+            pendingVoiceGain_ = voiceGain;
             pendingHeld_ = true;
             held_ = true;
             age_ = 0;
@@ -95,15 +102,19 @@ public:
             stealFadeRemaining_ = stealFadeTotal_;
             return;
         }
-        startNote(note, velocity, phaseSpread, startPitch, true);
+        startNote(note, velocity, phaseSpread, startPitch, tuningOffsetSemis,
+                  voiceGain, true);
     }
 
     void startNote(int note, float velocity, float phaseSpread, float startPitch,
+                   float tuningOffsetSemis, float voiceGain,
                    bool resetEnvelopes) {
         note_ = note;
         targetPitch_ = static_cast<float>(note);
         glidePitch_ = startPitch;   // where the glide begins (semitones)
         velocity_ = velocity;
+        tuningOffsetSemis_ = tuningOffsetSemis;
+        voiceGain_ = voiceGain;
         held_ = true;
         age_ = 0;
         // Per-voice start-phase randomisation ("un-sync"), independently
@@ -172,9 +183,12 @@ public:
             const float velocity = pendingVelocity_;
             const float phaseSpread = pendingPhaseSpread_;
             const float startPitch = pendingStartPitch_;
+            const float tuningOffset = pendingTuningOffsetSemis_;
+            const float voiceGain = pendingVoiceGain_;
             const bool shouldHold = pendingHeld_;
             pendingNote_ = false;
-            startNote(note, velocity, phaseSpread, startPitch, true);
+            startNote(note, velocity, phaseSpread, startPitch, tuningOffset,
+                      voiceGain, true);
             if (!shouldHold) noteOff();
         }
         ++age_;
@@ -247,6 +261,7 @@ public:
         // --- Shared pitch modulation: octave + bend + vibrato(LFO) + matrix --
         const float vibrato = lfo * p.lfoToOscFreq * 2.0f; // up to +/-2 semis
         const double baseSemis = static_cast<double>(glidePitch_)
+                               + tuningOffsetSemis_
                                + p.pitchBendSemis
                                + vibrato
                                + md[ModDstOscPitch] * 12.0;   // matrix -> pitch
@@ -256,6 +271,7 @@ public:
         // the carrier sets the perceived pitch, tuning osc 2 changes timbre,
         // not pitch.
         double semis1 = baseSemis + p.octave * 12.0
+                      + md[ModDstOsc1Pitch] * 12.0
                       + drift_ * p.analogAmount;          // +/-6 cents at analog=1
         double baseF1 = noteToHz(semis1);
         osc_.setWave(p.oscWave);
@@ -273,9 +289,14 @@ public:
         osc2_.setFrequency(baseF2);                       // modulator: own freq
 
         // --- Pulse width (each oscillator has its own; LFO PWM hits both) ---
-        float pwm = lfo * p.lfoToPulseWidth * 0.45f + md[ModDstPulseWidth] * 0.45f;
-        osc_.setPulseWidth(p.pulseWidth + pwm);
-        osc2_.setPulseWidth(p.osc2PulseWidth + pwm);
+        float pwm = lfo * p.lfoToPulseWidth * 0.45f
+                  + md[ModDstPulseWidth] * 0.45f;
+        const float pw1 = clampf(p.pulseWidth + pwm
+                               + md[ModDstOsc1PW] * 0.45f, 0.02f, 0.98f);
+        const float pw2 = clampf(p.osc2PulseWidth + pwm
+                               + md[ModDstOsc2PW] * 0.45f, 0.02f, 0.98f);
+        osc_.setPulseWidth(pw1);
+        osc2_.setPulseWidth(pw2);
 
         // --- Wavetable setup (per-osc; frequency is constant across the block
         //     because a wavetable oscillator does not support FM). The morph
@@ -337,7 +358,19 @@ public:
                        0.0f, 1.0f);
         const float filterAnalog = clampf(
             analog * (1.0f + vcfTolerance_.saturationScale), 0.0f, 1.0f);
-        filter_.setParams(cutoff, reso, p.filterSlopeMix, filterAnalog, drive);
+        const float filterSlope = clampf(
+            p.filterSlopeMix + md[ModDstFilterSlope], 0.0f, 1.0f);
+        const float filterMode = clampf(
+            p.filterModeMix + md[ModDstFilterMode] * 2.0f, 0.0f, 2.0f);
+        filter_.setParams(cutoff, reso, filterSlope, filterAnalog, drive,
+                          filterMode);
+
+        const float osc1Level = clampf(
+            p.osc1Level + md[ModDstOsc1Level], 0.0f, 1.0f);
+        const float osc2Level = clampf(
+            p.osc2Level + md[ModDstOsc2Level], 0.0f, 1.0f);
+        const float noiseLevel = clampf(
+            p.noiseLevel + md[ModDstNoiseLevel], 0.0f, 1.0f);
 
         float filtered = 0.0f;
         for (int os = 0; os < kOversample; ++os) {
@@ -367,9 +400,9 @@ public:
             // Hard sync: master osc 1 wraps -> reset slave osc 2.
             if (doSync && osc_.justWrapped()) osc2_.syncReset();
 
-            float m = o1 * p.osc1Level + o2 * p.osc2Level;
+            float m = o1 * osc1Level + o2 * osc2Level;
             // Noise and every nonlinear filter operation also run at 2x.
-            float src = m + rng_.nextBipolar() * p.noiseLevel;
+            float src = m + rng_.nextBipolar() * noiseLevel;
             filtered = decimator_.process(filter_.process(src));
         }
 
@@ -382,7 +415,8 @@ public:
         telemetry_.osc2Octave = p.osc2Octave
                               + (vibrato + p.osc2PitchEnv * env * 36.0f
                                  + md[ModDstOsc2Pitch] * 36.0f) / 12.0f;
-        telemetry_.pulseWidth = clampf(p.pulseWidth + pwm, 0.02f, 0.98f);
+        telemetry_.pulseWidth = pw1;
+        telemetry_.osc2PulseWidth = pw2;
         telemetry_.wtFrame = wtFrameMod;
         telemetry_.wtLiveness = wtLivenessMod;
         telemetry_.crossMod = cm;
@@ -390,7 +424,13 @@ public:
         telemetry_.resonance = reso;
         telemetry_.drive = drive;
         telemetry_.amplitude = clampf(p.masterGain * ampMod, 0.0f, 1.0f);
-        float output = filtered * amp;
+        telemetry_.osc1Level = osc1Level;
+        telemetry_.osc2Level = osc2Level;
+        telemetry_.noiseLevel = noiseLevel;
+        telemetry_.filterSlope = filterSlope;
+        telemetry_.filterMode = filterMode;
+        telemetry_.panOffset = clampf(md[ModDstVoicePan], -1.0f, 1.0f);
+        float output = filtered * amp * voiceGain_;
         if (stealFadeRemaining_ > 0) {
             output *= static_cast<float>(stealFadeRemaining_)
                     / static_cast<float>(stealFadeTotal_);
@@ -423,6 +463,8 @@ private:
     float targetPitch_ = 60.0f;
     float glidePitch_ = 60.0f;
     float velocity_ = 1.0f;
+    float tuningOffsetSemis_ = 0.0f;
+    float voiceGain_ = 1.0f;
     bool  held_ = false;
     uint64_t age_ = 0;
 
@@ -432,6 +474,8 @@ private:
     float pendingVelocity_ = 1.0f;
     float pendingPhaseSpread_ = 0.0f;
     float pendingStartPitch_ = 60.0f;
+    float pendingTuningOffsetSemis_ = 0.0f;
+    float pendingVoiceGain_ = 1.0f;
     int   stealFadeRemaining_ = 0;
     int   stealFadeTotal_ = 1;
 

@@ -272,6 +272,43 @@ int main() {
         check(resetPeak < 1e-6f, "I: resetting effects clears delay and chorus memory");
     }
 
+    // ---- Test I2: FDN reverb produces a stable, decorrelated stereo tail ---
+    {
+        StereoReverb reverb;
+        reverb.setup(sr);
+        reverb.setParams(1.0f, 0.72f, 4.0f, 0.62f, 0.0f);
+
+        const int M = static_cast<int>(sr * 1.2);
+        bool finite = true;
+        double tailEnergy = 0.0, stereoEnergy = 0.0;
+        float peak = 0.0f;
+        for (int n = 0; n < M; ++n) {
+            const float impulse = n == 0 ? 0.5f : 0.0f;
+            StereoSample y = reverb.process(impulse, impulse);
+            finite = finite && std::isfinite(y.l) && std::isfinite(y.r);
+            peak = std::max(peak, std::max(std::fabs(y.l), std::fabs(y.r)));
+            if (n > static_cast<int>(sr * 0.12)) {
+                tailEnergy += std::fabs(static_cast<double>(y.l))
+                            + std::fabs(static_cast<double>(y.r));
+                stereoEnergy += std::fabs(static_cast<double>(y.l - y.r));
+            }
+        }
+        printf("Test I2 (FDN reverb): finite=%d peak=%.3f tail=%.3f width=%.3f\n",
+               (int)finite, peak, tailEnergy, stereoEnergy);
+        check(finite, "I2: reverb remains finite at a long decay");
+        check(peak < 2.0f, "I2: reverb impulse response remains bounded");
+        check(tailEnergy > 1.0, "I2: reverb produces a sustained tail");
+        check(stereoEnergy > 0.1, "I2: reverb return is decorrelated stereo");
+
+        reverb.reset();
+        float resetPeak = 0.0f;
+        for (int n = 0; n < 4096; ++n) {
+            StereoSample y = reverb.process(0.0f, 0.0f);
+            resetPeak = std::max(resetPeak, std::max(std::fabs(y.l), std::fabs(y.r)));
+        }
+        check(resetPeak < 1e-6f, "I2: resetting reverb clears its tail");
+    }
+
     // ---- Test J: maximum polyphony remains bounded at unity master --------
     {
         SynthEngine e; e.setSampleRate(sr);
@@ -473,6 +510,280 @@ int main() {
               "P: full spread places the first voice toward its calibrated side");
         check(allFinite(wide[0]) && allFinite(wide[1]),
               "P: stereo voice panning remains finite");
+    }
+
+    // ---- Test Q: MIDI sustain holds released keys until pedal-up ----------
+    {
+        SynthEngine e; e.setSampleRate(sr);
+        e.setParameter(SynthParamFilterCutoff, 18000.0f);
+        e.setParameter(SynthParamAmpAttack, normFromTime(0.001f));
+        e.setParameter(SynthParamAmpSustain, 1.0f);
+        e.setParameter(SynthParamAmpRelease, normFromTime(0.015f));
+        e.noteOn(60, 127);
+        std::vector<float> warm(2048), right(8192);
+        e.render(warm.data(), right.data(), 2048);
+        e.sustainPedal(true);
+        e.noteOff(60);
+        std::vector<float> held(2048);
+        e.render(held.data(), right.data(), 2048);
+        e.sustainPedal(false);
+        std::vector<float> released(8192);
+        e.render(released.data(), right.data(), 8192);
+        float releasedTail = 0.0f;
+        for (int n = 6144; n < 8192; ++n)
+            releasedTail = std::max(releasedTail, std::fabs(released[n]));
+        printf("Test Q (sustain): heldPeak=%.5f  releasedTail=%.7f\n",
+               peakAbs(held), releasedTail);
+        check(peakAbs(held) > 0.01f,
+              "Q: CC64 holds a voice after its key is released");
+        check(releasedTail < 0.001f,
+              "Q: pedal-up releases keys that are no longer physically held");
+        check(allFinite(released), "Q: sustain transitions remain finite");
+    }
+
+    // ---- Test R: host automation ramps retain duration across renders -----
+    {
+        SynthEngine e; e.setSampleRate(sr);
+        e.setParameter(SynthParamFilterCutoff, 200.0f);
+        e.setParameter(SynthParamAmpSustain, 1.0f);
+        e.noteOn(60, 127);
+        std::vector<float> left(1024), right(1024);
+        e.render(left.data(), right.data(), 1024);
+
+        e.startParameterRamp(SynthParamFilterCutoff, 10000.0f, 1024);
+        e.render(left.data(), right.data(), 512);
+        const float midpoint = e.getParameter(SynthParamFilterCutoff);
+        e.render(left.data() + 512, right.data() + 512, 512);
+        const float endpoint = e.getParameter(SynthParamFilterCutoff);
+        float maxJump = 0.0f;
+        for (int n = 1; n < 1024; ++n)
+            maxJump = std::max(maxJump, std::fabs(left[n] - left[n - 1]));
+        printf("Test R (automation ramp): midpoint=%.1f endpoint=%.1f jump=%.5f\n",
+               midpoint, endpoint, maxJump);
+        check(std::fabs(midpoint - 5100.0f) < 1.0f,
+              "R: automation ramp reaches its midpoint after half the duration");
+        check(std::fabs(endpoint - 10000.0f) < 0.01f,
+              "R: automation ramp reaches the exact scheduled target");
+        check(maxJump < 0.5f && allFinite(left),
+              "R: ramped filter automation remains continuous and finite");
+    }
+
+    // ---- Test S: LP, BP and HP modes select the intended spectrum ---------
+    {
+        const double filterRate = sr * 2.0;
+        auto response = [&](float slope, float mode, double frequency) {
+            LadderFilter filter;
+            filter.setSampleRate(filterRate);
+            filter.reset();
+            filter.setParams(1000.0, 0.1f, slope, 0.0f, 0.0f, mode);
+            const int count = static_cast<int>(filterRate * 0.15);
+            double energy = 0.0;
+            for (int n = 0; n < count; ++n) {
+                const float input = 0.1f * std::sin(
+                    static_cast<float>(kTwoPi * frequency * n / filterRate));
+                const float output = filter.process(input);
+                if (n > count / 3)
+                    energy += static_cast<double>(output) * output;
+            }
+            return std::sqrt(energy / (count - count / 3));
+        };
+        bool shaped = true;
+        for (float slope : {0.0f, 1.0f}) {
+            const double lpLow = response(slope, 0.0f, 100.0);
+            const double lpHigh = response(slope, 0.0f, 8000.0);
+            const double bpLow = response(slope, 1.0f, 100.0);
+            const double bpMid = response(slope, 1.0f, 1000.0);
+            const double bpHigh = response(slope, 1.0f, 8000.0);
+            const double hpLow = response(slope, 2.0f, 100.0);
+            const double hpHigh = response(slope, 2.0f, 8000.0);
+            printf("Test S (%s modes): LP %.4f/%.5f  BP %.5f/%.4f/%.5f"
+                   "  HP %.5f/%.4f\n",
+                   slope < 0.5f ? "12 dB" : "24 dB",
+                   lpLow, lpHigh, bpLow, bpMid, bpHigh, hpLow, hpHigh);
+            shaped = shaped && lpLow > lpHigh * 3.0
+                            && bpMid > bpLow * 1.5
+                            && bpMid > bpHigh * 1.5
+                            && hpHigh > hpLow * 3.0;
+        }
+        check(shaped,
+              "S: both filter slopes provide distinct LP, BP and HP responses");
+    }
+
+    // ---- Test T: poly unison creates symmetric stereo-detuned voice pairs --
+    {
+        SynthEngine e; e.setSampleRate(sr);
+        e.setParameter(SynthParamVoiceCount, 8.0f);
+        e.setParameter(SynthParamUnison, 1.0f);
+        e.setParameter(SynthParamUnisonDetune, 1.0f); // +/-50 cents
+        e.setParameter(SynthParamStereoSpread, 1.0f);
+        e.setParameter(SynthParamOscPhaseSpread, 0.0f);
+        e.setParameter(SynthParamAnalogAmount, 0.0f);
+        e.setParameter(SynthParamFilterCutoff, 18000.0f);
+        e.setParameter(SynthParamFilterEnvAmount, 0.0f);
+        e.setParameter(SynthParamAmpSustain, 1.0f);
+        e.setParameter(SynthParamAmpRelease, normFromTime(0.015f));
+        e.noteOn(69, 127);
+        std::vector<float> left(N), right(N);
+        e.render(left.data(), right.data(), N);
+        const double lowFrequency = 440.0 * std::pow(2.0, -0.5 / 12.0);
+        const double highFrequency = 440.0 * std::pow(2.0, 0.5 / 12.0);
+        const double leftLow = magAt(left, lowFrequency, sr);
+        const double leftHigh = magAt(left, highFrequency, sr);
+        const double rightLow = magAt(right, lowFrequency, sr);
+        const double rightHigh = magAt(right, highFrequency, sr);
+        e.noteOff(69);
+        std::vector<float> tail(8192);
+        e.render(tail.data(), right.data(), 8192);
+        float tailEnd = 0.0f;
+        for (int n = 6144; n < 8192; ++n)
+            tailEnd = std::max(tailEnd, std::fabs(tail[n]));
+        printf("Test T (unison): L %.5f/%.5f  R %.5f/%.5f"
+               " peak=%.3f tail=%.7f\n",
+               leftLow, leftHigh, rightLow, rightHigh,
+               std::max(peakAbs(left), peakAbs(right)), tailEnd);
+        check(leftLow > leftHigh * 2.0 && rightHigh > rightLow * 2.0,
+              "T: unison voices are symmetrically detuned and stereo-separated");
+        check(peakAbs(left) <= 1.0f && peakAbs(right) <= 1.0f,
+              "T: unison output remains within the soft ceiling");
+        check(tailEnd < 0.001f,
+              "T: note-off releases both voice cards in the unison pair");
+    }
+
+    // ---- Test U: expanded matrix controls mixer levels and per-voice pan ---
+    {
+        SynthEngine muted; muted.setSampleRate(sr);
+        muted.setParameter(SynthParamFilterCutoff, 18000.0f);
+        muted.setParameter(SynthParamFilterEnvAmount, 0.0f);
+        muted.setParameter(SynthParamAmpSustain, 1.0f);
+        muted.setParameter(SynthParamMod1Source, ModSrcModWheel);
+        muted.setParameter(SynthParamMod1Dest, ModDstOsc1Level);
+        muted.setParameter(SynthParamMod1Amount, -1.0f);
+        muted.modWheel(1.0f);
+        muted.noteOn(60, 127);
+        std::vector<float> silence(4096), scratch(4096);
+        muted.render(silence.data(), scratch.data(), 4096);
+
+        SynthEngine panned; panned.setSampleRate(sr);
+        panned.setParameter(SynthParamStereoSpread, 0.0f);
+        panned.setParameter(SynthParamFilterCutoff, 18000.0f);
+        panned.setParameter(SynthParamFilterEnvAmount, 0.0f);
+        panned.setParameter(SynthParamAmpSustain, 1.0f);
+        panned.setParameter(SynthParamMod1Source, ModSrcModWheel);
+        panned.setParameter(SynthParamMod1Dest, ModDstVoicePan);
+        panned.setParameter(SynthParamMod1Amount, 1.0f);
+        panned.modWheel(1.0f);
+        panned.noteOn(60, 127);
+        std::vector<float> left(4096), right(4096);
+        panned.render(left.data(), right.data(), 4096);
+        double leftEnergy = 0.0, rightEnergy = 0.0;
+        for (int n = 2048; n < 4096; ++n) {
+            leftEnergy += static_cast<double>(left[n]) * left[n];
+            rightEnergy += static_cast<double>(right[n]) * right[n];
+        }
+        printf("Test U (expanded mod): mute=%.7f panEnergy=%.6f/%.4f\n",
+               peakAbs(silence), std::sqrt(leftEnergy), std::sqrt(rightEnergy));
+        check(peakAbs(silence) < 0.001f,
+              "U: matrix modulation can fully close an oscillator mixer level");
+        check(rightEnergy > leftEnergy * 100.0,
+              "U: voice-pan destination moves a centred voice across the stage");
+        check(allFinite(left) && allFinite(right),
+              "U: expanded modulation destinations remain finite");
+    }
+
+    // ---- Test V: chord trigger expands before the arpeggiator -------------
+    {
+        auto configure = [&](SynthEngine& e) {
+            e.setSampleRate(sr);
+            e.setParameter(SynthParamChordOn, 1.0f);
+            e.setParameter(SynthParamChordType, 0.0f); // major
+            e.setParameter(SynthParamChordInversion, 0.0f);
+            e.setParameter(SynthParamOscPhaseSpread, 0.0f);
+            e.setParameter(SynthParamAnalogAmount, 0.0f);
+            e.setParameter(SynthParamFilterCutoff, 18000.0f);
+            e.setParameter(SynthParamFilterEnvAmount, 0.0f);
+            e.setParameter(SynthParamAmpAttack, 0.0f);
+            e.setParameter(SynthParamAmpSustain, 1.0f);
+        };
+        auto noteHz = [](int note) {
+            return 440.0 * std::pow(2.0, (note - 69) / 12.0);
+        };
+
+        SynthEngine chord; configure(chord);
+        chord.noteOn(60, 127);
+        std::vector<float> direct(16384), scratch(16384);
+        chord.render(direct.data(), scratch.data(), static_cast<int>(direct.size()));
+        const double c = magAt(direct, noteHz(60), sr);
+        const double e = magAt(direct, noteHz(64), sr);
+        const double g = magAt(direct, noteHz(67), sr);
+        printf("Test V (chord direct): C=%.5f E=%.5f G=%.5f\n", c, e, g);
+        check(c > 0.002 && e > 0.002 && g > 0.002,
+              "V: one C key generates the C-major chord tones");
+
+        SynthEngine arpChord; configure(arpChord);
+        arpChord.setTempo(120.0);
+        arpChord.setParameter(SynthParamArpOn, 1.0f);
+        arpChord.setParameter(SynthParamArpMode, 0.0f);
+        arpChord.setParameter(SynthParamArpOctaves, 1.0f);
+        arpChord.setParameter(SynthParamArpRate, 13.0f); // 1/32 = 3000 samples
+        arpChord.setParameter(SynthParamArpGate, 0.9f);
+        arpChord.noteOn(60, 127);
+        const int step = 3000;
+        std::vector<float> sequence(step * 3), seqR(step * 3);
+        arpChord.render(sequence.data(), seqR.data(), static_cast<int>(sequence.size()));
+        auto windowMagnitude = [&](int stepIndex, int note) {
+            double re = 0.0, im = 0.0;
+            const int begin = stepIndex * step + 400;
+            const int end = (stepIndex + 1) * step - 300;
+            for (int n = begin; n < end; ++n) {
+                const double phase = kTwoPi * noteHz(note) * n / sr;
+                re += sequence[n] * std::cos(phase);
+                im -= sequence[n] * std::sin(phase);
+            }
+            return std::sqrt(re * re + im * im);
+        };
+        const bool ordered =
+            windowMagnitude(0, 60) > windowMagnitude(0, 64)
+            && windowMagnitude(1, 64) > windowMagnitude(1, 60)
+            && windowMagnitude(2, 67) > windowMagnitude(2, 64);
+        printf("Test V (chord -> arp): ordered=%d finite=%d\n",
+               (int)ordered, (int)allFinite(sequence));
+        check(ordered,
+              "V: generated C-major tones reach the arp in ascending order");
+        check(allFinite(sequence),
+              "V: chord-to-arp processing remains finite");
+    }
+
+    // ---- Test W: first-stage compressor is linked, bounded, and bypassable -
+    {
+        StereoCompressor compressor;
+        compressor.setup(sr);
+        compressor.setParams(0.0f, -18.0f, 4.0f, 0.001f, 0.1f, 0.0f);
+        StereoSample bypassed{};
+        for (int n = 0; n < 4096; ++n)
+            bypassed = compressor.process(0.8f, 0.4f);
+        const bool unityBypass = std::fabs(bypassed.l - 0.8f) < 1.0e-6f
+                              && std::fabs(bypassed.r - 0.4f) < 1.0e-6f;
+
+        compressor.setParams(1.0f, -18.0f, 4.0f, 0.001f, 0.1f, 0.0f);
+        StereoSample compressed{};
+        bool finite = true;
+        for (int n = 0; n < static_cast<int>(sr * 0.25); ++n) {
+            compressed = compressor.process(0.8f, 0.4f);
+            finite = finite && std::isfinite(compressed.l)
+                            && std::isfinite(compressed.r);
+        }
+        const float stereoRatio = compressed.r != 0.0f
+                                ? compressed.l / compressed.r : 0.0f;
+        printf("Test W (compressor): bypass=%.3f compressed=%.3f ratio=%.3f\n",
+               bypassed.l, compressed.l, stereoRatio);
+        check(unityBypass,
+              "W: disabled compressor is exact unity gain");
+        check(compressed.l < 0.35f && compressed.l > 0.12f,
+              "W: enabled compressor applies the expected gain reduction");
+        check(std::fabs(stereoRatio - 2.0f) < 0.001f,
+              "W: stereo linking preserves the left/right image");
+        check(finite,
+              "W: compressor output remains finite");
     }
 
     printf("\n%s (%d failure%s)\n",

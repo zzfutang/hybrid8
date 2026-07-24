@@ -42,6 +42,18 @@
     return (AUValue)_engine.getEffectiveParameter((uint64_t)address);
 }
 
+- (AUValue)compressorGainReductionDB {
+    return (AUValue)_engine.compressorGainReductionDb();
+}
+
+- (AUValue)outputMeterLeft {
+    return (AUValue)_engine.outputMeterLeft();
+}
+
+- (AUValue)outputMeterRight {
+    return (AUValue)_engine.outputMeterRight();
+}
+
 - (AUInternalRenderBlock)internalRenderBlockWithMusicalContext:
     (AUHostMusicalContextBlock)musicalContext {
     // Capture a raw pointer to the C++ engine so the audio thread never does
@@ -93,9 +105,16 @@
             if (eventTime <= now) {
                 switch (event->head.eventType) {
                     case AURenderEventParameter:
-                    case AURenderEventParameterRamp: {
+                    {
                         const AUParameterEvent &pe = event->parameter;
                         engine->setParameter((uint64_t)pe.parameterAddress, (float)pe.value);
+                        break;
+                    }
+                    case AURenderEventParameterRamp: {
+                        const AUParameterEvent &pe = event->parameter;
+                        engine->startParameterRamp(
+                            (uint64_t)pe.parameterAddress, (float)pe.value,
+                            (uint32_t)pe.rampDurationSampleFrames);
                         break;
                     }
                     case AURenderEventMIDI: {
@@ -109,6 +128,7 @@
                             case 0xE0: engine->pitchBend((int)d1 | ((int)d2 << 7)); break;
                             case 0xB0: // control change
                                 if (d1 == 1) engine->modWheel(d2 / 127.0f);   // mod wheel
+                                else if (d1 == 64) engine->sustainPedal(d2 >= 64);
                                 else if (d1 == 120) engine->allSoundOff();
                                 else if (d1 == 123) engine->allNotesOff();
                                 break;

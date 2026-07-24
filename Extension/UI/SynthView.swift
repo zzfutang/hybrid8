@@ -20,6 +20,7 @@ struct SynthView: View {
     @State private var showingSave = false
     @State private var saveName = ""
     @State private var lowerTab = 0
+    @State private var effectsTab = 0
 
     init(model: ParameterModel) {
         _model = ObservedObject(wrappedValue: model)
@@ -340,8 +341,12 @@ struct SynthView: View {
     private var filterPanel: some View {
         Panel(title: "Filter", accent: Palette.filterAccent) {
             VStack(alignment: .leading, spacing: 8) {
-                Selector("Slope", SynthParamFilterSlope, ["12dB", "24dB"],
-                         model, accent: Palette.filterAccent)
+                HStack(alignment: .top, spacing: 12) {
+                    Selector("Mode", SynthParamFilterMode, ["LP", "BP", "HP"],
+                             model, accent: Palette.filterAccent)
+                    Selector("Slope", SynthParamFilterSlope, ["12dB", "24dB"],
+                             model, accent: Palette.filterAccent)
+                }
                 HStack(spacing: 0) {
                     Knob("Cutoff", SynthParamFilterCutoff, model,
                          accent: Palette.filterAccent, unit: "", log: true).frame(maxWidth: .infinity)
@@ -408,7 +413,10 @@ struct SynthView: View {
     }
 
     private var globalPanel: some View {
-        Panel(title: "Global", accent: Palette.globalAccent) {
+        Panel(title: "Global", accent: Palette.globalAccent, trailing: {
+            StereoOutputMeter(left: model.outputLevelL,
+                              right: model.outputLevelR)
+        }) {
             VStack(spacing: 8) {
                 HStack(alignment: .top, spacing: 0) {
                     Knob("Voices", SynthParamVoiceCount, model, accent: Palette.globalAccent, integer: true).frame(maxWidth: .infinity)
@@ -427,8 +435,8 @@ struct SynthView: View {
                     // are assigned in the Mod Matrix.
                     Knob("Phase", SynthParamOscPhaseSpread, model, accent: Palette.globalAccent).frame(maxWidth: .infinity)
                     Knob("Vel Vol", SynthParamVelToVolume, model, accent: Palette.velAccent).frame(maxWidth: .infinity)
-                    Color.clear.frame(maxWidth: .infinity)
-                    Color.clear.frame(maxWidth: .infinity)
+                    ToggleButton("Unison", SynthParamUnison, model, accent: Palette.globalAccent).frame(maxWidth: .infinity)
+                    Knob("Uni Det", SynthParamUnisonDetune, model, accent: Palette.globalAccent).frame(maxWidth: .infinity)
                 }
             }
         }
@@ -460,20 +468,31 @@ struct SynthView: View {
     }
 
     private var arpEffectsPanel: some View {
-        Panel(title: lowerTab == 0 ? "Arpeggiator" : "Effects  ·  Chorus → Delay",
-              accent: lowerTab == 0 ? Palette.arpAccent : Palette.fxAccent,
+        Panel(title: lowerPanelTitle,
+              accent: lowerTab == 0 ? Palette.arpAccent
+                                    : (lowerTab == 1 ? Palette.chordAccent
+                                                     : Palette.fxAccent),
               trailing: {
             HStack(spacing: 4) {
                 lowerTabButton("ARP", index: 0, accent: Palette.arpAccent)
-                lowerTabButton("EFFECTS", index: 1, accent: Palette.fxAccent)
+                lowerTabButton("CHORD", index: 1, accent: Palette.chordAccent)
+                lowerTabButton("EFFECTS", index: 2, accent: Palette.fxAccent)
             }
         }) {
             if lowerTab == 0 {
                 arpControls
+            } else if lowerTab == 1 {
+                chordControls
             } else {
                 effectsControls
             }
         }
+    }
+
+    private var lowerPanelTitle: String {
+        if lowerTab == 0 { return "Arpeggiator" }
+        if lowerTab == 1 { return "Chord Trigger  ·  Before Arpeggiator" }
+        return "Effects  ·  Compressor → Chorus → Delay → Reverb"
     }
 
     private func lowerTabButton(_ title: String, index: Int,
@@ -516,6 +535,32 @@ struct SynthView: View {
             }
     }
 
+    private var chordControls: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ToggleButton("Chord", SynthParamChordOn, model,
+                         accent: Palette.chordAccent)
+            chordDropdown("Type", SynthParamChordType,
+                          ["Major", "Minor", "Maj 7", "Min 7", "Dom 7",
+                           "Sus 2", "Sus 4", "Dim", "Aug"], width: 104)
+            chordDropdown("Inversion", SynthParamChordInversion,
+                          ["Root", "First", "Second", "Third"], width: 88)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func chordDropdown(_ title: String, _ address: SynthParam,
+                               _ options: [String], width: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .tracking(0.6)
+                .foregroundColor(Palette.engrave)
+            Dropdown(address, options, model, accent: Palette.chordAccent,
+                     helpText: SynthHelp.text(for: AUParameterAddress(address.rawValue)))
+                .frame(width: width)
+        }
+    }
+
     private func arpDropdown(_ title: String, _ address: SynthParam,
                              _ options: [String], width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -530,15 +575,89 @@ struct SynthView: View {
     }
 
     private var effectsControls: some View {
-            HStack(alignment: .top, spacing: 0) {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(spacing: 2) {
+                effectTabButton("COMP", index: 0)
+                effectTabButton("CHORUS", index: 1)
+                effectTabButton("DELAY", index: 2)
+                effectTabButton("REVERB", index: 3)
+            }
+            .frame(width: 62)
+            Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1, height: 70)
+                .padding(.horizontal, 3)
+            Group {
+                if effectsTab == 0 {
+                    compressorControls
+                } else if effectsTab == 1 {
+                    chorusControls
+                } else if effectsTab == 2 {
+                    delayControls
+                } else {
+                    reverbControls
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func effectTabButton(_ title: String, index: Int) -> some View {
+        let selected = effectsTab == index
+        return Button {
+            effectsTab = index
+        } label: {
+            Text(title)
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .tracking(0.4)
+                .foregroundColor(selected ? Palette.engrave : Palette.engraveDim)
+                .frame(width: 58, height: 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(selected ? Palette.fxAccent.opacity(0.18)
+                                       : Color.black.opacity(0.22))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(selected ? Palette.fxAccent.opacity(0.75)
+                                         : Color.white.opacity(0.08), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var compressorControls: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ToggleButton("Comp", SynthParamCompressorOn, model,
+                         accent: Palette.fxAccent)
+                .frame(maxWidth: .infinity)
+            Knob("Threshold", SynthParamCompressorThreshold, model,
+                 accent: Palette.fxAccent, unit: "dB").frame(maxWidth: .infinity)
+            Knob("Ratio", SynthParamCompressorRatio, model,
+                 accent: Palette.fxAccent, unit: ":1").frame(maxWidth: .infinity)
+            Knob("Attack", SynthParamCompressorAttack, model,
+                 accent: Palette.fxAccent, unit: "s").frame(maxWidth: .infinity)
+            Knob("Release", SynthParamCompressorRelease, model,
+                 accent: Palette.fxAccent, unit: "s").frame(maxWidth: .infinity)
+            Knob("Makeup", SynthParamCompressorMakeup, model,
+                 accent: Palette.fxAccent, unit: "dB").frame(maxWidth: .infinity)
+            GainReductionMeter(decibels: model.compressorGainReductionDB)
+                .padding(.top, 12)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var chorusControls: some View {
+        HStack(alignment: .top, spacing: 0) {
                 Knob("Cho Mix", SynthParamChorusMix, model,
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
                 fxDivision("Cho Sync", SynthParamChorusRate)
                     .frame(maxWidth: .infinity)
                 Knob("Cho Depth", SynthParamChorusDepth, model,
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
-                Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1, height: 70)
-                    .padding(.horizontal, 8)
+        }
+    }
+
+    private var delayControls: some View {
+        HStack(alignment: .top, spacing: 0) {
                 Knob("Dly Mix", SynthParamDelayMix, model,
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
                 fxDivision("Dly Sync", SynthParamDelayTime)
@@ -549,7 +668,22 @@ struct SynthView: View {
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
                 Knob("PingPong", SynthParamDelayPingPong, model,
                      accent: Palette.fxAccent).frame(maxWidth: .infinity)
-            }
+        }
+    }
+
+    private var reverbControls: some View {
+        HStack(alignment: .top, spacing: 0) {
+            Knob("Rev Mix", SynthParamReverbMix, model,
+                 accent: Palette.fxAccent).frame(maxWidth: .infinity)
+            Knob("Size", SynthParamReverbSize, model,
+                 accent: Palette.fxAccent).frame(maxWidth: .infinity)
+            Knob("Decay", SynthParamReverbDecay, model,
+                 accent: Palette.fxAccent, unit: "s").frame(maxWidth: .infinity)
+            Knob("Tone", SynthParamReverbTone, model,
+                 accent: Palette.fxAccent).frame(maxWidth: .infinity)
+            Knob("Pre Delay", SynthParamReverbPreDelay, model,
+                 accent: Palette.fxAccent, unit: "s").frame(maxWidth: .infinity)
+        }
     }
 
     private func fxDivision(_ title: String, _ address: SynthParam) -> some View {
@@ -571,7 +705,10 @@ struct SynthView: View {
     static let modSources = ["Src", "LFO 1", "LFO 2", "Filt Env", "Amp Env",
                              "Velocity", "Key Trk", "Mod Whl", "Aftertch", "Random"]
     static let modDests   = ["Dest", "Osc Pitch", "Osc2 Pitch", "Pulse W", "Cutoff",
-                             "Reso", "Drive", "WT Frame", "WT Live", "X-Mod", "Amp"]
+                             "Reso", "Drive", "WT Frame", "WT Live", "X-Mod", "Amp",
+                             "Osc1 Pitch", "Osc1 Level", "Osc2 Level", "Noise",
+                             "Voice Pan", "Filt Slope", "Filt Mode", "Osc1 PW",
+                             "Osc2 PW"]
 
     private func modSlot(_ n: Int, _ s: SynthParam, _ d: SynthParam, _ a: SynthParam) -> some View {
         HStack(spacing: 5) {

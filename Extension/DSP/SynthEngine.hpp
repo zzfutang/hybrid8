@@ -101,6 +101,23 @@ public:
         store_[SynthParamDelayTone].store(0.65f);
         store_[SynthParamDelayPingPong].store(1.0f);
         store_[SynthParamStereoSpread].store(0.0f);
+        store_[SynthParamFilterMode].store(0.0f);
+        store_[SynthParamUnison].store(0.0f);
+        store_[SynthParamUnisonDetune].store(0.25f);
+        store_[SynthParamReverbMix].store(0.0f);
+        store_[SynthParamReverbSize].store(0.55f);
+        store_[SynthParamReverbDecay].store(2.4f);
+        store_[SynthParamReverbTone].store(0.55f);
+        store_[SynthParamReverbPreDelay].store(0.015f);
+        store_[SynthParamChordOn].store(0.0f);
+        store_[SynthParamChordType].store(0.0f);
+        store_[SynthParamChordInversion].store(0.0f);
+        store_[SynthParamCompressorOn].store(0.0f);
+        store_[SynthParamCompressorThreshold].store(-18.0f);
+        store_[SynthParamCompressorRatio].store(4.0f);
+        store_[SynthParamCompressorAttack].store(0.010f);
+        store_[SynthParamCompressorRelease].store(0.120f);
+        store_[SynthParamCompressorMakeup].store(0.0f);
         for (int i = 0; i < SynthParamCount; ++i)
             effective_[i].store(store_[i].load(std::memory_order_relaxed),
                                 std::memory_order_relaxed);
@@ -132,6 +149,7 @@ public:
         crossModSmoother_.setSampleRate(sr); crossModSmoother_.setTimeConstant(12.0);
         slopeSmoother_.setSampleRate(sr);    slopeSmoother_.setTimeConstant(15.0);
         stereoSmoother_.setSampleRate(sr);   stereoSmoother_.setTimeConstant(15.0);
+        modeSmoother_.setSampleRate(sr);     modeSmoother_.setTimeConstant(12.0);
         snapSmoothers();
     }
 
@@ -141,7 +159,10 @@ public:
 
     // --- Parameter access (thread-safe) ------------------------------------
     void setParameter(uint64_t address, float value) {
-        if (address < SynthParamCount) store_[address].store(value, std::memory_order_relaxed);
+        if (address < SynthParamCount) {
+            ramps_[address].active = false;
+            store_[address].store(value, std::memory_order_relaxed);
+        }
     }
     float getParameter(uint64_t address) const {
         if (address < SynthParamCount) return store_[address].load(std::memory_order_relaxed);
@@ -152,19 +173,119 @@ public:
             return effective_[address].load(std::memory_order_relaxed);
         return 0.0f;
     }
+    float compressorGainReductionDb() const {
+        return compressorReductionDb_.load(std::memory_order_relaxed);
+    }
+    float outputMeterLeft() const {
+        return outputMeterL_.load(std::memory_order_relaxed);
+    }
+    float outputMeterRight() const {
+        return outputMeterR_.load(std::memory_order_relaxed);
+    }
+    void startParameterRamp(uint64_t address, float target, uint32_t frames) {
+        if (address >= SynthParamCount) return;
+        if (frames == 0) { setParameter(address, target); return; }
+        ParameterRamp& ramp = ramps_[address];
+        ramp.start = store_[address].load(std::memory_order_relaxed);
+        ramp.target = target;
+        ramp.total = frames;
+        ramp.elapsed = 0;
+        ramp.active = true;
+    }
 
     // --- MIDI --------------------------------------------------------------
-    // Public note in/out: when the arpeggiator is on, incoming keys feed the
-    // arp's held-note set instead of playing directly; the arp clock (advanced
-    // in render) triggers the voices.
+    // Public note in/out. Chord expansion is deliberately first; its generated
+    // notes then either feed the arp's held-note set or play directly.
     void noteOn(int note, int velocity) {
         if (velocity == 0) { noteOff(note); return; }
-        if (store_[SynthParamArpOn].load() >= 0.5f) { arpKeyDown(note, velocity); return; }
-        directNoteOn(note, velocity);
+        note = std::min(127, std::max(0, note));
+        if (chordInputActive_[note]) chordKeyUp(note);
+        if (store_[SynthParamChordOn].load() >= 0.5f) {
+            chordKeyDown(note, velocity);
+            return;
+        }
+        downstreamNoteOn(note, velocity);
     }
     void noteOff(int note) {
-        if (store_[SynthParamArpOn].load() >= 0.5f) { arpKeyUp(note); return; }
+        note = std::min(127, std::max(0, note));
+        if (chordInputActive_[note]) {
+            chordKeyUp(note);
+            return;
+        }
+        downstreamNoteOff(note);
+    }
+
+    void downstreamNoteOn(int note, int velocity) {
+        if (store_[SynthParamArpOn].load() >= 0.5f) {
+            arpKeyDown(note, velocity);
+            return;
+        }
+        directNoteOn(note, velocity);
+    }
+    void downstreamNoteOff(int note) {
+        if (store_[SynthParamArpOn].load() >= 0.5f) {
+            if (sustainDown_) arpKeyUpSustained(note);
+            else arpKeyUp(note);
+            return;
+        }
         directNoteOff(note);
+    }
+
+    // ---- Chord trigger ---------------------------------------------------
+    static constexpr int kChordMaxTones = 4;
+
+    int chordIntervals(int type, int* intervals) const {
+        // Major, minor, maj7, min7, dominant7, sus2, sus4, diminished,
+        // augmented. The first five cover the common Logic-style trigger use.
+        static constexpr int table[9][kChordMaxTones] = {
+            {0, 4, 7, -1}, {0, 3, 7, -1}, {0, 4, 7, 11},
+            {0, 3, 7, 10}, {0, 4, 7, 10}, {0, 2, 7, -1},
+            {0, 5, 7, -1}, {0, 3, 6, -1}, {0, 4, 8, -1}
+        };
+        type = std::min(8, std::max(0, type));
+        int count = 0;
+        for (int i = 0; i < kChordMaxTones && table[type][i] >= 0; ++i)
+            intervals[count++] = table[type][i];
+        return count;
+    }
+
+    void chordKeyDown(int root, int velocity) {
+        int intervals[kChordMaxTones] = {0};
+        const int type = clampInt(store_[SynthParamChordType].load(), 0, 8);
+        const int count = chordIntervals(type, intervals);
+        const int inversion = std::min(count - 1, clampInt(
+            store_[SynthParamChordInversion].load(), 0, 3));
+
+        chordInputActive_[root] = true;
+        chordToneCount_[root] = count;
+        for (int i = 0; i < count; ++i) {
+            int semitones = intervals[i];
+            if (i < inversion) semitones += 12;
+            const int generated = std::min(127, root + semitones);
+            chordTones_[root][i] = generated;
+            if (chordOutputRefs_[generated]++ == 0)
+                downstreamNoteOn(generated, velocity);
+        }
+    }
+
+    void chordKeyUp(int root) {
+        if (!chordInputActive_[root]) return;
+        for (int i = 0; i < chordToneCount_[root]; ++i) {
+            const int generated = chordTones_[root][i];
+            if (chordOutputRefs_[generated] > 0
+                && --chordOutputRefs_[generated] == 0)
+                downstreamNoteOff(generated);
+        }
+        chordToneCount_[root] = 0;
+        chordInputActive_[root] = false;
+    }
+
+    void chordClear() {
+        for (int note = 0; note < 128; ++note) {
+            chordInputActive_[note] = false;
+            chordToneCount_[note] = 0;
+            chordOutputRefs_[note] = 0;
+        }
     }
 
     void directNoteOn(int note, int velocity) {
@@ -197,12 +318,31 @@ public:
         lastNote_ = static_cast<float>(note);
         hasLastNote_ = true;
 
-        Voice& v = allocateVoice(maxVoices);
-        v.noteOn(note, velocity / 127.0f, phaseSpread, startPitch);
+        const bool unison = store_[SynthParamUnison].load(
+                                std::memory_order_relaxed) >= 0.5f
+                          && maxVoices >= 2;
+        const int stackSize = unison ? 2 : 1;
+        const float detuneControl = clampf(
+            store_[SynthParamUnisonDetune].load(std::memory_order_relaxed),
+            0.0f, 1.0f);
+        const float detuneSemis = 0.5f * detuneControl * detuneControl;
+        const float stackedGain = unison ? 0.70710678f : 1.0f;
+        for (int layer = 0; layer < stackSize; ++layer) {
+            const float offset = unison
+                               ? (layer == 0 ? -detuneSemis : detuneSemis)
+                               : 0.0f;
+            Voice& voice = allocateVoice(maxVoices);
+            voice.noteOn(note, velocity / 127.0f, phaseSpread, startPitch,
+                         offset, stackedGain);
+        }
     }
 
     void directNoteOff(int note) {
         removeHeld(note);
+        // CC64 holds the voice gate after the physical key is released.
+        // The note is still removed from heldStack_ so mono last-note priority
+        // and subsequent legato decisions reflect the actual keyboard.
+        if (sustainDown_) return;
         int maxVoices = clampInt(store_[SynthParamVoiceCount].load(), 1, kNumVoices);
         bool legato = (store_[SynthParamLegato].load() >= 0.5f) && (maxVoices == 1);
 
@@ -225,12 +365,43 @@ public:
         }
     }
 
-    void allNotesOff() { heldCount_ = 0; arpClear(); for (auto& v : voices_) v.noteOff(); }   // CC123
-    void allSoundOff() {
+    void sustainPedal(bool down) {
+        if (down == sustainDown_) return;
+        sustainDown_ = down;
+        if (down) return;
+
+        if (store_[SynthParamArpOn].load() >= 0.5f) {
+            if (store_[SynthParamArpHold].load() < 0.5f) {
+                for (int note = 0; note < 128; ++note)
+                    if (!arpPhysDown_[note]) arpRemove(note);
+            }
+            return;
+        }
+
+        // Pedal-up releases only voices whose keys are no longer down.
+        for (auto& voice : voices_)
+            if (voice.isActive() && voice.isHeld()
+                && !isPhysicallyHeld(voice.note()))
+                voice.noteOff();
+    }
+
+    void allNotesOff() {
+        sustainDown_ = false;
         heldCount_ = 0;
+        chordClear();
+        arpClear();
+        for (auto& v : voices_) v.noteOff();
+    }   // CC123
+    void allSoundOff() {
+        sustainDown_ = false;
+        heldCount_ = 0;
+        chordClear();
         arpClear();
         for (auto& v : voices_) v.silence();
         effects_.reset(); // CC120 / host reset must also kill effect tails
+        compressorReductionDb_.store(0.0f, std::memory_order_relaxed);
+        outputMeterL_.store(0.0f, std::memory_order_relaxed);
+        outputMeterR_.store(0.0f, std::memory_order_relaxed);
     }
 
     // ---- Arpeggiator -----------------------------------------------------
@@ -259,6 +430,14 @@ public:
         if (store_[SynthParamArpHold].load() < 0.5f) arpRemove(note);
     }
 
+    void arpKeyUpSustained(int note) {
+        if (note >= 0 && note < 128 && arpPhysDown_[note]) {
+            arpPhysDown_[note] = false;
+            if (arpPhysCount_ > 0) --arpPhysCount_;
+        }
+        // Keep the note in the arp set until CC64 is released.
+    }
+
     void modWheel(float v)   { modWheel_.store(clampf(v, 0.0f, 1.0f), std::memory_order_relaxed); }
     void aftertouch(float v) { aftertouch_.store(clampf(v, 0.0f, 1.0f), std::memory_order_relaxed); }
 
@@ -271,6 +450,18 @@ public:
     // --- Render ------------------------------------------------------------
     // Writes `frames` samples into outL / outR (outR may equal outL for mono).
     void render(float* outL, float* outR, int frames) {
+        int offset = 0;
+        while (offset < frames) {
+            const bool ramping = hasActiveRamps();
+            const int count = ramping ? std::min(8, frames - offset)
+                                      : frames - offset;
+            renderSlice(outL + offset, outR + offset, count);
+            if (ramping) advanceRamps(static_cast<uint32_t>(count));
+            offset += count;
+        }
+    }
+
+    void renderSlice(float* outL, float* outR, int frames) {
         // Snapshot discrete/enum params once per block.
         Params p;
         int w1 = clampInt(store_[SynthParamOscWaveform].load(), 0, 3);
@@ -346,7 +537,18 @@ public:
                            static_cast<float>(delaySeconds),
                            store_[SynthParamDelayFeedback].load(),
                            store_[SynthParamDelayTone].load(),
-                           store_[SynthParamDelayPingPong].load());
+                           store_[SynthParamDelayPingPong].load(),
+                           store_[SynthParamReverbMix].load(),
+                           store_[SynthParamReverbSize].load(),
+                           store_[SynthParamReverbDecay].load(),
+                           store_[SynthParamReverbTone].load(),
+                           store_[SynthParamReverbPreDelay].load(),
+                           store_[SynthParamCompressorOn].load(),
+                           store_[SynthParamCompressorThreshold].load(),
+                           store_[SynthParamCompressorRatio].load(),
+                           store_[SynthParamCompressorAttack].load(),
+                           store_[SynthParamCompressorRelease].load(),
+                           store_[SynthParamCompressorMakeup].load());
 
         // Smoothed continuous params: set targets, ramp per sample.
         cutoffSmoother_.setTarget(store_[SynthParamFilterCutoff].load());
@@ -361,6 +563,7 @@ public:
         driveSmoother_.setTarget(store_[SynthParamFilterDrive].load());
         crossModSmoother_.setTarget(store_[SynthParamOscCrossMod].load());
         slopeSmoother_.setTarget(store_[SynthParamFilterSlope].load());
+        modeSmoother_.setTarget(store_[SynthParamFilterMode].load());
         stereoSmoother_.setTarget(store_[SynthParamStereoSpread].load());
 
         // Update envelope times on active voices once per block.
@@ -380,6 +583,7 @@ public:
             if (!arpOn) { arpCount_ = 0; arpPhysCount_ = 0; for (bool& b : arpPhysDown_) b = false; }
         }
 
+        float blockPeakL = 0.0f, blockPeakR = 0.0f;
         for (int n = 0; n < frames; ++n) {
             if (arpOn) arpTick(arpStepInc, arpGateFrac, arpMode, arpOct);
             p.cutoff     = cutoffSmoother_.next();
@@ -393,6 +597,7 @@ public:
             p.filterDrive = driveSmoother_.next();
             p.crossMod   = crossModSmoother_.next();
             p.filterSlopeMix = slopeSmoother_.next();
+            p.filterModeMix = modeSmoother_.next();
             float stereoSpread = stereoSmoother_.next();
             float gain   = gainSmoother_.next();
 
@@ -410,7 +615,8 @@ public:
                 Voice& v = voices_[i];
                 if (!v.isActive()) continue;
                 const float sample = v.render(p, lfoVal, lfo2Val);
-                const float pan = voicePan[i] * stereoSpread;
+                const float pan = clampf(voicePan[i] * stereoSpread
+                                       + v.panModulation(), -1.0f, 1.0f);
                 const float angle =
                     (pan + 1.0f) * static_cast<float>(kPi * 0.25);
                 // sqrt(2) keeps the existing centre position at unity per
@@ -424,7 +630,22 @@ public:
                                                mixR * kVoiceSumGain);
             outL[n] = softClip(fx.l) * gain;
             if (outR != outL) outR[n] = softClip(fx.r) * gain;
+            blockPeakL = std::max(blockPeakL, std::fabs(outL[n]));
+            blockPeakR = std::max(blockPeakR, std::fabs(outR[n]));
         }
+
+        // Fast peak capture with a 300 ms visual release. These atomics are
+        // read by the editor and never participate in the audio signal path.
+        const float meterDecay = static_cast<float>(
+            std::exp(-frames / (0.300 * sampleRate_)));
+        const float oldL = outputMeterL_.load(std::memory_order_relaxed);
+        const float oldR = outputMeterR_.load(std::memory_order_relaxed);
+        outputMeterL_.store(std::max(blockPeakL, oldL * meterDecay),
+                            std::memory_order_relaxed);
+        outputMeterR_.store(std::max(blockPeakR, oldR * meterDecay),
+                            std::memory_order_relaxed);
+        compressorReductionDb_.store(effects_.compressorGainReductionDb(),
+                                     std::memory_order_relaxed);
 
         // Publish one representative voice once per block. Atomics keep this
         // audio-thread write lock-free while the editor polls independently.
@@ -440,7 +661,7 @@ public:
             effective_[SynthParamOctave].store(t.osc1Octave);
             effective_[SynthParamOsc2Octave].store(t.osc2Octave);
             effective_[SynthParamOscPulseWidth].store(t.pulseWidth);
-            effective_[SynthParamOsc2PulseWidth].store(t.pulseWidth);
+            effective_[SynthParamOsc2PulseWidth].store(t.osc2PulseWidth);
             effective_[SynthParamWTFrame].store(t.wtFrame);
             effective_[SynthParamWTLiveness].store(t.wtLiveness);
             effective_[SynthParamOscCrossMod].store(t.crossMod);
@@ -448,10 +669,43 @@ public:
             effective_[SynthParamFilterResonance].store(t.resonance);
             effective_[SynthParamFilterDrive].store(t.drive);
             effective_[SynthParamMasterGain].store(t.amplitude);
+            effective_[SynthParamOsc1Level].store(t.osc1Level);
+            effective_[SynthParamOsc2Level].store(t.osc2Level);
+            effective_[SynthParamNoiseLevel].store(t.noiseLevel);
+            effective_[SynthParamFilterSlope].store(t.filterSlope);
+            effective_[SynthParamFilterMode].store(t.filterMode);
         }
     }
 
 private:
+    struct ParameterRamp {
+        float start = 0.0f;
+        float target = 0.0f;
+        uint32_t total = 0;
+        uint32_t elapsed = 0;
+        bool active = false;
+    };
+
+    bool hasActiveRamps() const {
+        for (int i = 0; i < SynthParamCount; ++i)
+            if (ramps_[i].active) return true;
+        return false;
+    }
+
+    void advanceRamps(uint32_t frames) {
+        for (int i = 0; i < SynthParamCount; ++i) {
+            ParameterRamp& ramp = ramps_[i];
+            if (!ramp.active) continue;
+            ramp.elapsed = std::min(ramp.total, ramp.elapsed + frames);
+            const float fraction = static_cast<float>(ramp.elapsed)
+                                 / static_cast<float>(ramp.total);
+            const float value = ramp.start
+                              + (ramp.target - ramp.start) * fraction;
+            store_[i].store(value, std::memory_order_relaxed);
+            if (ramp.elapsed >= ramp.total) ramp.active = false;
+        }
+    }
+
     // Allocate within the first `maxVoices` voices only (1 = monophonic).
     Voice& allocateVoice(int maxVoices) {
         // 1) An idle voice.
@@ -489,6 +743,11 @@ private:
                 return;
             }
         }
+    }
+    bool isPhysicallyHeld(int note) const {
+        for (int i = 0; i < heldCount_; ++i)
+            if (heldStack_[i] == note) return true;
+        return false;
     }
 
     // ---- Arpeggiator internals -------------------------------------------
@@ -562,6 +821,7 @@ private:
         driveSmoother_.snap(store_[SynthParamFilterDrive].load());
         crossModSmoother_.snap(store_[SynthParamOscCrossMod].load());
         slopeSmoother_.snap(store_[SynthParamFilterSlope].load());
+        modeSmoother_.snap(store_[SynthParamFilterMode].load());
         stereoSmoother_.snap(store_[SynthParamStereoSpread].load());
     }
 
@@ -585,17 +845,29 @@ private:
     GlobalEffects effects_;
     std::atomic<float> modWheel_{0.0f};
     std::atomic<float> aftertouch_{0.0f};
+    std::atomic<float> compressorReductionDb_{0.0f};
+    std::atomic<float> outputMeterL_{0.0f};
+    std::atomic<float> outputMeterR_{0.0f};
 
     OnePoleSmoother cutoffSmoother_, resoSmoother_, pwSmoother_, gainSmoother_;
     OnePoleSmoother pw2Smoother_, wtFrameSmoother_;
     OnePoleSmoother osc1LevelSmoother_, osc2LevelSmoother_, noiseLevelSmoother_;
     OnePoleSmoother driveSmoother_, crossModSmoother_, slopeSmoother_;
     OnePoleSmoother stereoSmoother_;
+    OnePoleSmoother modeSmoother_;
     float pitchBendSemis_ = 0.0f;
     float lastNote_ = 60.0f;
     bool  hasLastNote_ = false;
     int   heldStack_[128] = {0};
     int   heldCount_ = 0;
+    bool  sustainDown_ = false;
+
+    // Chord-trigger ownership. Each incoming key remembers the precise notes
+    // it generated, and shared output pitches are reference-counted.
+    bool chordInputActive_[128] = {false};
+    int  chordToneCount_[128] = {0};
+    int  chordTones_[128][kChordMaxTones] = {{0}};
+    int  chordOutputRefs_[128] = {0};
 
     // Arpeggiator state.
     static constexpr int kArpMax = 16;
@@ -613,6 +885,7 @@ private:
 
     std::atomic<float> store_[SynthParamCount];
     std::atomic<float> effective_[SynthParamCount];
+    ParameterRamp ramps_[SynthParamCount];
 };
 
 } // namespace synth

@@ -35,7 +35,80 @@ enum Palette {
     static let mixerAccent  = Color(red: 0.72, green: 0.74, blue: 0.80)  // silver
     static let wtAccent     = Color(red: 0.60, green: 0.52, blue: 0.92)  // violet
     static let arpAccent    = Color(red: 0.95, green: 0.78, blue: 0.32)  // gold
+    static let chordAccent  = Color(red: 0.48, green: 0.83, blue: 0.62)  // mint
     static let fxAccent     = Color(red: 0.42, green: 0.74, blue: 0.96)  // sky blue
+}
+
+// MARK: - Audio meters
+
+struct MeterFill: View {
+    let fraction: CGFloat
+    let accent: Color
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.black.opacity(0.45))
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(LinearGradient(
+                        colors: [accent.opacity(0.65), accent],
+                        startPoint: .leading, endPoint: .trailing))
+                    .frame(width: geometry.size.width
+                                 * min(1, max(0, fraction)))
+                    .shadow(color: accent.opacity(0.55), radius: 2)
+            }
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color.white.opacity(0.10), lineWidth: 1))
+        }
+    }
+}
+
+struct GainReductionMeter: View {
+    let decibels: Float
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Text("GAIN REDUCTION")
+                Spacer(minLength: 2)
+                Text(String(format: "%.1f dB", max(0, decibels)))
+                    .foregroundColor(Palette.lcd)
+            }
+            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+            .foregroundColor(Palette.engrave)
+            MeterFill(fraction: CGFloat(min(24, max(0, decibels)) / 24),
+                      accent: Palette.fxAccent)
+                .frame(height: 10)
+        }
+        .frame(width: 112)
+    }
+}
+
+struct StereoOutputMeter: View {
+    let left: Float
+    let right: Float
+
+    private func fraction(_ linear: Float) -> CGFloat {
+        let db = 20 * log10(max(linear, 0.001))
+        return CGFloat(min(1, max(0, (db + 60) / 60)))
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("OUT")
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .tracking(0.5)
+                .foregroundColor(Palette.engraveDim)
+            VStack(spacing: 2) {
+                MeterFill(fraction: fraction(left), accent: Palette.lcd)
+                    .frame(height: 4)
+                MeterFill(fraction: fraction(right), accent: Palette.lcd)
+                    .frame(height: 4)
+            }
+        }
+        .frame(width: 108)
+    }
 }
 
 // MARK: - Rotary knob
@@ -98,7 +171,9 @@ struct Knob: View {
                     .shadow(color: accent.opacity(0.6), radius: 2)
                 let effectiveNorm = normFor(model.effectiveValue(addr))
                 let baseNorm = normFor(value)
-                if abs(effectiveNorm - baseNorm) > 0.002 {
+                if startNorm == nil
+                    && model.supportsModulationIndicator(addr)
+                    && abs(effectiveNorm - baseNorm) > 0.002 {
                     KnobArc(fraction: effectiveNorm)
                         .trim(from: max(0, effectiveNorm - 0.018),
                               to: effectiveNorm)

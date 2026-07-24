@@ -49,6 +49,7 @@ struct Params {
     float   resonance     = 0.1f;    // 0..1
     float   filterEnvAmt  = 0.5f;    // -1..1
     float   filterSlopeMix = 0.0f;   // 0=12dB .. 1=24dB (smoothed cross-fade)
+    float   filterModeMix  = 0.0f;   // 0=LP, 1=BP, 2=HP (smoothed)
     float   filterKeyTrack = 0.0f;   // 0..1
     float   filterDrive   = 0.0f;    // 0..1 overdrive into filter
 

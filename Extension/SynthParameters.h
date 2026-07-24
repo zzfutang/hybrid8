@@ -123,6 +123,29 @@ typedef enum SynthParam : unsigned long long {
 
     // Appended to preserve every existing AU parameter address.
     SynthParamStereoSpread,    // 0..1 scales fixed per-voice stereo positions
+    SynthParamFilterMode,      // 0=LP, 1=BP, 2=HP
+    SynthParamUnison,          // 0/1 two-card unison per note
+    SynthParamUnisonDetune,    // 0..1, curved up to +/-50 cents
+
+    // Stereo FDN reverb. Appended to preserve every existing AU address.
+    SynthParamReverbMix,       // 0..1 wet/dry
+    SynthParamReverbSize,      // 0..1 room scale
+    SynthParamReverbDecay,     // 0.2..12 s RT60
+    SynthParamReverbTone,      // 0..1 dark..bright damping
+    SynthParamReverbPreDelay,  // 0..0.2 s
+
+    // MIDI chord trigger (runs before the arpeggiator).
+    SynthParamChordOn,         // 0/1
+    SynthParamChordType,       // indexed chord quality
+    SynthParamChordInversion,  // 0=root, 1=first, 2=second, 3=third
+
+    // Stereo-linked compressor (first stage in the global FX chain).
+    SynthParamCompressorOn,       // 0/1
+    SynthParamCompressorThreshold,// -36..0 dBFS
+    SynthParamCompressorRatio,    // 1..20:1
+    SynthParamCompressorAttack,   // 0.001..0.1 s
+    SynthParamCompressorRelease,  // 0.02..1 s
+    SynthParamCompressorMakeup,   // 0..18 dB
 
     SynthParamCount
 } SynthParam;

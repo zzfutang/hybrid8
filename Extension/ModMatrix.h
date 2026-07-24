@@ -40,6 +40,15 @@ typedef enum SynthModDest : int {
     ModDstWTLiveness,    // wavetable liveness / phase drift
     ModDstCrossMod,      // cross-mod (FM) amount
     ModDstAmp,           // amplitude (tremolo / AM)
+    ModDstOsc1Pitch,     // oscillator 1 only, semitones
+    ModDstOsc1Level,     // oscillator 1 mixer level
+    ModDstOsc2Level,     // oscillator 2 mixer level
+    ModDstNoiseLevel,    // noise mixer level
+    ModDstVoicePan,      // per-voice pan offset
+    ModDstFilterSlope,   // continuous 12 -> 24 dB morph
+    ModDstFilterMode,    // continuous LP -> BP -> HP morph
+    ModDstOsc1PW,        // oscillator 1 pulse width only
+    ModDstOsc2PW,        // oscillator 2 pulse width only
     ModDstCount
 } SynthModDest;
 

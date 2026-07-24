@@ -129,6 +129,12 @@ public final class SynthAudioUnit: AUAudioUnit {
         kernel.effectiveValue(forParameter: address)
     }
 
+    func meterValues() -> (gainReductionDB: Float, outputL: Float, outputR: Float) {
+        (kernel.compressorGainReductionDB(),
+         kernel.outputMeterLeft(),
+         kernel.outputMeterRight())
+    }
+
     // Allow hosts to preserve long high-feedback delay tails.
     public override var tailTime: TimeInterval { 45.0 }
 }
