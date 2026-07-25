@@ -1,14 +1,14 @@
 //
-//  Params.hpp
+//  Hybrid8VoiceParameters.hpp
 //  Resolved, per-block snapshot of all synth parameters (plain values, already
 //  converted from the atomic parameter store). Passed by const-ref into the
 //  voice render path so the audio thread never touches atomics per sample.
 //
 
 #pragma once
-#include "Oscillator.hpp"
-#include "LFO.hpp"
-#include "../ModMatrix.h"
+#include "../../../Shared/DSPCore/Oscillator.hpp"
+#include "../../../Shared/DSPCore/LFO.hpp"
+#include "../../../Extension/ModMatrix.h"
 
 namespace synth {
 

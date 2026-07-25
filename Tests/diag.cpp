@@ -1,6 +1,6 @@
 //  diag.cpp — isolate the per-cycle glitch in TZ-FM Bells.
 //  clang++ -std=c++17 -O2 Tests/diag.cpp -o /tmp/diag && /tmp/diag <variant>
-#include "../Extension/DSP/SynthEngine.hpp"
+#include "../Products/Hybrid8/DSP/Hybrid8Engine.hpp"
 #include <vector>
 #include <cmath>
 #include <cstdio>

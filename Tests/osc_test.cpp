@@ -1,7 +1,7 @@
 //  osc_test.cpp — is the per-cycle overshoot from PolyBLEP or from the decimator?
 //  clang++ -std=c++17 -O2 Tests/osc_test.cpp -o /tmp/osc && /tmp/osc
-#include "../Extension/DSP/Oscillator.hpp"
-#include "../Extension/DSP/Decimator.hpp"
+#include "../Shared/DSPCore/Oscillator.hpp"
+#include "../Shared/DSPCore/Decimator.hpp"
 #include <vector>
 #include <cmath>
 #include <cstdio>

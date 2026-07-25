@@ -1,5 +1,5 @@
 //
-//  SynthEngine.hpp
+//  Hybrid8Engine.hpp — Hybrid8 product signal graph
 //  8-voice polyphonic engine. Owns the voice pool, the global LFO, the
 //  lock-free parameter store, MIDI handling and the sample render loop.
 //  All render-time methods are real-time safe (no locks, no allocation).
@@ -8,11 +8,11 @@
 #pragma once
 #include <atomic>
 #include <array>
-#include "Voice.hpp"
-#include "LFO.hpp"
-#include "Params.hpp"
-#include "Effects.hpp"
-#include "../SynthParameters.h"
+#include "Hybrid8Voice.hpp"
+#include "../../../Shared/DSPCore/LFO.hpp"
+#include "Hybrid8VoiceParameters.hpp"
+#include "Hybrid8EffectsRack.hpp"
+#include "Hybrid8ParameterMapping.hpp"
 
 namespace synth {
 

@@ -1,5 +1,5 @@
 //
-//  Oscillator.hpp
+//  Reusable Oscillator.hpp
 //  Band-limited (PolyBLEP) oscillator: saw / square / pulse with variable
 //  pulse-width. PolyBLEP suppresses the aliasing that a naive discontinuous
 //  waveform would produce, giving a cleaner "analogue" tone.

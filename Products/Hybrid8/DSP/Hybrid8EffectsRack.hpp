@@ -1,11 +1,11 @@
 //
-//  Effects.hpp
+//  Hybrid8EffectsRack.hpp
 //  Global stereo effects: linked compressor -> four-voice fractional-delay
 //  chorus -> filtered stereo delay -> eight-line modulated FDN reverb.
 //
 
 #pragma once
-#include "Utils.hpp"
+#include "../../../Shared/DSPCore/Utils.hpp"
 #include <array>
 #include <vector>
 

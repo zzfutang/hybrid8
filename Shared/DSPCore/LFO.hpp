@@ -1,5 +1,5 @@
 //
-//  LFO.hpp
+//  Reusable LFO.hpp
 //  Low-frequency oscillator with phase offset, polarity and sample-and-hold.
 //  Runs at control-but-per-sample resolution so it can modulate audio-rate
 //  targets (oscillator pitch) without stepping artefacts.

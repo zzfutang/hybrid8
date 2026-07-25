@@ -5,7 +5,7 @@
 //
 
 #import "SynthDSPKernelAdapter.h"
-#import "DSP/SynthEngine.hpp"
+#import "../Products/Hybrid8/DSP/Hybrid8Engine.hpp"
 
 @implementation SynthDSPKernelAdapter {
     synth::SynthEngine _engine;

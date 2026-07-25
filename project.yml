@@ -44,6 +44,8 @@ targets:
         excludes:
           - "Info.plist"
           - "*.entitlements"
+      - path: Shared/PerformanceKeyboard
+      - path: Shared/InstrumentHost
     settings:
       base:
         PRODUCT_NAME: Hybrid8
@@ -66,6 +68,9 @@ targets:
         excludes:
           - "Info.plist"
           - "*.entitlements"
+      - path: Shared/InstrumentUI
+      - path: Shared/PerformanceKeyboard/MusicalTypingStateMachine.swift
+      - path: Products/Hybrid8/DSP
     settings:
       base:
         PRODUCT_NAME: Hybrid8Extension
@@ -76,5 +81,6 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: Extension/Extension-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - "$(SRCROOT)/Extension"
+          - "$(SRCROOT)/Shared/DSPCore"
         # AUv3 extension boilerplate.
         SKIP_INSTALL: "YES"

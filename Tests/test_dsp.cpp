@@ -6,7 +6,7 @@
 //    clang++ -std=c++17 -O2 Tests/test_dsp.cpp -o /tmp/test_dsp && /tmp/test_dsp
 //
 
-#include "../Extension/DSP/SynthEngine.hpp"
+#include "../Products/Hybrid8/DSP/Hybrid8Engine.hpp"
 #include <vector>
 #include <cmath>
 #include <cstdio>

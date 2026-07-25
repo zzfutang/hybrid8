@@ -7,7 +7,6 @@
 #include <cmath>
 #include <cstdint>
 #include <algorithm>
-#include "../SynthParameters.h"
 
 namespace synth {
 
@@ -86,20 +85,6 @@ inline float softClip(float x) {
 // MIDI note -> frequency (A4 = 440 Hz at note 69).
 inline double noteToHz(double note) {
     return 440.0 * std::pow(2.0, (note - 69.0) / 12.0);
-}
-
-// --- Envelope-time mapping (normalised 0..1  <->  seconds) -----------------
-inline float timeFromNorm(float n) {
-    n = clampf(n, 0.0f, 1.0f);
-    float e = std::pow(n, (float)SYNTH_TIME_SKEW);
-    return (float)SYNTH_TIME_MIN *
-           std::pow((float)(SYNTH_TIME_MAX / SYNTH_TIME_MIN), e);
-}
-inline float normFromTime(float seconds) {
-    seconds = clampf(seconds, (float)SYNTH_TIME_MIN, (float)SYNTH_TIME_MAX);
-    float e = std::log(seconds / (float)SYNTH_TIME_MIN) /
-              std::log((float)(SYNTH_TIME_MAX / SYNTH_TIME_MIN));
-    return std::pow(std::max(0.0f, e), 1.0f / (float)SYNTH_TIME_SKEW);
 }
 
 } // namespace synth

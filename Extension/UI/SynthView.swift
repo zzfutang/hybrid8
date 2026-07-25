@@ -207,9 +207,9 @@ struct SynthView: View {
                 .truncationMode(.tail)   // long text truncates rather than shrinking the font
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: 400, alignment: .center)
         .padding(.horizontal, 12)
-        .frame(height: 52)               // fixed height so text length never shifts the layout
+        // Match the middle synthesis column so the LED reads as one grid unit.
+        .frame(width: Self.columnWidth, height: 52) // fixed size so text length never shifts the layout
         .background(
             RoundedRectangle(cornerRadius: 5)
                 .fill(Palette.lcdBg)
@@ -219,27 +219,38 @@ struct SynthView: View {
 
     // MARK: Header + preset browser
 
+    // Header mirrors the three-column synthesis grid below: identity on the
+    // left column, the hover-help LED on the middle column (so it lines up
+    // exactly with the middle synthesis column), patch + meter on the right.
     private var header: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("HYBRID 8")
-                    .font(.system(size: 24, weight: .black, design: .rounded))
-                    .tracking(3)
-                    .foregroundColor(Palette.titleCream)
-                    .fixedSize()
-                Text("VA · WAVETABLE POLYSYNTH")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .tracking(3)
-                    .foregroundColor(Palette.textLabel)
-                    .fixedSize()
+        HStack(alignment: .center, spacing: 12) {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("HYBRID 8")
+                        .font(.system(size: 24, weight: .black, design: .rounded))
+                        .tracking(3)
+                        .foregroundColor(Palette.titleCream)
+                        .fixedSize()
+                    Text("VA · WAVETABLE POLYSYNTH")
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .tracking(3)
+                        .foregroundColor(Palette.textLabel)
+                        .fixedSize()
+                }
+                navPills          // Synth / Performance tab selector
+                Spacer(minLength: 0)
             }
-            navPills              // Synth / Performance tab selector
-            Spacer(minLength: 14)
-            helpBar               // explanatory display in the middle
-            Spacer(minLength: 14)
-            presetBar
-            StereoOutputMeter(left: model.outputLevelL,
-                              right: model.outputLevelR)
+            .frame(width: Self.columnWidth)
+
+            helpBar               // middle column: hover-help readout
+
+            HStack(spacing: 14) {
+                Spacer(minLength: 0)
+                presetBar
+                StereoOutputMeter(left: model.outputLevelL,
+                                  right: model.outputLevelR)
+            }
+            .frame(width: Self.columnWidth)
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 8)
@@ -1183,6 +1194,8 @@ private struct PatchNavigator: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundColor(Palette.lcd)
+                .frame(width: 200)
+                .layoutPriority(1)
                 .focused($searchFocused)
                 .onSubmit { resignSearchFocus() }
                 .onExitCommand { resignSearchFocus() }
@@ -1373,34 +1386,10 @@ private struct PatchNavigator: View {
             NSApp.keyWindow?.makeFirstResponder(nil)
             NSApp.sendAction(#selector(NSResponder.resignFirstResponder),
                              to: nil, from: nil)
+            // Hand the keyboard back to the musical-typing responder.
             NotificationCenter.default.post(
                 name: Notification.Name("Hybrid8SearchDidResign"), object: nil)
         }
         #endif
     }
 }
-
-// MARK: - Xcode Preview (live layout canvas)
-//
-// Renders the real fascia in Xcode's canvas with hot reload — edit any layout
-// value and it updates without a full build/install cycle. It instantiates the
-// actual SynthAudioUnit exactly like the plugin host, so what you see is what
-// the plugin shows. Open this file in Xcode and reveal the canvas
-// (Editor ▸ Canvas, or ⌥⌘⏎); use "Selectable"/live mode to click controls.
-#if DEBUG
-import AudioToolbox
-
-#Preview("Hybrid 8 — Fascia") {
-    // aumu / Hy8v / Jhgn — must match Extension/Info.plist.
-    let desc = AudioComponentDescription(
-        componentType: kAudioUnitType_MusicDevice,
-        componentSubType: 0x48793876,        // "Hy8v"
-        componentManufacturer: 0x4a68676e,   // "Jhgn"
-        componentFlags: 0, componentFlagsMask: 0)
-    let au = try! SynthAudioUnit(componentDescription: desc, options: [])
-    let model = ParameterModel(tree: au.parameterTree!)
-    let wavetables = WavetableStore(model: model, audioUnit: au)
-    return SynthView(model: model, wavetables: wavetables)
-        .frame(width: 1700, height: 824)
-}
-#endif

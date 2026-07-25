@@ -1,5 +1,5 @@
 //
-//  Decimator.hpp
+//  Reusable Decimator.hpp
 //  2x -> 1x decimation filter. The oscillator / cross-mod / hard-sync path runs
 //  at double rate; this low-pass band-limits before dropping to the host rate,
 //  removing the images that sync and audio-rate FM push above the host Nyquist.

@@ -1,5 +1,5 @@
 //
-//  Filter.hpp
+//  Reusable Filter.hpp
 //  Analogue-modelled low-pass filter. A TPT state-variable stage (Cytomic /
 //  Zavalishin topology) provides a resonant 12 dB/oct 2-pole low-pass. The
 //  24 dB mode is a four-stage trapezoidal ladder with nonlinear zero-delay

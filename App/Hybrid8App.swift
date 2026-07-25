@@ -9,7 +9,7 @@ import SwiftUI
 
 @main
 struct Hybrid8App: App {
-    @StateObject private var host = SynthHost()
+    @StateObject private var host = AudioUnitHost(product: .hybrid8)
 
     var body: some Scene {
         WindowGroup("Hybrid 8") {

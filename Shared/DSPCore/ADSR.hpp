@@ -1,5 +1,5 @@
 //
-//  ADSR.hpp
+//  Reusable ADSR.hpp
 //  Analogue-style ADSR envelope with exponential segments (Nigel Redmond /
 //  earlevel design). Times are specified in seconds; the curve shape mimics
 //  the capacitor charge/discharge of a real analogue envelope.

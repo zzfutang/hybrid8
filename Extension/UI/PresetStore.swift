@@ -8,17 +8,15 @@
 import SwiftUI
 import AudioToolbox
 
-struct StoredPreset: Codable {
-    var name: String
-    var values: [String: Float]   // keyed by String(AUParameterAddress)
-    var formatVersion: Int?
-}
-
 final class PresetStore: ObservableObject {
     private let model: ParameterModel
     private let defaults: [AUParameterAddress: Float]
 
-    @Published var userPresets: [StoredPreset] = []
+    @Published var userPresets: [PresetDocument] = []
+    private let persistence = PresetPersistenceConfiguration(
+        productID: "com.johangorsjo.Hybrid8",
+        directoryName: "Presets",
+        currentFormatVersion: 2)
     @Published var currentName: String = "Init"
     @Published var currentIsUser: Bool = false
     @Published var currentIndex: Int = 0   // global index into factory + user
@@ -100,7 +98,9 @@ final class PresetStore: ObservableObject {
         guard !trimmed.isEmpty else { return }
         var dict = [String: Float]()
         for (a, v) in model.captureState() { dict[String(a)] = v }
-        let preset = StoredPreset(name: trimmed, values: dict, formatVersion: 2)
+        let preset = PresetDocument(
+            name: trimmed, values: dict,
+            formatVersion: persistence.currentFormatVersion)
         if let data = try? JSONEncoder().encode(preset) {
             try? data.write(to: fileURL(for: trimmed))
         }
@@ -126,7 +126,8 @@ final class PresetStore: ObservableObject {
     private var presetsDir: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory,
                                             in: .userDomainMask)[0]
-        let dir = base.appendingPathComponent("Hybrid8/Presets", isDirectory: true)
+        let dir = base.appendingPathComponent(
+            persistence.applicationSupportPath, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -139,10 +140,10 @@ final class PresetStore: ObservableObject {
     func loadUser() {
         let files = (try? FileManager.default.contentsOfDirectory(
             at: presetsDir, includingPropertiesForKeys: nil)) ?? []
-        var list: [StoredPreset] = []
+        var list: [PresetDocument] = []
         for f in files where f.pathExtension == "json" {
             if let d = try? Data(contentsOf: f),
-               let p = try? JSONDecoder().decode(StoredPreset.self, from: d) {
+               let p = try? JSONDecoder().decode(PresetDocument.self, from: d) {
                 list.append(p)
             }
         }

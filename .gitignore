@@ -8,3 +8,11 @@ venv/
 .DS_Store
 dist/
 build/
+
+# Xcode per-user state
+*.xcuserstate
+xcuserdata/
+
+# Local audio assets / scratch archives (not part of the build)
+*.wav
+*.zip

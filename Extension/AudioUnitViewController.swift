@@ -3,6 +3,11 @@
 //  Principal class of the AU extension. Implements AUAudioUnitFactory (creates
 //  the SynthAudioUnit) and hosts the SwiftUI editor view.
 //
+//  Musical typing lives here (not just in the standalone app) because the AUv3
+//  editor runs in a separate view-service process: key events routed to the
+//  remote view never reach the host app's event monitor, so the responder that
+//  turns the computer keyboard into notes has to be inside the extension.
+//
 
 import AppKit
 import CoreAudioKit
@@ -11,16 +16,11 @@ import SwiftUI
 public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
 
     var audioUnit: AUAudioUnit?
-    private var standaloneMusicalTyping = false
-    private var downNotes: [Character: UInt8] = [:]
-    private var octaveShift = 0
-    private var typingVelocity: UInt8 = 100
 
-    private static let noteMap: [Character: Int] = [
-        "a": 0, "w": 1, "s": 2, "e": 3, "d": 4, "f": 5, "t": 6, "g": 7,
-        "y": 8, "h": 9, "u": 10, "j": 11, "k": 12, "o": 13, "l": 14,
-        "p": 15, ";": 16
-    ]
+    // Musical typing is only active inside our own standalone host (which
+    // announces itself); in a third-party DAW the host owns the keyboard.
+    private var standaloneMusicalTyping = false
+    private let typing = MusicalTypingStateMachine()
 
     public override func loadView() {
         let keyView = MusicalTypingView(
@@ -38,14 +38,33 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
             forName: Notification.Name("com.johangorsjo.Hybrid8.standaloneActive"),
             object: nil, queue: .main) { [weak self] _ in
                 self?.standaloneMusicalTyping = true
+                // The notification and viewDidAppear race; whichever lands
+                // second grabs first responder so typing works from launch.
+                self?.grabKeyboardFocus()
             }
+        // After the preset search field gives up focus, pull first-responder
+        // back to the key view so typing resumes instead of leaking into the
+        // shared field editor.
         NotificationCenter.default.addObserver(
             forName: Notification.Name("Hybrid8SearchDidResign"),
             object: nil, queue: .main) { [weak self] _ in
-                guard let self, self.standaloneMusicalTyping else { return }
-                self.view.window?.makeFirstResponder(self.view)
+                self?.grabKeyboardFocus()
             }
         if audioUnit != nil { setupUI() }
+    }
+
+    public override func viewDidAppear() {
+        super.viewDidAppear()
+        grabKeyboardFocus()
+    }
+
+    /// Make the key view first responder so keys reach `handleMusicalTyping`.
+    /// Without this, on launch nothing is focused and keydowns fall straight to
+    /// the window, which plays the macOS alert sound ("click"). Only acts in our
+    /// standalone host so a third-party DAW keeps control of the keyboard.
+    private func grabKeyboardFocus() {
+        guard standaloneMusicalTyping else { return }
+        view.window?.makeFirstResponder(view)
     }
 
     public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {
@@ -73,32 +92,29 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
         view.addSubview(host)
     }
 
+    /// Returns true when the event was consumed (so the view must not fall
+    /// through to `super`, which would play the macOS alert sound). While the
+    /// standalone host owns the keyboard we consume *every* non-modifier key —
+    /// note keys play, and anything else is swallowed silently rather than
+    /// beeping. Modifier combos (⌘/⌃/⌥) are left for menu shortcuts.
     private func handleMusicalTyping(_ event: NSEvent, down: Bool) -> Bool {
         guard standaloneMusicalTyping,
               event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
               let character = event.charactersIgnoringModifiers?.lowercased().first
         else { return false }
-        if down && !event.isARepeat {
-            switch character {
-            case "z": octaveShift = max(-4, octaveShift - 1); return true
-            case "x": octaveShift = min(4, octaveShift + 1); return true
-            case "c": typingVelocity = UInt8(max(1, Int(typingVelocity) - 16)); return true
-            case "v": typingVelocity = UInt8(min(127, Int(typingVelocity) + 16)); return true
-            default: break
-            }
-        }
-        guard let semitone = Self.noteMap[character] else { return false }
-        let midiNote = 48 + octaveShift * 12 + semitone
-        guard (0...127).contains(midiNote) else { return true }
-        let note = UInt8(midiNote)
-        if down {
-            guard !event.isARepeat, downNotes[character] == nil else { return true }
-            downNotes[character] = note
-            sendMIDI([0x90, note, typingVelocity])
-        } else if let sounding = downNotes.removeValue(forKey: character) {
-            sendMIDI([0x80, sounding, 0])
-        }
+
+        let (_, output) = typing.handle(
+            character: character, isDown: down, isRepeat: event.isARepeat)
+        dispatch(output)
         return true
+    }
+
+    private func dispatch(_ output: MusicalTypingStateMachine.Output?) {
+        switch output {
+        case let .noteOn(note, velocity): sendMIDI([0x90, note, velocity])
+        case let .noteOff(note): sendMIDI([0x80, note, 0])
+        case nil: break
+        }
     }
 
     private func sendMIDI(_ bytes: [UInt8]) {

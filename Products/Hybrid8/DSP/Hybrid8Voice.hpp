@@ -1,5 +1,5 @@
 //
-//  Voice.hpp
+//  Hybrid8Voice.hpp — Hybrid8 product voice composition
 //  A single synth voice: oscillator + noise blend -> analogue-modelled
 //  low-pass filter -> VCA. Two independent ADSR envelopes drive the VCA and
 //  the filter cutoff. Per-voice pitch drift and phase randomisation give the
@@ -7,12 +7,12 @@
 //
 
 #pragma once
-#include "Oscillator.hpp"
-#include "Wavetable.hpp"
-#include "ADSR.hpp"
-#include "Filter.hpp"
-#include "Decimator.hpp"
-#include "Params.hpp"
+#include "../../../Shared/DSPCore/Oscillator.hpp"
+#include "Hybrid8Wavetable.hpp"
+#include "../../../Shared/DSPCore/ADSR.hpp"
+#include "../../../Shared/DSPCore/Filter.hpp"
+#include "../../../Shared/DSPCore/Decimator.hpp"
+#include "Hybrid8VoiceParameters.hpp"
 
 namespace synth {
 

@@ -1,7 +1,7 @@
 //
-//  SynthHost.swift
-//  Loads the Hybrid 8 AUv3 in-process through AVAudioEngine so the host app
-//  can play it, and vends its view controller and a MIDI send path.
+//  AudioUnitHost.swift
+//  Generic standalone AUv3 host. Product identity is injected so another
+//  instrument can reuse the engine, CoreMIDI, and performance UI unchanged.
 //
 
 import AVFoundation
@@ -10,7 +10,8 @@ import CoreAudioKit
 import CoreMIDI
 import SwiftUI
 
-final class SynthHost: ObservableObject {
+final class AudioUnitHost: ObservableObject, PerformanceEventSink {
+    let product: InstrumentProduct
     private let engine = AVAudioEngine()
     private var avAudioUnit: AVAudioUnit?
     private(set) var auAudioUnit: AUAudioUnit?
@@ -20,7 +21,7 @@ final class SynthHost: ObservableObject {
     @Published var typingInfo: String = ""
     @Published var viewController: NSViewController?
 
-    private var typingKeyboard: TypingKeyboard?
+    private var typingKeyboard: MusicalTypingController?
 
     // CoreMIDI
     private var midiClient = MIDIClientRef()
@@ -28,22 +29,18 @@ final class SynthHost: ObservableObject {
     private var connectedSources = Set<MIDIEndpointRef>()
     private var runningStatus: UInt8 = 0
 
-    // aumu / Hy8v / Jhgn  — must match Extension/Info.plist.
-    private let desc = AudioComponentDescription(
-        componentType: kAudioUnitType_MusicDevice,
-        componentSubType: SynthHost.fourCC("Hy8v"),
-        componentManufacturer: SynthHost.fourCC("Jhgn"),
-        componentFlags: 0, componentFlagsMask: 0)
-
-    init() {
-        announceStandaloneHost()
+    init(product: InstrumentProduct) {
+        self.product = product
         load()
         setupMIDI()
-        typingKeyboard = TypingKeyboard(host: self)
+        typingKeyboard = MusicalTypingController(sink: self) { [weak self] state in
+            DispatchQueue.main.async { self?.typingInfo = state.description }
+        }
     }
 
     private func load() {
-        AVAudioUnit.instantiate(with: desc, options: []) { [weak self] avAU, error in
+        AVAudioUnit.instantiate(with: product.componentDescription, options: []) {
+            [weak self] avAU, error in
             guard let self else { return }
             if let error = error {
                 self.status = "Load failed: \(error.localizedDescription)"
@@ -56,10 +53,12 @@ final class SynthHost: ObservableObject {
 
             // Start the test player on a clean, deterministic patch rather than
             // whatever macOS state-restoration may have left behind.
-            let initPreset = AUAudioUnitPreset()
-            initPreset.number = 0
-            initPreset.name = "Init"
-            avAU.auAudioUnit.currentPreset = initPreset
+            if let presetNumber = self.product.initialFactoryPreset {
+                let initialPreset = AUAudioUnitPreset()
+                initialPreset.number = presetNumber
+                initialPreset.name = "Init"
+                avAU.auAudioUnit.currentPreset = initialPreset
+            }
 
             self.engine.attach(avAU)
             let format = self.engine.mainMixerNode.outputFormat(forBus: 0)
@@ -81,6 +80,10 @@ final class SynthHost: ObservableObject {
         }
     }
 
+    /// Tell the (out-of-process) AUv3 editor that it is running inside our own
+    /// standalone host, so it enables computer-keyboard musical typing. Keys
+    /// routed to the remote view never reach this process's event handling, so
+    /// the typing responder has to live in the extension.
     private func announceStandaloneHost() {
         DistributedNotificationCenter.default().postNotificationName(
             Notification.Name("com.johangorsjo.Hybrid8.standaloneActive"),
@@ -90,7 +93,8 @@ final class SynthHost: ObservableObject {
     // MARK: - CoreMIDI input (hardware keyboards / controllers)
 
     private func setupMIDI() {
-        let clientStatus = MIDIClientCreateWithBlock("Hybrid8 Host" as CFString, &midiClient) { [weak self] _ in
+        let clientStatus = MIDIClientCreateWithBlock(
+            "\(product.name) Host" as CFString, &midiClient) { [weak self] _ in
             // Device plugged in / removed: (re)connect any new sources.
             self?.connectSources()
         }
@@ -99,7 +103,9 @@ final class SynthHost: ObservableObject {
             return
         }
 
-        MIDIInputPortCreateWithBlock(midiClient, "Hybrid8 In" as CFString, &inputPort) { [weak self] packetList, _ in
+        MIDIInputPortCreateWithBlock(
+            midiClient, "\(product.name) In" as CFString, &inputPort) {
+                [weak self] packetList, _ in
             self?.handle(packetList: packetList)
         }
         connectSources()
@@ -164,20 +170,8 @@ final class SynthHost: ObservableObject {
 
     // MARK: - Play
 
-    func noteOn(_ note: UInt8, velocity: UInt8 = 100) {
-        sendMIDI([0x90, note, velocity])
-    }
-    func noteOff(_ note: UInt8) {
-        sendMIDI([0x80, note, 0])
-    }
-    func pitchBend(_ normalized: Double) {
-        let clamped = min(1.0, max(-1.0, normalized))
-        let value = Int(((clamped + 1.0) * 0.5 * 16_383.0).rounded())
-        sendMIDI([0xE0, UInt8(value & 0x7F), UInt8((value >> 7) & 0x7F)])
-    }
-    func modWheel(_ normalized: Double) {
-        let value = UInt8((min(1.0, max(0.0, normalized)) * 127.0).rounded())
-        sendMIDI([0xB0, 1, value])
+    func sendPerformanceEvent(_ event: PerformanceMIDIEvent) {
+        sendMIDI(event.bytes)
     }
 
     private func sendMIDI(_ bytes: [UInt8]) {
@@ -186,11 +180,5 @@ final class SynthHost: ObservableObject {
             guard let base = ptr.baseAddress else { return }
             block(AUEventSampleTimeImmediate, 0, bytes.count, base)
         }
-    }
-
-    static func fourCC(_ s: String) -> FourCharCode {
-        var result: FourCharCode = 0
-        for c in s.utf8.prefix(4) { result = (result << 8) + FourCharCode(c) }
-        return result
     }
 }

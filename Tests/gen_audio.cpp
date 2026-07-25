@@ -7,7 +7,7 @@
 //  Build: clang++ -std=c++17 -O2 Tests/gen_audio.cpp -o /tmp/gen && /tmp/gen
 //
 
-#include "../Extension/DSP/SynthEngine.hpp"
+#include "../Products/Hybrid8/DSP/Hybrid8Engine.hpp"
 #include <vector>
 #include <cmath>
 #include <cstdio>
