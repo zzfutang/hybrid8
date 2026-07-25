@@ -48,5 +48,5 @@ open "$DEST"
 
 echo
 echo "==> SUCCESS. In Logic Pro the instrument appears under:"
-echo "    AU Instruments > Johan > Hybrid 8   (or: Johan: Hybrid 8)"
+echo "    AU Instruments > Rytell > Hybrid 8   (or: Rytell: Hybrid 8)"
 echo "    If it doesn't show, restart Logic so it re-scans plug-ins."

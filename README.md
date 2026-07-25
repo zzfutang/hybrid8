@@ -111,7 +111,7 @@ output meter. Hovering any control also flips its label to its live value.
 This regenerates the Xcode project, builds the app + extension, copies the app to
 `/Applications` (which registers the AUv3 with the system), launches it once, and
 runs `auval` to validate. Then open Logic Pro — the instrument appears under
-**AU Instruments → Johan → Hybrid 8**.
+**AU Instruments → Rytell → Hybrid 8**.
 
 To just build, or run the offline DSP tests:
 
@@ -124,7 +124,7 @@ To just build, or run the offline DSP tests:
 ## Using it in Logic Pro
 
 1. Create a **Software Instrument** track.
-2. Click the Instrument slot → **AU Instruments → Johan → Hybrid 8** (Stereo).
+2. Click the Instrument slot → **AU Instruments → Rytell → Hybrid 8** (Stereo).
 3. Play. Tweak the custom UI, or automate any parameter from Logic.
 
 The bundled host app is also a standalone player: an on-screen keyboard, Musical
