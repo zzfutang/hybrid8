@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		11715466F6817FCC81AFD690 /* SynthParametersTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1C382D5C95F92CE70271E1 /* SynthParametersTree.swift */; };
 		19BED8CE50B96437C6B03166 /* SynthTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3098E2CA53815C28DFBDFF /* SynthTheme.swift */; };
+		218ABB44EC907908984516A1 /* FactoryPresets.json in Resources */ = {isa = PBXBuildFile; fileRef = 61D2883D0081EEAEB74A495F /* FactoryPresets.json */; };
 		2C8E269FB1288172C592C3BF /* KnobShapes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33F329CBCC076644995FD3A6 /* KnobShapes.swift */; };
 		45CCA61426EF5F476F70D725 /* PresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97914D3D466CC0071C9535CD /* PresetStore.swift */; };
 		73C1B6C0A75B2B9E49B9C48A /* Hybrid8Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 120104614B6CF8293F99DD17 /* Hybrid8Extension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -71,6 +72,7 @@
 		4B917A556B54CD66B004878A /* SynthEngine.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = SynthEngine.hpp; sourceTree = "<group>"; };
 		5D2A41C1C9551453765E809A /* Hybrid8App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hybrid8App.swift; sourceTree = "<group>"; };
 		5EA7533D68274288E8D74CB5 /* LFO.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = LFO.hpp; sourceTree = "<group>"; };
+		61D2883D0081EEAEB74A495F /* FactoryPresets.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FactoryPresets.json; sourceTree = "<group>"; };
 		6F1B6179EAB5CDDA2B814BA6 /* Oscillator.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Oscillator.hpp; sourceTree = "<group>"; };
 		7E1C382D5C95F92CE70271E1 /* SynthParametersTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthParametersTree.swift; sourceTree = "<group>"; };
 		82E0830377D667BD763D41AA /* SynthHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthHost.swift; sourceTree = "<group>"; };
@@ -144,10 +146,19 @@
 			path = UI;
 			sourceTree = "<group>";
 		};
+		CC49A3DDB4F4EC4869FA1C27 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				61D2883D0081EEAEB74A495F /* FactoryPresets.json */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		CFC693F6AF44D839B7178222 /* Extension */ = {
 			isa = PBXGroup;
 			children = (
 				17BAFE757C4A9BD64E2EE124 /* DSP */,
+				CC49A3DDB4F4EC4869FA1C27 /* Resources */,
 				B24F404B3E108CFF936A76AE /* UI */,
 				39D64F8046DBE8A8415EEAA2 /* AudioUnitViewController.swift */,
 				DE0A2823181C214D850EE6FA /* Extension-Bridging-Header.h */,
@@ -179,6 +190,7 @@
 			buildConfigurationList = 2560BBC6F79EFC0CB89BF362 /* Build configuration list for PBXNativeTarget "Hybrid8Extension" */;
 			buildPhases = (
 				8742F10F3527592F30D00CFC /* Sources */,
+				5B5663450C1D1FB3A7AA6CCB /* Resources */,
 			);
 			buildRules = (
 			);
@@ -248,6 +260,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5B5663450C1D1FB3A7AA6CCB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				218ABB44EC907908984516A1 /* FactoryPresets.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		27D9ED6E1E5CD11839D7C486 /* Sources */ = {

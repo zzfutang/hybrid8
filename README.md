@@ -12,21 +12,22 @@ Coding by claude and codex.
 
 | Section | Details |
 |---|---|
-| **Voices** | 8-voice polyphony with voice stealing; selectable 1–8 (mono ↔ poly), true legato, glide/portamento |
+| **Voices** | 8-voice polyphony with voice stealing; selectable 1–8 (mono ↔ poly), true legato, glide/portamento, two-card Unison with detune |
 | **Osc 1 / Osc 2** | Two oscillators, each Saw / Square / Pulse (band-limited PolyBLEP) **or Wavetable**; independent octave, pulse width; Osc 2 semitone + fine detune |
-| **Wavetable** | 2D wavetable osc: 4 tables (Harmonic→guitar, FM, Choir, Metallic built in, external 2048 sample wav-files can imported), 32 morphable frames, "liveness" phase-drift; mip-pyramid band-limiting with per-octave crossfade |
-| **Osc interaction** | Hard sync, Roland-style cross-mod (osc 2 → osc 1 FM), exponential or through-zero FM |
-| **Mixer** | Independent Osc 1 / Osc 2 / Noise levels |
-| **Filter** | Analogue-modelled **12 dB TPT state-variable** and **24 dB four-pole ladder** topologies; LP / BP / HP modes, stable self-oscillation, nonlinear Drive, key tracking and per-voice VCF tolerances |
+| **Wavetable** | 2D wavetable osc: 5 built-in tables (Harmonic→guitar, FM, Choir, Metallic, **Piano** — extracted from a real sample), external 2048-sample WAV/AIFF tables can be imported, 32 morphable frames, "liveness" phase-drift; mip-pyramid band-limiting with per-octave crossfade |
+| **Osc interaction** | Hard sync, Roland-style cross-mod (osc 2 → osc 1 FM), exponential or through-zero FM (inharmonic ratios give struck-bell timbres) |
+| **Mixer** | Independent Osc 1 / Osc 2 / Noise levels, plus per-voice Stereo spread |
+| **Filter** | Analogue-modelled **12 dB TPT state-variable** and **24 dB four-pole ladder** topologies; LP / BP / HP modes, stable self-oscillation, nonlinear Drive, key tracking and per-voice VCF tolerances; the ladder is passband-gain compensated so the two slopes stay level-matched |
 | **Envelopes** | Dedicated ADSR for the VCA and for the filter (bipolar filter-env amount) |
-| **LFO 1 / 2 / 3** | Three modulation sources with Sine, Square, Saw Up, Saw Down and Sample & Hold; independent rate, delay, bipolar/unipolar polarity and phase; selectable global vibrato source |
-| **Mod matrix** | 6 assignable slots — sources: LFO 1/2, Filter/Amp Env, Velocity, Key Track, **Mod Wheel**, **Aftertouch**, Random → destinations: pitch, PW, cutoff, reso, drive, WT frame/liveness, cross-mod, amp |
+| **LFO 1 / 2 / 3** | Three modulation sources with Sine, Square, Saw Up, Saw Down and Sample & Hold; independent rate, delay, bipolar/unipolar polarity and phase; per-LFO **run mode — Loop (free-running), Trig (key-synced restart) or One-Shot (single cycle then hold)**; selectable global vibrato source |
+| **Mod matrix** | 6 assignable slots — sources: LFO 1/2/3, Filter/Amp Env, Velocity, Key Track, **Mod Wheel**, **Aftertouch**, Random → destinations: pitch, PW, cutoff, reso, drive, WT frame/liveness, cross-mod, amp, pan, filter slope/mode |
 | **Arpeggiator** | Up / Down / Up-Down / Random, 1–4 octave range, free-running rate, gate length, **Hold** latch (early-80s Roland style) |
-| **Effects** | FX chain with Compressor, Four-voice stereo chorus followed by a filtered, saturated stereo/ping-pong delay and ending with reverb |
+| **Effects** | Tempo-synced FX chain: stereo-linked Compressor → four-voice Chorus → filtered/saturated stereo ping-pong Delay → FDN Reverb |
+| **Chord** | Optional chord trigger — expands each key into a chord (triads, 7ths, sus, dim, aug) with inversions, ahead of the arpeggiator |
 | **Velocity** | Velocity → volume (hardwired) plus cutoff / reso / drive via the matrix |
 | **Analogue modeling** | Per-voice pitch drift/detune, controllable phase un-sync (Spread), nonlinear filter feedback and deterministic voice-card component tolerances |
 | **Anti-aliasing** | Complete oscillator, sync/FM, noise and nonlinear filter path runs at 2×, followed by an 11-tap linear-phase half-band FIR decimator |
-| **Presets** | 55 factory presets grouped by category, plus user-preset save |
+| **Presets** | Factory presets loaded from a bundled, editable JSON catalog and grouped by category, plus user-preset save |
 
 ## Filter modelling
 
@@ -42,7 +43,10 @@ the 12 dB filter. It runs two distinct virtual-analogue topologies:
   feedback loop. The loop is solved with three Newton iterations and has no
   artificial unit delay. Maximum resonance slightly exceeds the theoretical
   four-pole oscillation threshold, producing bounded, cutoff-tracking
-  self-oscillation.
+  self-oscillation. Because a ladder's linear passband gain is `1/(1+k)`, its
+  output is compensated by `(1+k)` so the passband returns to unity — the two
+  slopes stay level-matched and resonance peaks above the passband, matching the
+  SVF.
 
 Both filters produce low-pass, band-pass and high-pass outputs. The selected
 mode and the 12/24 dB slope are interpolated continuously; both topologies keep
@@ -69,6 +73,23 @@ twice the host sample rate. An 11-tap, linear-phase half-band FIR decimator
 (approximately −45 dB stopband) filters the result before returning to the host
 rate. This reduces fold-back from oscillator discontinuities, hard sync, FM,
 filter drive and self-oscillation.
+
+## Interface
+
+The editor is a wide hardware-style fascia that scales uniformly to fit the host
+window. A row of pills next to the title switches between two tabs:
+
+- **Synth** — the sound-design engine: a combined **Oscillators** panel (Osc 1 with
+  the wavetable display + Osc 2), **Mixer**, a combined **Envelopes** panel (Amp +
+  Filter ADSR), **Filter**, **LFO** (LFO 1/2/3), **X-Mod**, and the **Mod Matrix**.
+- **Performance** — how the instrument plays: **Effects Chain**, **Global** (voicing,
+  unison, master, vibrato…), **Glide** (legato, portamento, glide start, pitch-bend
+  range), **Arpeggiator**, **Chord Trigger**, and a searchable, category-filtered
+  **Patch Navigator**.
+
+The top bar carries the preset browser (◀ patch ▶ / Save), a live hover-help
+readout that describes whatever control is under the pointer, and the stereo
+output meter. Hovering any control also flips its label to its live value.
 
 ## Requirements
 
@@ -126,13 +147,17 @@ Extension/                      The AUv3 extension
   ModMatrix.h                   Shared mod-matrix source/destination indices
   SynthAudioUnit.swift          AUAudioUnit subclass + factory presets
   SynthParametersTree.swift     Parameter tree definition
-  FactoryPresets.swift          Built-in presets (+ legacy → mod-matrix migration)
+  FactoryPresets.swift          Validated loader for the bundled preset catalog
+  Resources/FactoryPresets.json External factory preset definitions and categories
   AudioUnitViewController.swift AU factory + hosts the SwiftUI editor
   SynthDSPKernelAdapter.{h,mm}  Obj-C++ bridge + real-time render/MIDI loop
   DSP/                          Real-time-safe C++ DSP core (header-only)
-    Oscillator, Wavetable, ADSR, Filter, LFO, Decimator, Effects (chorus+delay),
-    Voice, SynthEngine (voices + arp + mod matrix), Params, Utils
+    Oscillator, Wavetable (+ WavetablePianoData), ADSR, Filter, LFO, Decimator,
+    Effects (compressor/chorus/delay/reverb), Voice,
+    SynthEngine (voices + arp + chord + mod matrix), Params, Utils
   UI/                           SwiftUI editor (ParameterModel, SynthView, SynthTheme, SynthHelp)
+Tools/                          Offline analysis/utilities (wav_analyze, synth_render,
+                                synth_match, wt_extract) — see Tools/README.md
 Tests/test_dsp.cpp              Offline DSP regression tests
 scripts/                        build.sh, install.sh, test.sh
 ```

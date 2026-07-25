@@ -16,7 +16,7 @@ struct Hybrid8App: App {
             ContentView(host: host)
                 .frame(minWidth: 760, minHeight: 620)
         }
-        .defaultSize(width: 1360, height: 1040)
+        .defaultSize(width: 1700, height: 974)
         .windowResizability(.automatic)
     }
 }

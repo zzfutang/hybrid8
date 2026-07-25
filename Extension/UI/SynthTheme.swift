@@ -233,7 +233,7 @@ struct Knob: View {
     }
 
     var body: some View {
-        VStack(spacing: 7) {
+        VStack(spacing: 2) {
             ZStack {
                 // 270-degree track + value arc.
                 KnobArc(fraction: 1)
@@ -485,18 +485,19 @@ struct ToggleButton: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // Same label + single-chip structure as Dropdown, so a toggle and a
+        // dropdown sitting side by side (e.g. Chord: On / Type / Inversion) line
+        // up exactly.
+        VStack(alignment: .leading, spacing: 3) {
             Text(title.uppercased())
-                .font(.system(size: 8.5, weight: .semibold, design: .rounded))
-                .tracking(1.3)
-                .foregroundColor(Palette.textLabel)
-            SegGroup {
-                Button { on.toggle(); model.set(addr, on ? 1 : 0) } label: {
-                    SegChip(text: on ? "On" : "Off", on: on, accent: accent)
-                        .frame(minWidth: 40)
-                }
-                .buttonStyle(.plain)
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .tracking(0.6)
+                .foregroundColor(Palette.engrave)
+            Button { on.toggle(); model.set(addr, on ? 1 : 0) } label: {
+                SegChip(text: on ? "On" : "Off", on: on, accent: accent)
+                    .frame(minWidth: 52)
             }
+            .buttonStyle(.plain)
         }
         .onHover { hovering in
             let h = SynthHelp.text(for: AUParameterAddress(addr.rawValue))
@@ -513,42 +514,91 @@ struct Dropdown: View {
     let model: ParameterModel
     let accent: Color
     let helpText: String
+    // When true, index 0 is a "None" state and renders dim (used by the mod
+    // matrix so empty slots read as inactive). Otherwise every value is lit.
+    let dimsNone: Bool
     @EnvironmentObject private var help: HelpModel
     @State private var index: Int
+    @State private var showing = false
 
     init(_ addr: SynthParam, _ options: [String], _ model: ParameterModel,
-         accent: Color, helpText: String = "") {
+         accent: Color, helpText: String = "", dimsNone: Bool = false) {
         self.addr = addr; self.options = options; self.model = model
-        self.accent = accent; self.helpText = helpText
+        self.accent = accent; self.helpText = helpText; self.dimsNone = dimsNone
         _index = State(initialValue: Int((model.param(addr)?.value ?? 0).rounded()))
     }
 
+    // The closed control is a raised, beveled chip identical to the SegChip
+    // button groups; a custom Button + popover (rather than the system Menu,
+    // whose label styling macOS overrides) guarantees the hardware look.
     var body: some View {
-        Menu {
-            ForEach(options.indices, id: \.self) { i in
-                Button(options[i]) { index = i; model.set(addr, Float(i)) }
-            }
-        } label: {
-            HStack(spacing: 3) {
+        let lit = !dimsNone || index > 0
+        Button { showing.toggle() } label: {
+            HStack(spacing: 4) {
                 Circle()
-                    .fill(index <= 0 ? Color.black.opacity(0.5) : accent)
-                    .frame(width: 5, height: 5)
-                    .shadow(color: index <= 0 ? .clear : accent.opacity(0.8), radius: 2)
+                    .fill(lit ? accent : Palette.ledOff)
+                    .frame(width: 6, height: 6)
+                    .overlay(Circle().fill(Color.white.opacity(lit ? 0.35 : 0))
+                        .frame(width: 2, height: 2).offset(x: -0.6, y: -0.6))
+                    .shadow(color: lit ? accent.opacity(0.9) : .clear, radius: lit ? 3.5 : 0)
                 Text(index < options.count ? options[index] : "?")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundColor(index <= 0 ? Palette.engraveDim : Palette.engrave)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundColor(lit ? Palette.textActive : Palette.textOff)
                     .lineLimit(1)
-                Spacer(minLength: 1)
-                Image(systemName: "chevron.down")
+                    .fixedSize()
+                Spacer(minLength: 2)
+                Image(systemName: "arrowtriangle.down.fill")
                     .font(.system(size: 6, weight: .bold))
-                    .foregroundColor(Palette.engraveDim)
+                    .foregroundColor(Palette.engrave.opacity(0.7))
             }
-            .padding(.horizontal, 8).padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 5).fill(Palette.comboBg))
-            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.black.opacity(0.5), lineWidth: 1))
+            .padding(.leading, 6).padding(.trailing, 5).padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(LinearGradient(colors: [Palette.btnOnTop, Palette.btnOnBottom],
+                                         startPoint: .top, endPoint: .bottom)))
+            .overlay(RoundedRectangle(cornerRadius: 5)
+                .stroke(Color.black.opacity(0.55), lineWidth: 1))
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(Color(hex: 0xd8cdb0).opacity(0.14), lineWidth: 1)
+                    .padding(0.5)
+                    .mask(LinearGradient(colors: [.black, .clear],
+                                         startPoint: .top, endPoint: .center))
+            }
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .popover(isPresented: $showing, arrowEdge: .bottom) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(options.indices, id: \.self) { i in
+                        Button {
+                            index = i; model.set(addr, Float(i)); showing = false
+                        } label: {
+                            HStack(spacing: 7) {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(accent)
+                                    .opacity(i == index ? 1 : 0)
+                                Text(options[i])
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .foregroundColor(i == index ? Palette.textActive : Palette.engrave)
+                                Spacer(minLength: 8)
+                            }
+                            .padding(.horizontal, 9).padding(.vertical, 5)
+                            .frame(minWidth: 120, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .background(RoundedRectangle(cornerRadius: 4)
+                                .fill(i == index ? accent.opacity(0.16) : Color.clear))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(6)
+            }
+            .frame(maxHeight: 320)
+            .background(Palette.sectionBottom)
+        }
         .onHover { hovering in
             if hovering { help.set(helpText) } else { help.clear(ifMatches: helpText) }
         }
@@ -646,9 +696,9 @@ struct Panel<Content: View, Trailing: View>: View {
                 Spacer(minLength: 8)
                 trailing
             }
-            Spacer(minLength: 8)
+            Spacer().frame(height: 13)   // fixed, consistent header→content gap
             content
-            Spacer(minLength: 8)
+            Spacer(minLength: 0)        // absorbs the slack so content stays top-aligned
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

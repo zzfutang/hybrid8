@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  Hosts the AU's own editor view and a simple two-octave test keyboard.
+//  Hosts the AU's own editor view and a three-octave performance keyboard.
 //
 
 import SwiftUI
@@ -32,8 +32,13 @@ struct ContentView: View {
             .foregroundColor(.secondary)
             .padding(.vertical, 4)
 
-            Keyboard(host: host)
+            HStack(spacing: 0) {
+                PerformanceRibbons(host: host)
+                    .frame(width: 116)
+                Keyboard(host: host)
+            }
                 .frame(height: 120)
+                .background(Color(red: 0.08, green: 0.08, blue: 0.10))
         }
     }
 }
@@ -45,15 +50,17 @@ struct AUViewRepresentable: NSViewControllerRepresentable {
     func updateNSViewController(_ nsViewController: NSViewController, context: Context) {}
 }
 
-// Minimal click/hold piano covering C3..B4.
+// Click/hold piano covering three complete octaves, C3..B5.
 struct Keyboard: View {
     @ObservedObject var host: SynthHost
     private let firstNote = 48 // C3
+    private let noteCount = 36
 
     var body: some View {
         GeometryReader { geo in
             let whiteNotes = whiteKeyNotes()
-            let whiteWidth = geo.size.width / CGFloat(whiteNotes.count)
+            let gaps = CGFloat(max(0, whiteNotes.count - 1))
+            let whiteWidth = (geo.size.width - gaps) / CGFloat(whiteNotes.count)
             ZStack(alignment: .topLeading) {
                 HStack(spacing: 1) {
                     ForEach(whiteNotes, id: \.self) { note in
@@ -73,13 +80,13 @@ struct Keyboard: View {
 
     private func whiteKeyNotes() -> [Int] {
         var notes: [Int] = []
-        for n in firstNote...(firstNote + 24) where !isBlack(n) { notes.append(n) }
+        for n in firstNote..<(firstNote + noteCount) where !isBlack(n) { notes.append(n) }
         return notes
     }
     private func blackKeys(whiteWidth: CGFloat) -> [(note: Int, x: CGFloat)] {
         var result: [(Int, CGFloat)] = []
         var whiteIndex = 0
-        for n in firstNote...(firstNote + 24) {
+        for n in firstNote..<(firstNote + noteCount) {
             if isBlack(n) {
                 let x = CGFloat(whiteIndex) * (whiteWidth + 1) - whiteWidth * 0.3
                 result.append((n, x))
@@ -91,6 +98,98 @@ struct Keyboard: View {
     }
     private func isBlack(_ note: Int) -> Bool {
         [1, 3, 6, 8, 10].contains(((note % 12) + 12) % 12)
+    }
+}
+
+// Conventional left-of-keybed performance controls. Pitch is bipolar and
+// springs back to centre; modulation is unipolar and holds its last position.
+private struct PerformanceRibbons: View {
+    @ObservedObject var host: SynthHost
+
+    var body: some View {
+        HStack(spacing: 7) {
+            MIDIRibbon(title: "PITCH", bipolar: true,
+                       accent: Color(red: 0.31, green: 0.61, blue: 0.91)) {
+                host.pitchBend($0)
+            }
+            MIDIRibbon(title: "MOD", bipolar: false,
+                       accent: Color(red: 0.56, green: 0.84, blue: 0.42)) {
+                host.modWheel($0)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 1)
+        }
+    }
+}
+
+private struct MIDIRibbon: View {
+    let title: String
+    let bipolar: Bool
+    let accent: Color
+    let onChange: (Double) -> Void
+    @State private var value: Double
+
+    init(title: String, bipolar: Bool, accent: Color,
+         onChange: @escaping (Double) -> Void) {
+        self.title = title
+        self.bipolar = bipolar
+        self.accent = accent
+        self.onChange = onChange
+        _value = State(initialValue: 0)
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .tracking(0.8)
+                .foregroundColor(Color.white.opacity(0.65))
+            GeometryReader { geometry in
+                let normalized = CGFloat(bipolar ? (value + 1) * 0.5 : value)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color.black.opacity(0.58))
+                    Rectangle()
+                        .fill(Color.white.opacity(0.09))
+                        .frame(width: 1)
+                    if bipolar {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.18))
+                            .frame(height: 1)
+                    }
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(accent)
+                        .frame(height: 4)
+                        .shadow(color: accent.opacity(0.8), radius: 3)
+                        .offset(y: (0.5 - normalized) * max(0, geometry.size.height - 10))
+                }
+                .overlay(RoundedRectangle(cornerRadius: 5)
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1))
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        let position = Double(min(1, max(
+                            0, 1 - gesture.location.y / geometry.size.height)))
+                        value = bipolar ? position * 2 - 1 : position
+                        onChange(value)
+                    }
+                    .onEnded { _ in
+                        if bipolar {
+                            value = 0
+                            onChange(0)
+                        }
+                    })
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel("\(title) ribbon")
+        .help(bipolar ? "Pitch bend · returns to centre"
+                       : "Modulation wheel · holds position")
     }
 }
 

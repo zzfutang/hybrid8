@@ -39,7 +39,19 @@ final class TypingKeyboard {
             guard let self = self else { return e }
             return self.handle(e, down: false)
         }
-        monitors = [down, up].compactMap { $0 }
+        let mouse = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]) { e in
+                // SwiftUI's FocusState inside the hosted AU does not always
+                // retire AppKit's shared field editor. A click anywhere other
+                // than that editor should restore Musical Typing immediately.
+                if let window = e.window,
+                   window.firstResponder is NSTextView,
+                   !(window.contentView?.hitTest(e.locationInWindow) is NSTextView) {
+                    window.makeFirstResponder(nil)
+                }
+                return e
+            }
+        monitors = [down, up, mouse].compactMap { $0 }
     }
 
     deinit { monitors.forEach { NSEvent.removeMonitor($0) } }
@@ -47,7 +59,16 @@ final class TypingKeyboard {
     private func handle(_ e: NSEvent, down: Bool) -> NSEvent? {
         // Let menu shortcuts and text entry (e.g. the Save dialog) work normally.
         if !e.modifierFlags.intersection([.command, .control, .option]).isEmpty { return e }
-        if e.window?.firstResponder is NSTextView { return e }
+        if e.window?.firstResponder is NSTextView {
+            // AppKit owns the actual field editor even though the search box
+            // lives in SwiftUI. Explicitly end editing so Escape/Return always
+            // hand the letter keys back to the performance keyboard.
+            if down && (e.keyCode == 53 || e.keyCode == 36 || e.keyCode == 76) {
+                e.window?.makeFirstResponder(nil)
+                return nil
+            }
+            return e
+        }
         guard let ch = e.charactersIgnoringModifiers?.lowercased().first else { return e }
 
         // Octave / velocity keys (on key-down only).

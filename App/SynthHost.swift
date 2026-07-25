@@ -36,6 +36,7 @@ final class SynthHost: ObservableObject {
         componentFlags: 0, componentFlagsMask: 0)
 
     init() {
+        announceStandaloneHost()
         load()
         setupMIDI()
         typingKeyboard = TypingKeyboard(host: self)
@@ -72,9 +73,18 @@ final class SynthHost: ObservableObject {
             }
 
             avAU.auAudioUnit.requestViewController { vc in
-                DispatchQueue.main.async { self.viewController = vc }
+                DispatchQueue.main.async {
+                    self.viewController = vc
+                    self.announceStandaloneHost()
+                }
             }
         }
+    }
+
+    private func announceStandaloneHost() {
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name("com.johangorsjo.Hybrid8.standaloneActive"),
+            object: nil, userInfo: nil, options: [.deliverImmediately])
     }
 
     // MARK: - CoreMIDI input (hardware keyboards / controllers)
@@ -159,6 +169,15 @@ final class SynthHost: ObservableObject {
     }
     func noteOff(_ note: UInt8) {
         sendMIDI([0x80, note, 0])
+    }
+    func pitchBend(_ normalized: Double) {
+        let clamped = min(1.0, max(-1.0, normalized))
+        let value = Int(((clamped + 1.0) * 0.5 * 16_383.0).rounded())
+        sendMIDI([0xE0, UInt8(value & 0x7F), UInt8((value >> 7) & 0x7F)])
+    }
+    func modWheel(_ normalized: Double) {
+        let value = UInt8((min(1.0, max(0.0, normalized)) * 127.0).rounded())
+        sendMIDI([0xB0, 1, value])
     }
 
     private func sendMIDI(_ bytes: [UInt8]) {
