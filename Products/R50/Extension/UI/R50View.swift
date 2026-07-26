@@ -100,8 +100,9 @@ struct R50View: View {
     private var oscillator: some View {
         R50Panel(title: "Oscillator") {
             VStack(alignment: .leading, spacing: 14) {
-                R50Selector(title: "Wave", address: R50ParamOscWave,
-                            options: R50Parameters.waveformNames, model: model)
+                R50WaveGrid(title: "Wave", address: R50ParamOscWave,
+                            options: R50Parameters.waveformNames,
+                            columns: 3, model: model)
                 HStack(spacing: 4) {
                     R50Knob(title: "Width", address: R50ParamPulseWidth, model: model)
                     R50Knob(title: "Octave", address: R50ParamOctave, model: model)
@@ -163,7 +164,7 @@ struct R50View: View {
             R50Knob(title: "Master", address: R50ParamMasterGain, model: model)
             R50Knob(title: "Bend", address: R50ParamPitchBendRange, model: model)
             Spacer()
-            Text("8-VOICE · POLYBLEP OSC · ZDF LADDER")
+            Text("8-VOICE · BAND-LIMITED PCM · ZDF LADDER")
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .tracking(1.4)
                 .foregroundColor(R50Palette.glowDim)

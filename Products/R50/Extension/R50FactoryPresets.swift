@@ -42,7 +42,7 @@ enum R50FactoryPresets {
         ]),
 
         R50FactoryPreset(name: "Hollow Pulse Pad", values: [
-            addr(R50ParamOscWave): 2,
+            addr(R50ParamOscWave): 4,        // variable pulse
             addr(R50ParamPulseWidth): 0.22,
             addr(R50ParamCutoff): 1400,
             addr(R50ParamResonance): 0.2,
@@ -51,6 +51,72 @@ enum R50FactoryPresets {
             addr(R50ParamAmpRelease): 1.6,
             addr(R50ParamFilterAttack): 0.9,
             addr(R50ParamFilterSustain): 0.5,
+        ]),
+
+        R50FactoryPreset(name: "Drawbar Organ", values: [
+            addr(R50ParamOscWave): 5,
+            addr(R50ParamCutoff): 9000,
+            addr(R50ParamKeyTrack): 0.25,
+            addr(R50ParamFilterEnvAmount): 0.0,
+            addr(R50ParamAmpAttack): 0.002,
+            addr(R50ParamAmpDecay): 0.05,
+            addr(R50ParamAmpSustain): 1.0,
+            addr(R50ParamAmpRelease): 0.05,
+        ]),
+
+        R50FactoryPreset(name: "Tine Electric", values: [
+            addr(R50ParamOscWave): 6,
+            addr(R50ParamCutoff): 4200,
+            addr(R50ParamKeyTrack): 0.7,
+            addr(R50ParamFilterEnvAmount): 0.5,
+            addr(R50ParamAmpDecay): 1.8,
+            addr(R50ParamAmpSustain): 0.25,
+            addr(R50ParamAmpRelease): 0.5,
+            addr(R50ParamFilterDecay): 0.7,
+            addr(R50ParamFilterSustain): 0.1,
+        ]),
+
+        R50FactoryPreset(name: "Reed Solo", values: [
+            addr(R50ParamOscWave): 7,        // clarinet
+            addr(R50ParamCutoff): 5200,
+            addr(R50ParamResonance): 0.1,
+            addr(R50ParamKeyTrack): 0.5,
+            addr(R50ParamAmpAttack): 0.05,
+            addr(R50ParamAmpSustain): 0.9,
+            addr(R50ParamAmpRelease): 0.18,
+        ]),
+
+        R50FactoryPreset(name: "String Machine", values: [
+            addr(R50ParamOscWave): 8,
+            addr(R50ParamCutoff): 3400,
+            addr(R50ParamResonance): 0.12,
+            addr(R50ParamFilterEnvAmount): 0.25,
+            addr(R50ParamAmpAttack): 0.35,
+            addr(R50ParamAmpRelease): 0.9,
+            addr(R50ParamFilterAttack): 0.5,
+            addr(R50ParamFilterSustain): 0.55,
+        ]),
+
+        R50FactoryPreset(name: "Choir Ah", values: [
+            addr(R50ParamOscWave): 9,
+            addr(R50ParamCutoff): 6000,
+            addr(R50ParamKeyTrack): 0.3,
+            addr(R50ParamAmpAttack): 0.28,
+            addr(R50ParamAmpSustain): 0.9,
+            addr(R50ParamAmpRelease): 0.7,
+        ]),
+
+        R50FactoryPreset(name: "Glass Bell", values: [
+            addr(R50ParamOscWave): 10,
+            addr(R50ParamCutoff): 8500,
+            addr(R50ParamKeyTrack): 0.8,
+            addr(R50ParamFilterEnvAmount): 0.35,
+            addr(R50ParamAmpAttack): 0.001,
+            addr(R50ParamAmpDecay): 2.2,
+            addr(R50ParamAmpSustain): 0.0,
+            addr(R50ParamAmpRelease): 1.4,
+            addr(R50ParamFilterDecay): 1.2,
+            addr(R50ParamFilterSustain): 0.15,
         ]),
     ]
 

@@ -113,12 +113,14 @@
 		3F531AA1A539C2EE9735AC44 /* R50AudioUnitHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50AudioUnitHost.swift; sourceTree = "<group>"; };
 		41B17FA7BB496A3934FE4A27 /* Hybrid8Voice.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Hybrid8Voice.hpp; sourceTree = "<group>"; };
 		43741427DD1185348DACAEA1 /* R50Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = R50Extension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		4531DF6E83F3C47C88B2DB27 /* R50WaveOscillator.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50WaveOscillator.hpp; sourceTree = "<group>"; };
 		4E121C11D557B938C66F5F0E /* MusicalTypingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicalTypingController.swift; sourceTree = "<group>"; };
 		500DB9C8FB202ADBA6321677 /* R50Product.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50Product.swift; sourceTree = "<group>"; };
 		5C2CF0929FB2CD6E611FF697 /* InstrumentProduct.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstrumentProduct.swift; sourceTree = "<group>"; };
 		5D2A41C1C9551453765E809A /* Hybrid8App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hybrid8App.swift; sourceTree = "<group>"; };
 		61D2883D0081EEAEB74A495F /* FactoryPresets.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FactoryPresets.json; sourceTree = "<group>"; };
 		772DF3A82502AEDD6C9C552E /* R50ParametersTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50ParametersTree.swift; sourceTree = "<group>"; };
+		7915BC69DA6FDB8EC6117CD2 /* R50Wave.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Wave.hpp; sourceTree = "<group>"; };
 		7B32D6BB2F88D3FA24D09D2A /* MusicalTypingStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicalTypingStateMachine.swift; sourceTree = "<group>"; };
 		7E1C382D5C95F92CE70271E1 /* SynthParametersTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthParametersTree.swift; sourceTree = "<group>"; };
 		81DE5D8AC0351437DC2CE76B /* MIDIEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIDIEvent.swift; sourceTree = "<group>"; };
@@ -260,6 +262,8 @@
 			children = (
 				B1F99D67BD35FB874E88A075 /* R50Engine.hpp */,
 				C1767F6F1334E44D6F16411B /* R50Voice.hpp */,
+				7915BC69DA6FDB8EC6117CD2 /* R50Wave.hpp */,
+				4531DF6E83F3C47C88B2DB27 /* R50WaveOscillator.hpp */,
 			);
 			path = DSP;
 			sourceTree = "<group>";

@@ -201,8 +201,8 @@ private:
     /// single-threaded.
     void snapshotParams() {
         const int wave = static_cast<int>(get(R50ParamOscWave) + 0.5f);
-        params_.wave = static_cast<synth::OscWave>(
-            wave < 0 ? 0 : (wave > 2 ? 2 : wave));
+        params_.waveIndex = wave < 0 ? 0
+                          : (wave >= kWaveCount ? kWaveCount - 1 : wave);
         params_.pulseWidth      = get(R50ParamPulseWidth);
         params_.octave          = static_cast<int>(std::lround(get(R50ParamOctave)));
 

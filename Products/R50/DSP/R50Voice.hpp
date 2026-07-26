@@ -1,7 +1,7 @@
 //
 //  R50Voice.hpp
-//  One R50 voice: a single band-limited oscillator into the shared analogue-
-//  modelled ladder/SVF filter, with dedicated amp and filter envelopes.
+//  One R50 voice: a single band-limited PCM wave oscillator into the shared
+//  ladder/SVF filter, with dedicated amp and filter envelopes.
 //
 //  Filter coefficients are recomputed once per control block (see
 //  kControlBlock in R50Engine.hpp) rather than per sample — setParams() runs a
@@ -12,7 +12,7 @@
 
 #include "ADSR.hpp"
 #include "Filter.hpp"
-#include "Oscillator.hpp"
+#include "R50WaveOscillator.hpp"
 #include "Utils.hpp"
 
 namespace r50 {
@@ -20,8 +20,8 @@ namespace r50 {
 /// Denormalised parameter block shared by every voice, rebuilt by the engine
 /// whenever a parameter changes.
 struct VoiceParams {
-    synth::OscWave wave       = synth::OscWave::Saw;
-    float pulseWidth          = 0.5f;
+    int   waveIndex           = 0;      // index into waveDescriptors()
+    float pulseWidth          = 0.5f;   // only read by Difference-mode waves
     int   octave              = 0;
 
     float cutoffHz            = 4000.0f;
@@ -82,8 +82,8 @@ public:
     void updateBlock(const VoiceParams &p, double pitchBendSemitones) {
         applyEnvelopeTimes(p);
 
-        osc_.setWave(p.wave);
-        osc_.setPulseWidth(p.pulseWidth);
+        osc_.setWave(p.waveIndex);
+        osc_.setWidth(p.pulseWidth);
         const double midi = static_cast<double>(note_)
                           + p.octave * 12.0 + pitchBendSemitones;
         osc_.setFrequency(synth::noteToHz(midi));
@@ -126,7 +126,7 @@ private:
         filterEnv_.setRelease(p.filterRelease);
     }
 
-    synth::Oscillator  osc_;
+    WaveOscillator     osc_;
     synth::LadderFilter filter_;
     synth::ADSR        ampEnv_;
     synth::ADSR        filterEnv_;

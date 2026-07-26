@@ -8,7 +8,11 @@ import AudioToolbox
 
 enum R50Parameters {
 
-    static let waveformNames = ["Saw", "Square", "Pulse"]
+    /// Order must match waveDescriptors() in R50Wave.hpp.
+    static let waveformNames = [
+        "Saw", "Triangle", "Square", "Pulse 10%", "Pulse",
+        "Organ", "Tine", "Clarinet", "Strings", "Vocal Ah", "Bell"
+    ]
     static let slopeNames    = ["12 dB", "24 dB"]
 
     private static let readWrite: AudioUnitParameterOptions =
@@ -45,8 +49,8 @@ enum R50Parameters {
         let osc = AUParameterTree.createGroup(
             withIdentifier: "osc", name: "Oscillator", children: [
                 param(R50ParamOscWave, "oscWave", "Waveform",
-                      min: 0, max: 2, value: 0, unit: .indexed,
-                      strings: waveformNames),
+                      min: 0, max: AUValue(waveformNames.count - 1), value: 0,
+                      unit: .indexed, strings: waveformNames),
                 param(R50ParamPulseWidth, "pulseWidth", "Pulse Width",
                       min: 0.02, max: 0.98, value: 0.5),
                 param(R50ParamOctave, "octave", "Octave",

@@ -11,8 +11,8 @@
 // Fixed underlying type so the values match AUParameterAddress (UInt64) and
 // import cleanly into Swift as a proper enum.
 typedef enum R50Param : unsigned long long {
-    R50ParamOscWave = 0,         // 0=saw, 1=square, 2=pulse
-    R50ParamPulseWidth,          // 0.02 .. 0.98 (pulse only)
+    R50ParamOscWave = 0,         // 0..10, see waveDescriptors() in R50Wave.hpp
+    R50ParamPulseWidth,          // 0.02 .. 0.98 (variable-pulse wave only)
     R50ParamOctave,              // -2 .. +2 (integer)
 
     R50ParamCutoff,              // Hz

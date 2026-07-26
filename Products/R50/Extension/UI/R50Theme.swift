@@ -210,6 +210,65 @@ struct R50Selector: View {
     }
 }
 
+// MARK: - Wave grid
+
+/// Indexed-parameter picker for lists too long for a single segmented row.
+/// Lays the options out as a fixed-column grid of short labels.
+struct R50WaveGrid: View {
+    let title: String
+    let address: R50Param
+    let options: [String]
+    let columns: Int
+    @ObservedObject var model: R50ParameterModel
+
+    var body: some View {
+        let current = Int(model.value(address).rounded())
+        let rows = Int(ceil(Double(options.count) / Double(columns)))
+
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title.uppercased())
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .tracking(0.8)
+                .foregroundColor(R50Palette.engrave)
+
+            VStack(spacing: 1) {
+                ForEach(0..<rows, id: \.self) { row in
+                    HStack(spacing: 1) {
+                        ForEach(0..<columns, id: \.self) { column in
+                            let index = row * columns + column
+                            if index < options.count {
+                                cell(options[index], index: index,
+                                     selected: index == current)
+                            } else {
+                                Color.clear.frame(maxWidth: .infinity)
+                            }
+                        }
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color(white: 0.32), lineWidth: 1))
+        }
+    }
+
+    private func cell(_ label: String, index: Int, selected: Bool) -> some View {
+        Text(label)
+            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+            .foregroundColor(selected ? Color.black : R50Palette.legend)
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background(selected ? R50Palette.glow : Color(white: 0.13))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                model.parameter(address)?.setValue(Float(index), originator: nil)
+                model.objectWillChange.send()
+            }
+    }
+}
+
 // MARK: - Meter
 
 struct R50Meter: View {
