@@ -130,6 +130,7 @@
 		81DE5D8AC0351437DC2CE76B /* MIDIEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIDIEvent.swift; sourceTree = "<group>"; };
 		858F1E9DA80548BB0FC91928 /* R50FactoryPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50FactoryPresets.swift; sourceTree = "<group>"; };
 		8D27DAF314B0D8B1899F4BC3 /* PerformanceKeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceKeyboardView.swift; sourceTree = "<group>"; };
+		8D90BFA8D15AB1DC1692CC68 /* R50Partial.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Partial.hpp; sourceTree = "<group>"; };
 		8DAF2A33D71D5EE6461A540D /* R50SampleFactory.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50SampleFactory.hpp; sourceTree = "<group>"; };
 		8FB5F915331861EE4ED079E0 /* R50Parameters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = R50Parameters.h; sourceTree = "<group>"; };
 		90C36064148CBB1BA047620D /* SynthTimeMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthTimeMapping.swift; sourceTree = "<group>"; };
@@ -268,6 +269,7 @@
 			children = (
 				B1F99D67BD35FB874E88A075 /* R50Engine.hpp */,
 				4E1AA536D5BCEFC6B916629C /* R50Noise.hpp */,
+				8D90BFA8D15AB1DC1692CC68 /* R50Partial.hpp */,
 				19FA9B3BB4AE406828814F9A /* R50Sample.hpp */,
 				8DAF2A33D71D5EE6461A540D /* R50SampleFactory.hpp */,
 				AA5A665188698ADB50316116 /* R50SamplePlayer.hpp */,

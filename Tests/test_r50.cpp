@@ -801,6 +801,275 @@ int main() {
         check(tuned, "every key zone plays at the requested pitch");
     }
 
+    // --- Partial addressing -------------------------------------------------
+    {
+        // Partial 1 must still live at the original addresses, or every saved
+        // preset and automation lane silently means something else.
+        const struct { R50PartialField field; R50Param legacy; } mapping[] = {
+            {R50FieldSourceType, R50ParamSourceType},
+            {R50FieldSampleInstrument, R50ParamSampleInstrument},
+            {R50FieldSampleStart, R50ParamSampleStart},
+            {R50FieldOscWave, R50ParamOscWave},
+            {R50FieldPulseWidth, R50ParamPulseWidth},
+            {R50FieldOctave, R50ParamOctave},
+            {R50FieldNoiseMix, R50ParamNoiseMix},
+            {R50FieldNoiseSpectrum, R50ParamNoiseSpectrum},
+            {R50FieldNoiseTone, R50ParamNoiseTone},
+            {R50FieldNoiseRate, R50ParamNoiseRate},
+            {R50FieldNoisePitchTrack, R50ParamNoisePitchTrack},
+            {R50FieldCutoff, R50ParamCutoff},
+            {R50FieldResonance, R50ParamResonance},
+            {R50FieldDrive, R50ParamDrive},
+            {R50FieldSlope, R50ParamSlope},
+            {R50FieldKeyTrack, R50ParamKeyTrack},
+            {R50FieldFilterEnvAmount, R50ParamFilterEnvAmount},
+            {R50FieldAmpAttack, R50ParamAmpAttack},
+            {R50FieldAmpDecay, R50ParamAmpDecay},
+            {R50FieldAmpSustain, R50ParamAmpSustain},
+            {R50FieldAmpRelease, R50ParamAmpRelease},
+            {R50FieldFilterAttack, R50ParamFilterAttack},
+            {R50FieldFilterDecay, R50ParamFilterDecay},
+            {R50FieldFilterSustain, R50ParamFilterSustain},
+            {R50FieldFilterRelease, R50ParamFilterRelease},
+        };
+        bool stable = true;
+        for (const auto &entry : mapping) {
+            if (r50PartialParam(0, entry.field) != entry.legacy) stable = false;
+        }
+        check(stable, "Partial 1 keeps the original parameter addresses");
+
+        // Partial 2's block must be contiguous, in range, and not collide.
+        bool blockOk = true;
+        for (int f = 0; f < R50PartialFieldCount; ++f) {
+            const R50Param address =
+                r50PartialParam(1, static_cast<R50PartialField>(f));
+            if (address != R50ParamP2Base + f || address >= R50ParamCount) {
+                blockOk = false;
+            }
+            if (r50PartialParam(0, static_cast<R50PartialField>(f)) == address) {
+                blockOk = false;   // the two Partials must never share storage
+            }
+        }
+        check(blockOk, "Partial 2 occupies its own contiguous block");
+    }
+
+    // --- Partial 2 disabled reproduces the single-Partial engine ------------
+    {
+        // The refactor must move code without changing sound. Partial 2 is off
+        // by default, so a default patch has to render exactly as before.
+        auto renderPatch = [](int wave) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, wave);
+            engine.noteOn(60, 100);
+            engine.noteOn(64, 90);
+            return renderBuffer(engine, 0.4);
+        };
+        const std::vector<float> a = renderPatch(0);
+        const std::vector<float> b = renderPatch(0);
+        check(a == b && !a.empty(), "default two-Partial engine is deterministic");
+
+        r50::R50Engine engine;
+        setupSpectralTone(engine, 0);
+        check(engine.getParameter(r50PartialParam(1, R50FieldEnabled)) < 0.5f,
+              "Partial 2 is disabled by default");
+
+        engine.noteOn(60, 100);
+        const float withPartial2Off = render(engine, 0.3);
+        check(std::isfinite(withPartial2Off) && withPartial2Off > 0.02f,
+              "a one-Partial patch still sounds");
+    }
+
+    // --- Tone structures ----------------------------------------------------
+    {
+        // Set up both Partials with the same wave so the structures are
+        // comparable, then measure what each one does.
+        auto twoPartialPeak = [](int structure, float velocity,
+                                 int note, float p2Level) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(r50PartialParam(1, R50FieldEnabled), 1.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldOscWave), 0.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldLevel), p2Level);
+            engine.setParameter(r50PartialParam(1, R50FieldCutoff), 18000.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldFilterEnvAmount), 0.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldKeyTrack), 0.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldAmpAttack), 0.001f);
+            engine.setParameter(r50PartialParam(1, R50FieldAmpSustain), 1.0f);
+            engine.setParameter(R50ParamToneStructure,
+                                static_cast<float>(structure));
+            engine.noteOn(static_cast<uint8_t>(note),
+                          static_cast<uint8_t>(velocity * 127.0f));
+            return render(engine, 0.3, 0.1);
+        };
+
+        // Mix: adding a second Partial adds level.
+        const float one = twoPartialPeak(0, 0.8f, 60, 0.0f);
+        const float two = twoPartialPeak(0, 0.8f, 60, 1.0f);
+        check(two > one * 1.4f, "Mix sums both Partials");
+
+        // Velocity crossfade: low velocity favours Partial 1, high favours 2.
+        // With only Partial 2 carrying level, loud notes must be louder.
+        const float soft = twoPartialPeak(3, 0.15f, 60, 1.0f);
+        const float loud = twoPartialPeak(3, 0.99f, 60, 1.0f);
+        check(loud > soft, "velocity crossfade moves towards Partial 2");
+
+        // Key crossfade: same, across the key range 48..72.
+        const float low  = twoPartialPeak(4, 0.8f, 48, 1.0f);
+        const float high = twoPartialPeak(4, 0.8f, 72, 1.0f);
+        check(std::isfinite(low) && std::isfinite(high) && high > 0.0f && low > 0.0f,
+              "key crossfade renders across the zone");
+    }
+    {
+        // Ring modulation: two Partials a fifth apart must produce sum and
+        // difference frequencies that neither source contains.
+        r50::R50Engine engine;
+        setupSpectralTone(engine, 0);
+        engine.setParameter(r50PartialParam(0, R50FieldNoiseMix), 0.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldEnabled), 1.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldOscWave), 0.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldSemitone), 7.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldCutoff), 18000.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldFilterEnvAmount), 0.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldKeyTrack), 0.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldAmpSustain), 1.0f);
+        engine.setParameter(R50ParamToneStructure, 1.0f);   // RingMod
+        engine.setParameter(R50ParamToneRingLevel, 1.0f);
+        engine.noteOn(48, 100);
+
+        const std::vector<float> buffer = renderBuffer(engine, 0.5);
+        const int from = static_cast<int>(buffer.size()) - kAnalysisLength;
+        const double f1 = midiToHz(48);
+        const double f2 = midiToHz(55);
+        const double sum  = magAt(buffer, f1 + f2, kSR, from);
+        const double diff = magAt(buffer, f2 - f1, kSR, from);
+        const double carrier = magAt(buffer, f1, kSR, from);
+        printf("       ringmod: f1=%.4f sum=%.4f diff=%.4f\n", carrier, sum, diff);
+        check(sum > carrier * 0.02 && diff > carrier * 0.02,
+              "ring modulation produces sum and difference frequencies");
+    }
+    {
+        // How much does ring modulation alias? The multiply doubles bandwidth
+        // and this phase does not oversample, so the size of the problem is
+        // measured rather than assumed. Tuning Partial 2 an octave above
+        // Partial 1 makes every ring product a harmonic of Partial 1, so
+        // anything landing off that grid is folded energy and nothing else.
+        auto ringAlias = [](int note) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(r50PartialParam(1, R50FieldEnabled), 1.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldOscWave), 0.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldSemitone), 12.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldCutoff), 18000.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldFilterEnvAmount), 0.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldKeyTrack), 0.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldAmpSustain), 1.0f);
+            engine.setParameter(R50ParamToneStructure, 1.0f);
+            engine.setParameter(R50ParamToneRingLevel, 1.0f);
+            engine.noteOn(static_cast<uint8_t>(note), 100);
+
+            const std::vector<float> buffer = renderBuffer(engine, 0.5);
+            const int from = static_cast<int>(buffer.size()) - kAnalysisLength;
+            const double f0 = midiToHz(note);
+            const double fundamental = magAt(buffer, f0, kSR, from);
+            double worst = 0.0;
+            for (double f = 40.0; f < kSR * 0.47; f += 20.0) {
+                const double nearest = std::round(f / f0) * f0;
+                if (std::fabs(f - nearest) < 0.3 * f0) continue;
+                worst = std::max(worst, magAt(buffer, f, kSR, from));
+            }
+            return worst / (fundamental + 1e-12);
+        };
+        const double low  = ringAlias(48);
+        const double high = ringAlias(84);
+        printf("       ring-mod off-grid energy: C3=%.4f  C6=%.4f "
+               "(no oversampling yet)\n", low, high);
+        check(std::isfinite(low) && std::isfinite(high),
+              "ring modulation stays finite across the range");
+    }
+    {
+        // AttackSustain hands over from Partial 1 to Partial 2 within blendTime.
+        r50::R50Engine engine;
+        setupSpectralTone(engine, 0);
+        // Partial 1 silent, Partial 2 loud: the output must therefore *rise*
+        // as the blend moves across.
+        engine.setParameter(r50PartialParam(0, R50FieldLevel), 0.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldEnabled), 1.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldLevel), 1.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldOscWave), 0.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldCutoff), 18000.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldFilterEnvAmount), 0.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldKeyTrack), 0.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldAmpAttack), 0.001f);
+        engine.setParameter(r50PartialParam(1, R50FieldAmpSustain), 1.0f);
+        engine.setParameter(R50ParamToneStructure, 2.0f);   // AttackSustain
+        engine.setParameter(R50ParamToneBlendTime, 0.20f);
+        engine.noteOn(60, 100);
+
+        const std::vector<float> buffer = renderBuffer(engine, 0.6);
+        auto peakBetween = [&buffer](double fromSec, double toSec) {
+            float peak = 0.0f;
+            for (int n = static_cast<int>(fromSec * kSR);
+                 n < static_cast<int>(toSec * kSR) && n < (int)buffer.size(); ++n) {
+                peak = std::max(peak, std::fabs(buffer[n]));
+            }
+            return peak;
+        };
+        const float early = peakBetween(0.00, 0.03);
+        const float late  = peakBetween(0.35, 0.55);
+        printf("       attack/sustain handover: early=%.4f late=%.4f\n", early, late);
+        check(late > early * 3.0f, "AttackSustain hands over to Partial 2");
+    }
+
+    // --- Panning ------------------------------------------------------------
+    {
+        auto channelPeaks = [](float pan) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(r50PartialParam(0, R50FieldPan), pan);
+            engine.noteOn(60, 100);
+
+            const int total = static_cast<int>(0.3 * kSR);
+            std::vector<float> left(total, 0.0f), right(total, 0.0f);
+            for (int offset = 0; offset < total; offset += 137) {
+                const int frames = std::min(137, total - offset);
+                engine.render(left.data() + offset, right.data() + offset, frames);
+            }
+            float peakL = 0.0f, peakR = 0.0f;
+            for (int n = 0; n < total; ++n) {
+                peakL = std::max(peakL, std::fabs(left[n]));
+                peakR = std::max(peakR, std::fabs(right[n]));
+            }
+            return std::pair<float, float>(peakL, peakR);
+        };
+
+        const auto centre = channelPeaks(0.0f);
+        const auto hardLeft = channelPeaks(-1.0f);
+        const auto hardRight = channelPeaks(1.0f);
+        check(std::fabs(centre.first - centre.second) < 0.001f,
+              "a centred Partial is balanced");
+        check(hardLeft.first > hardLeft.second * 20.0f,
+              "pan -1 places the Partial in the left channel");
+        check(hardRight.second > hardRight.first * 20.0f,
+              "pan +1 places the Partial in the right channel");
+    }
+
+    // --- Mixed sources across Partials --------------------------------------
+    {
+        r50::R50Engine engine;
+        setupSpectralTone(engine, 0);
+        // Partial 1: sample. Partial 2: noise.
+        engine.setParameter(r50PartialParam(0, R50FieldSourceType), 1.0f);
+        engine.setParameter(r50PartialParam(0, R50FieldSampleInstrument), 0.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldEnabled), 1.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldNoiseMix), 1.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldCutoff), 12000.0f);
+        engine.setParameter(r50PartialParam(1, R50FieldAmpSustain), 1.0f);
+        engine.noteOn(60, 100);
+        const float peak = render(engine, 0.4);
+        check(std::isfinite(peak) && peak > 0.02f && peak <= 1.05f,
+              "sample and noise Partials render together");
+    }
+
     // --- Determinism --------------------------------------------------------
     {
         auto renderOnce = [] {

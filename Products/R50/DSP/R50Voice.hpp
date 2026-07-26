@@ -1,75 +1,61 @@
 //
 //  R50Voice.hpp
-//  One R50 voice: a single band-limited PCM wave oscillator into the shared
-//  ladder/SVF filter, with dedicated amp and filter envelopes.
+//  One voice: two Partials combined by a Tone structure, producing stereo.
 //
-//  Filter coefficients are recomputed once per control block (see
-//  kControlBlock in R50Engine.hpp) rather than per sample — setParams() runs a
-//  tan() and is far too costly to call 8 times per sample frame.
+//  The structure is what makes two Partials a Tone rather than two sounds
+//  playing at once. AttackSustain in particular — a sampled transient handing
+//  over to a sustaining source — is the structure the whole instrument is
+//  built around.
 //
 
 #pragma once
 
-#include "ADSR.hpp"
-#include "Filter.hpp"
-#include "R50Noise.hpp"
-#include "R50SampleFactory.hpp"
-#include "R50SamplePlayer.hpp"
-#include "R50WaveOscillator.hpp"
+#include <cmath>
+
+#include "R50Partial.hpp"
 #include "Utils.hpp"
 
 namespace r50 {
 
-/// Denormalised parameter block shared by every voice, rebuilt by the engine
-/// whenever a parameter changes.
-enum class SourceType { Wave = 0, Sample };
+static constexpr int kPartialsPerVoice = 2;
+
+enum class ToneStructure {
+    Mix = 0,
+    RingMod,
+    AttackSustain,
+    VelocityCrossfade,
+    KeyCrossfade
+};
+
+static constexpr int kToneStructureCount = 5;
 
 struct VoiceParams {
-    SourceType sourceType     = SourceType::Wave;
-    int   sampleInstrument    = 0;      // index into SampleLibrary
-    float sampleStart         = 0.0f;   // 0..1 scrub into the asset
+    PartialParams partial[kPartialsPerVoice];
 
-    int   waveIndex           = 0;      // index into waveDescriptors()
-    float pulseWidth          = 0.5f;   // only read by Difference-mode waves
-    int   octave              = 0;
-
-    // Source mix: 0 = oscillator only, 1 = noise only.
-    float         noiseMix      = 0.0f;
-    NoiseSpectrum noiseSpectrum = NoiseSpectrum::White;
-    float         noiseTone     = 0.5f;
-    float         noiseRateHz   = 4000.0f;
-    bool          noisePitchTrack = false;
-
-    float cutoffHz            = 4000.0f;
-    float resonance           = 0.2f;
-    float drive               = 0.0f;
-    float slope               = 0.0f;   // 0 = 12 dB, 1 = 24 dB
-    float keyTrack            = 0.5f;
-    float filterEnvAmount     = 0.4f;   // bipolar, +/- 4 octaves at full scale
-
-    float ampAttack = 0.005f, ampDecay = 0.2f, ampSustain = 0.8f, ampRelease = 0.3f;
-    float filterAttack = 0.005f, filterDecay = 0.4f, filterSustain = 0.3f, filterRelease = 0.3f;
+    ToneStructure structure     = ToneStructure::Mix;
+    float         ringLevel     = 1.0f;
+    float         blendTime     = 0.25f;   // AttackSustain handover, seconds
+    int           crossfadeLow  = 48;
+    int           crossfadeHigh = 72;
 };
 
 class Voice {
 public:
     void setSampleRate(double sr) {
         sampleRate_ = sr;
-        osc_.setSampleRate(sr);
-        noise_.setSampleRate(sr);
-        filter_.setSampleRate(sr);
-        ampEnv_.setSampleRate(sr);
-        filterEnv_.setSampleRate(sr);
+        for (Partial &partial : partials_) partial.setSampleRate(sr);
     }
 
-    void setSeed(uint64_t seed) { noise_.setSeed(seed); }
+    void setSeed(uint64_t seed) {
+        // Distinct per Partial as well as per voice, so two Partials both using
+        // noise do not produce the same stream and sum to 6 dB of one source.
+        for (int i = 0; i < kPartialsPerVoice; ++i) {
+            partials_[i].setSeed(seed + 0x9E3779B9ULL * (i + 1));
+        }
+    }
 
     void reset() {
-        sample_.stop();
-        noise_.reset();
-        filter_.reset();
-        ampEnv_.resetHard();
-        filterEnv_.resetHard();
+        for (Partial &partial : partials_) partial.reset();
         active_ = false;
         note_ = -1;
     }
@@ -79,132 +65,137 @@ public:
         velocity_ = velocity;
         held_     = true;
         active_   = true;
-        // A fresh note starts from a known phase so repeated notes are
-        // identical — R50 is deliberately a tight, repeatable digital voice.
-        osc_.reset(0.0f);
-
-        // Resolve the region once, here: the scan is bounded but it has no
-        // business running per sample, and the asset pointer must stay fixed
-        // for the life of the note so a library publish cannot tear it.
-        sample_.stop();
-        if (p.sourceType == SourceType::Sample) {
-            const Multisample *instrument =
-                SampleLibrary::shared().instrument(p.sampleInstrument);
-            const SampleRegion *region = instrument
-                ? instrument->find(note, static_cast<int>(velocity * 127.0f + 0.5f))
-                : nullptr;
-            if (region != nullptr) {
-                sample_.start(SampleLibrary::shared().sample(region->slot),
-                              region, p.sampleStart);
-                sampleRootKey_  = region->rootKey;
-                sampleTuneCents_ = region->tuneCents;
-            }
+        blendPosition_ = 0.0;
+        computeStructureWeights(p);
+        for (int i = 0; i < kPartialsPerVoice; ++i) {
+            partials_[i].noteOn(note, velocity, p.partial[i]);
         }
-
-        applyEnvelopeTimes(p);
-        ampEnv_.gate(true);
-        filterEnv_.gate(true);
     }
 
     void noteOff() {
         held_ = false;
-        ampEnv_.gate(false);
-        filterEnv_.gate(false);
+        for (Partial &partial : partials_) partial.noteOff();
     }
 
     bool isActive() const { return active_; }
     bool isHeld() const { return held_; }
     int  note() const { return note_; }
+
     /// Rough "how disposable is this voice" score for stealing (lower = safer).
-    float releaseProgress() const { return held_ ? 1.0f : ampLevel_; }
-
-    /// Per-control-block update: envelope times and filter coefficients.
-    void updateBlock(const VoiceParams &p, double pitchBendSemitones) {
-        applyEnvelopeTimes(p);
-
-        osc_.setWave(p.waveIndex);
-        osc_.setWidth(p.pulseWidth);
-        noiseMix_ = synth::clampf(p.noiseMix, 0.0f, 1.0f);
-        const double midi = static_cast<double>(note_)
-                          + p.octave * 12.0 + pitchBendSemitones;
-        const double noteHz = synth::noteToHz(midi);
-        osc_.setFrequency(noteHz);
-        noise_.updateBlock(p.noiseSpectrum, p.noiseTone, p.noiseRateHz,
-                           p.noisePitchTrack, noteHz);
-
-        // Sample playback rate follows the same pitch as the oscillator, but
-        // relative to the region's root key rather than to concert pitch.
-        sourceType_ = p.sourceType;
-        if (sample_.isActive()) {
-            const double semitones = (note_ - sampleRootKey_)
-                                   + p.octave * 12.0
-                                   + sampleTuneCents_ / 100.0
-                                   + pitchBendSemitones;
-            sample_.setPlaybackRatio(std::pow(2.0, semitones / 12.0), sampleRate_);
+    float releaseProgress() const {
+        if (held_) return 1.0f;
+        float loudest = 0.0f;
+        for (const Partial &partial : partials_) {
+            loudest = std::max(loudest, partial.ampLevel());
         }
-
-        // Cutoff in octaves: base + key tracking + bipolar envelope.
-        const double keyOctaves = p.keyTrack * (note_ - 60) / 12.0;
-        const double envOctaves = p.filterEnvAmount * 4.0 * filterLevel_;
-        double cutoff = p.cutoffHz * std::pow(2.0, keyOctaves + envOctaves);
-        cutoff = synth::clampf(static_cast<float>(cutoff), 20.0f,
-                               static_cast<float>(sampleRate_ * 0.45));
-        filter_.setParams(cutoff, p.resonance, p.slope, 0.0f, p.drive);
+        return loudest;
     }
 
-    /// One sample. Returns mono; the engine handles gain and stereo.
-    inline float process() {
-        if (!active_) return 0.0f;
+    void updateBlock(const VoiceParams &p, double pitchBendSemitones) {
+        structure_ = p.structure;
+        ringLevel_ = p.ringLevel;
+        blendRate_ = (p.blendTime > 0.0001f)
+                   ? 1.0 / (p.blendTime * sampleRate_) : 1.0;
+        computeStructureWeights(p);
+        for (int i = 0; i < kPartialsPerVoice; ++i) {
+            partials_[i].updateBlock(p.partial[i], pitchBendSemitones);
+        }
+    }
 
-        ampLevel_    = ampEnv_.process();
-        filterLevel_ = filterEnv_.process();
+    /// One stereo sample.
+    inline void process(float &outL, float &outR) {
+        outL = 0.0f;
+        outR = 0.0f;
+        if (!active_) return;
 
-        if (!ampEnv_.isActive()) {
+        const float a = partials_[0].process();
+        const float b = partials_[1].process();
+
+        // A voice lives as long as either Partial is still sounding.
+        if (!partials_[0].isActive() && !partials_[1].isActive()) {
             active_ = false;
-            filter_.reset();
-            return 0.0f;
+            return;
         }
 
-        // Crossfade the two sources before the filter, so the filter and its
-        // envelope shape noise exactly as they shape the oscillator.
-        const float tonal = (sourceType_ == SourceType::Sample)
-                          ? sample_.process()
-                          : osc_.process();
-        const float noise = noise_.process();
-        const float source = tonal + (noise - tonal) * noiseMix_;
-        return filter_.process(source) * ampLevel_ * velocity_;
+        float weightA = weightA_, weightB = weightB_;
+        float extra = 0.0f;
+
+        switch (structure_) {
+            case ToneStructure::Mix:
+            case ToneStructure::VelocityCrossfade:
+            case ToneStructure::KeyCrossfade:
+                break;   // weights already resolved per block
+
+            case ToneStructure::RingMod:
+                // Bandwidth doubles here, so the product aliases against
+                // Nyquist without oversampling both Partials. Measured rather
+                // than assumed — see the ring-mod test.
+                extra = a * b * ringLevel_;
+                break;
+
+            case ToneStructure::AttackSustain: {
+                // Explicit timed handover: the transient Partial gives way to
+                // the sustaining one over blendTime.
+                const float x = static_cast<float>(blendPosition_);
+                weightA = 1.0f - x;
+                weightB = x;
+                if (blendPosition_ < 1.0) {
+                    blendPosition_ += blendRate_;
+                    if (blendPosition_ > 1.0) blendPosition_ = 1.0;
+                }
+                break;
+            }
+        }
+
+        const float left = a * weightA * partials_[0].panLeft()
+                         + b * weightB * partials_[1].panLeft()
+                         + extra * 0.7071f;
+        const float right = a * weightA * partials_[0].panRight()
+                          + b * weightB * partials_[1].panRight()
+                          + extra * 0.7071f;
+        outL = left;
+        outR = right;
     }
 
 private:
-    void applyEnvelopeTimes(const VoiceParams &p) {
-        ampEnv_.setAttack(p.ampAttack);
-        ampEnv_.setDecay(p.ampDecay);
-        ampEnv_.setSustain(p.ampSustain);
-        ampEnv_.setRelease(p.ampRelease);
-        filterEnv_.setAttack(p.filterAttack);
-        filterEnv_.setDecay(p.filterDecay);
-        filterEnv_.setSustain(p.filterSustain);
-        filterEnv_.setRelease(p.filterRelease);
+    /// Equal-power crossfade weights, resolved once per block rather than per
+    /// sample: velocity is fixed for the note and key position cannot change.
+    void computeStructureWeights(const VoiceParams &p) {
+        float position = -1.0f;
+        if (p.structure == ToneStructure::VelocityCrossfade) {
+            position = synth::clampf(velocity_, 0.0f, 1.0f);
+        } else if (p.structure == ToneStructure::KeyCrossfade) {
+            const float low = static_cast<float>(p.crossfadeLow);
+            const float high = static_cast<float>(p.crossfadeHigh);
+            position = (high > low)
+                ? synth::clampf((note_ - low) / (high - low), 0.0f, 1.0f)
+                : 0.0f;
+        }
+
+        if (position < 0.0f) {          // Mix, RingMod, AttackSustain
+            weightA_ = 1.0f;
+            weightB_ = 1.0f;
+            return;
+        }
+        const float angle = position * 0.5f * static_cast<float>(synth::kPi);
+        weightA_ = std::cos(angle);
+        weightB_ = std::sin(angle);
     }
 
-    WaveOscillator     osc_;
-    SamplePlayer       sample_;
-    NoiseSource        noise_;
-    synth::LadderFilter filter_;
-    synth::ADSR        ampEnv_;
-    synth::ADSR        filterEnv_;
+    Partial partials_[kPartialsPerVoice];
 
-    double sampleRate_  = 44100.0;
-    int    note_        = -1;
-    float  velocity_    = 1.0f;
-    bool   held_        = false;
-    bool   active_      = false;
-    SourceType sourceType_ = SourceType::Wave;
-    int    sampleRootKey_   = 60;
-    float  sampleTuneCents_ = 0.0f;
-    float  noiseMix_    = 0.0f;
-    float  ampLevel_    = 0.0f;
-    float  filterLevel_ = 0.0f;
+    double sampleRate_ = 44100.0;
+    int    note_       = -1;
+    float  velocity_   = 1.0f;
+    bool   held_       = false;
+    bool   active_     = false;
+
+    ToneStructure structure_ = ToneStructure::Mix;
+    float  ringLevel_     = 1.0f;
+    float  weightA_       = 1.0f;
+    float  weightB_       = 1.0f;
+    double blendPosition_ = 0.0;
+    double blendRate_     = 1.0;
 };
 
 } // namespace r50

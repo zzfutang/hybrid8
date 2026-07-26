@@ -18,6 +18,12 @@ struct R50View: View {
     @ObservedObject var samples: R50SampleStore
     @State private var page: R50Page = .synth
     @State private var showingImporter = false
+    /// Which Partial the Synth page panels are editing.
+    @State private var partial = 0
+
+    private func addr(_ field: R50PartialField) -> R50Param {
+        r50PartialParam(Int32(partial), field)
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -29,6 +35,8 @@ struct R50View: View {
                 .frame(width: geo.size.width, height: geo.size.height)
         }
         .background(R50Palette.chassisLow)
+        // Keep the sample browser pointed at the Partial the Synth page edits.
+        .onChange(of: partial) { samples.partial = $0 }
     }
 
     private var fascia: some View {
@@ -49,14 +57,81 @@ struct R50View: View {
     // MARK: - Pages
 
     private var synthPage: some View {
-        HStack(alignment: .top, spacing: 10) {
-            oscillator.frame(width: 190)
-            noise.frame(width: 230)
-            filter.frame(width: 300)
-            ampEnvelope.frame(width: 190)
-            filterEnvelope.frame(width: 190)
+        VStack(spacing: 8) {
+            partialStrip
+            HStack(alignment: .top, spacing: 10) {
+                oscillator.frame(width: 190)
+                noise.frame(width: 205)
+                filter.frame(width: 270)
+                ampEnvelope.frame(width: 165)
+                filterEnvelope.frame(width: 165)
+                tone.frame(width: 145)
+            }
+            .frame(height: 268)
         }
-        .frame(height: 300)
+    }
+
+    /// Which Partial the panels below edit, plus that Partial's own mix
+    /// controls — they belong next to the selector rather than buried in a
+    /// panel, because they are what make two Partials a Tone.
+    private var partialStrip: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 2) {
+                ForEach(0..<2, id: \.self) { index in
+                    let selected = index == partial
+                    let on = model.value(r50PartialParam(Int32(index),
+                                                         R50FieldEnabled)) >= 0.5
+                    Text("PARTIAL \(index + 1)")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .tracking(1.0)
+                        .foregroundColor(selected ? Color.black
+                                                  : (on ? R50Palette.legend
+                                                        : Color(white: 0.42)))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(selected ? R50Palette.glow : Color(white: 0.14))
+                        .contentShape(Rectangle())
+                        .onTapGesture { partial = index }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color(white: 0.32), lineWidth: 1))
+
+            R50Selector(title: "", address: addr(R50FieldEnabled),
+                        options: R50Parameters.onOffNames, model: model)
+                .frame(width: 90)
+
+            HStack(spacing: 4) {
+                R50Knob(title: "Level", address: addr(R50FieldLevel), model: model)
+                R50Knob(title: "Pan", address: addr(R50FieldPan), model: model)
+                R50Knob(title: "Semi", address: addr(R50FieldSemitone), model: model)
+                R50Knob(title: "Fine", address: addr(R50FieldFine), model: model)
+            }
+            Spacer()
+        }
+    }
+
+    private var tone: some View {
+        R50Panel(title: "Tone") {
+            VStack(alignment: .leading, spacing: 12) {
+                R50WaveGrid(title: "Structure", address: R50ParamToneStructure,
+                            options: R50Parameters.toneStructureNames,
+                            columns: 2, model: model)
+                HStack(spacing: 4) {
+                    R50Knob(title: "Ring", address: R50ParamToneRingLevel,
+                            model: model)
+                    R50Knob(title: "Blend", address: R50ParamToneBlendTime,
+                            model: model)
+                }
+                HStack(spacing: 4) {
+                    R50Knob(title: "XF Low", address: R50ParamToneCrossfadeLow,
+                            model: model)
+                    R50Knob(title: "XF High", address: R50ParamToneCrossfadeHigh,
+                            model: model)
+                }
+            }
+        }
     }
 
     private var samplePage: some View {
@@ -86,9 +161,9 @@ struct R50View: View {
             R50Panel(title: "Playback") {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(spacing: 4) {
-                        R50Knob(title: "Start", address: R50ParamSampleStart,
+                        R50Knob(title: "Start", address: addr(R50FieldSampleStart),
                                 model: model)
-                        R50Knob(title: "Octave", address: R50ParamOctave,
+                        R50Knob(title: "Octave", address: addr(R50FieldOctave),
                                 model: model)
                     }
                     Text(statusText)
@@ -163,7 +238,7 @@ struct R50View: View {
 
     private var statusText: String {
         if let message = samples.errorMessage { return message }
-        let sourceIsSample = model.value(R50ParamSourceType) >= 0.5
+        let sourceIsSample = model.value(addr(R50FieldSourceType)) >= 0.5
         return sourceIsSample
             ? "Sample source active. Factory instruments are generated at startup."
             : "Set Source to Sample on the Synth page to hear these."
@@ -250,14 +325,14 @@ struct R50View: View {
     private var oscillator: some View {
         R50Panel(title: "Oscillator") {
             VStack(alignment: .leading, spacing: 12) {
-                R50Selector(title: "Source", address: R50ParamSourceType,
+                R50Selector(title: "Source", address: addr(R50FieldSourceType),
                             options: R50Parameters.sourceTypeNames, model: model)
-                R50WaveGrid(title: "Wave", address: R50ParamOscWave,
+                R50WaveGrid(title: "Wave", address: addr(R50FieldOscWave),
                             options: R50Parameters.waveformNames,
                             columns: 3, model: model)
                 HStack(spacing: 4) {
-                    R50Knob(title: "Width", address: R50ParamPulseWidth, model: model)
-                    R50Knob(title: "Octave", address: R50ParamOctave, model: model)
+                    R50Knob(title: "Width", address: addr(R50FieldPulseWidth), model: model)
+                    R50Knob(title: "Octave", address: addr(R50FieldOctave), model: model)
                 }
             }
         }
@@ -266,16 +341,16 @@ struct R50View: View {
     private var noise: some View {
         R50Panel(title: "Noise") {
             VStack(alignment: .leading, spacing: 12) {
-                R50WaveGrid(title: "Spectrum", address: R50ParamNoiseSpectrum,
+                R50WaveGrid(title: "Spectrum", address: addr(R50FieldNoiseSpectrum),
                             options: R50Parameters.noiseSpectrumNames,
                             columns: 3, model: model)
                 HStack(spacing: 4) {
-                    R50Knob(title: "Mix", address: R50ParamNoiseMix, model: model)
-                    R50Knob(title: "Tone", address: R50ParamNoiseTone, model: model)
-                    R50Knob(title: "Rate", address: R50ParamNoiseRate, model: model)
+                    R50Knob(title: "Mix", address: addr(R50FieldNoiseMix), model: model)
+                    R50Knob(title: "Tone", address: addr(R50FieldNoiseTone), model: model)
+                    R50Knob(title: "Rate", address: addr(R50FieldNoiseRate), model: model)
                 }
                 R50Selector(title: "Tone / Rate Source",
-                            address: R50ParamNoisePitchTrack,
+                            address: addr(R50FieldNoisePitchTrack),
                             options: R50Parameters.trackNames, model: model)
             }
         }
@@ -284,16 +359,16 @@ struct R50View: View {
     private var filter: some View {
         R50Panel(title: "Filter") {
             VStack(alignment: .leading, spacing: 14) {
-                R50Selector(title: "Slope", address: R50ParamSlope,
+                R50Selector(title: "Slope", address: addr(R50FieldSlope),
                             options: R50Parameters.slopeNames, model: model)
                 HStack(spacing: 4) {
-                    R50Knob(title: "Cutoff", address: R50ParamCutoff, model: model)
-                    R50Knob(title: "Reso", address: R50ParamResonance, model: model)
-                    R50Knob(title: "Drive", address: R50ParamDrive, model: model)
-                    R50Knob(title: "Key Trk", address: R50ParamKeyTrack, model: model)
+                    R50Knob(title: "Cutoff", address: addr(R50FieldCutoff), model: model)
+                    R50Knob(title: "Reso", address: addr(R50FieldResonance), model: model)
+                    R50Knob(title: "Drive", address: addr(R50FieldDrive), model: model)
+                    R50Knob(title: "Key Trk", address: addr(R50FieldKeyTrack), model: model)
                 }
                 HStack(spacing: 4) {
-                    R50Knob(title: "Env Amt", address: R50ParamFilterEnvAmount, model: model)
+                    R50Knob(title: "Env Amt", address: addr(R50FieldFilterEnvAmount), model: model)
                 }
             }
         }
@@ -301,28 +376,29 @@ struct R50View: View {
 
     private var ampEnvelope: some View {
         R50Panel(title: "Amp Envelope") {
-            envelopeGrid(attack: R50ParamAmpAttack, decay: R50ParamAmpDecay,
-                         sustain: R50ParamAmpSustain, release: R50ParamAmpRelease)
+            envelopeGrid(attack: R50FieldAmpAttack, decay: R50FieldAmpDecay,
+                         sustain: R50FieldAmpSustain, release: R50FieldAmpRelease)
         }
     }
 
     private var filterEnvelope: some View {
         R50Panel(title: "Filter Envelope") {
-            envelopeGrid(attack: R50ParamFilterAttack, decay: R50ParamFilterDecay,
-                         sustain: R50ParamFilterSustain, release: R50ParamFilterRelease)
+            envelopeGrid(attack: R50FieldFilterAttack, decay: R50FieldFilterDecay,
+                         sustain: R50FieldFilterSustain, release: R50FieldFilterRelease)
         }
     }
 
-    private func envelopeGrid(attack: R50Param, decay: R50Param,
-                              sustain: R50Param, release: R50Param) -> some View {
+    private func envelopeGrid(attack: R50PartialField, decay: R50PartialField,
+                              sustain: R50PartialField,
+                              release: R50PartialField) -> some View {
         VStack(spacing: 12) {
             HStack(spacing: 4) {
-                R50Knob(title: "Attack", address: attack, model: model)
-                R50Knob(title: "Decay", address: decay, model: model)
+                R50Knob(title: "Attack", address: addr(attack), model: model)
+                R50Knob(title: "Decay", address: addr(decay), model: model)
             }
             HStack(spacing: 4) {
-                R50Knob(title: "Sustain", address: sustain, model: model)
-                R50Knob(title: "Release", address: release, model: model)
+                R50Knob(title: "Sustain", address: addr(sustain), model: model)
+                R50Knob(title: "Release", address: addr(release), model: model)
             }
         }
     }

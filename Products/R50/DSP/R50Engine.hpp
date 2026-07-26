@@ -154,16 +154,22 @@ public:
             }
 
             for (int i = 0; i < block; ++i) {
-                float sum = 0.0f;
-                for (auto &voice : voices_) sum += voice.process();
+                float sumL = 0.0f, sumR = 0.0f;
+                for (auto &voice : voices_) {
+                    float voiceL = 0.0f, voiceR = 0.0f;
+                    voice.process(voiceL, voiceR);
+                    sumL += voiceL;
+                    sumR += voiceR;
+                }
 
-                // Headroom for 8 stacked voices, then a gentle safety clip.
-                sum *= 0.25f * gainSmoother_.next();
-                sum = synth::softClip(sum);
+                // Headroom for stacked voices, then a gentle safety clip.
+                const float gain = 0.25f * gainSmoother_.next();
+                sumL = synth::softClip(sumL * gain);
+                sumR = synth::softClip(sumR * gain);
 
-                outL[offset + i] = sum;
-                outR[offset + i] = sum;
-                const float magnitude = sum < 0.0f ? -sum : sum;
+                outL[offset + i] = sumL;
+                outR[offset + i] = sumR;
+                const float magnitude = std::max(std::fabs(sumL), std::fabs(sumR));
                 if (magnitude > peak) peak = magnitude;
             }
             offset += block;
@@ -178,6 +184,10 @@ private:
     }
     float get(R50Param address) const {
         return store_[address].load(std::memory_order_relaxed);
+    }
+    void setPartial(int partial, R50PartialField field, float value) {
+        store_[r50PartialParam(partial, field)]
+            .store(value, std::memory_order_relaxed);
     }
 
     void setDefaults() {
@@ -208,6 +218,112 @@ private:
         set(R50ParamSourceType,       0.0f);   // wave table
         set(R50ParamSampleInstrument, 0.0f);
         set(R50ParamSampleStart,      0.0f);
+
+        // Partial 1 mixing controls, and Partial 2 off by default so an
+        // existing one-Partial preset sounds exactly as it did before.
+        set(R50ParamP1Enabled,  1.0f);
+        set(R50ParamP1Level,    1.0f);
+        set(R50ParamP1Pan,      0.0f);
+        set(R50ParamP1Semitone, 0.0f);
+        set(R50ParamP1Fine,     0.0f);
+
+        PartialParams defaults;
+        setPartial(1, R50FieldEnabled,         0.0f);
+        setPartial(1, R50FieldSourceType,      0.0f);
+        setPartial(1, R50FieldSampleInstrument,0.0f);
+        setPartial(1, R50FieldSampleStart,     0.0f);
+        setPartial(1, R50FieldOscWave,         0.0f);
+        setPartial(1, R50FieldPulseWidth,      defaults.pulseWidth);
+        setPartial(1, R50FieldOctave,          0.0f);
+        setPartial(1, R50FieldSemitone,        0.0f);
+        setPartial(1, R50FieldFine,            0.0f);
+        setPartial(1, R50FieldNoiseMix,        0.0f);
+        setPartial(1, R50FieldNoiseSpectrum,   0.0f);
+        setPartial(1, R50FieldNoiseTone,       0.5f);
+        setPartial(1, R50FieldNoiseRate,       4000.0f);
+        setPartial(1, R50FieldNoisePitchTrack, 0.0f);
+        setPartial(1, R50FieldCutoff,          3200.0f);
+        setPartial(1, R50FieldResonance,       0.15f);
+        setPartial(1, R50FieldDrive,           0.0f);
+        setPartial(1, R50FieldSlope,           1.0f);
+        setPartial(1, R50FieldKeyTrack,        0.5f);
+        setPartial(1, R50FieldFilterEnvAmount, 0.45f);
+        setPartial(1, R50FieldAmpAttack,       0.004f);
+        setPartial(1, R50FieldAmpDecay,        0.25f);
+        setPartial(1, R50FieldAmpSustain,      0.75f);
+        setPartial(1, R50FieldAmpRelease,      0.30f);
+        setPartial(1, R50FieldFilterAttack,    0.004f);
+        setPartial(1, R50FieldFilterDecay,     0.45f);
+        setPartial(1, R50FieldFilterSustain,   0.30f);
+        setPartial(1, R50FieldFilterRelease,   0.30f);
+        setPartial(1, R50FieldLevel,           1.0f);
+        setPartial(1, R50FieldPan,             0.0f);
+
+        set(R50ParamToneStructure,     0.0f);   // Mix
+        set(R50ParamToneRingLevel,     1.0f);
+        set(R50ParamToneBlendTime,     0.25f);
+        set(R50ParamToneCrossfadeLow,  48.0f);
+        set(R50ParamToneCrossfadeHigh, 72.0f);
+    }
+
+    /// Derive the denormalised block the voices read from the atomic store.
+    ///
+    /// RENDER THREAD ONLY (plus the constructor, before any render can run).
+    /// Writers on other threads touch nothing but `store_`, which keeps every
+    /// piece of live DSP state — params_, the voices and the gain smoother —
+    /// single-threaded.
+    /// Read one Partial's block out of the atomic store. Addresses come from
+    /// r50PartialParam(), the single authority for the mapping — Partial 1 uses
+    /// the original scattered addresses so old presets keep their meaning.
+    void snapshotPartial(int index, PartialParams &out) const {
+        const auto field = [&](R50PartialField f) {
+            return store_[r50PartialParam(index, f)]
+                       .load(std::memory_order_relaxed);
+        };
+
+        out.enabled = field(R50FieldEnabled) >= 0.5f;
+
+        out.sourceType = field(R50FieldSourceType) >= 0.5f
+                       ? SourceType::Sample : SourceType::Wave;
+        const int instrument = static_cast<int>(field(R50FieldSampleInstrument) + 0.5f);
+        out.sampleInstrument = instrument < 0 ? 0 : instrument;
+        out.sampleStart = synth::clampf(field(R50FieldSampleStart), 0.0f, 1.0f);
+
+        const int wave = static_cast<int>(field(R50FieldOscWave) + 0.5f);
+        out.waveIndex = wave < 0 ? 0 : (wave >= kWaveCount ? kWaveCount - 1 : wave);
+        out.pulseWidth = field(R50FieldPulseWidth);
+        out.octave     = static_cast<int>(std::lround(field(R50FieldOctave)));
+        out.semitone   = static_cast<int>(std::lround(field(R50FieldSemitone)));
+        out.fineCents  = field(R50FieldFine);
+
+        out.noiseMix = synth::clampf(field(R50FieldNoiseMix), 0.0f, 1.0f);
+        const int spectrum = static_cast<int>(field(R50FieldNoiseSpectrum) + 0.5f);
+        out.noiseSpectrum = static_cast<NoiseSpectrum>(
+            spectrum < 0 ? 0
+                         : (spectrum >= kNoiseSpectrumCount
+                                ? kNoiseSpectrumCount - 1 : spectrum));
+        out.noiseTone       = synth::clampf(field(R50FieldNoiseTone), 0.0f, 1.0f);
+        out.noiseRateHz     = field(R50FieldNoiseRate);
+        out.noisePitchTrack = field(R50FieldNoisePitchTrack) >= 0.5f;
+
+        out.cutoffHz        = field(R50FieldCutoff);
+        out.resonance       = synth::clampf(field(R50FieldResonance), 0.0f, 1.0f);
+        out.drive           = synth::clampf(field(R50FieldDrive), 0.0f, 1.0f);
+        out.slope           = synth::clampf(field(R50FieldSlope), 0.0f, 1.0f);
+        out.keyTrack        = synth::clampf(field(R50FieldKeyTrack), 0.0f, 1.0f);
+        out.filterEnvAmount = synth::clampf(field(R50FieldFilterEnvAmount), -1.0f, 1.0f);
+
+        out.ampAttack     = std::max(0.0005f, field(R50FieldAmpAttack));
+        out.ampDecay      = std::max(0.0005f, field(R50FieldAmpDecay));
+        out.ampSustain    = synth::clampf(field(R50FieldAmpSustain), 0.0f, 1.0f);
+        out.ampRelease    = std::max(0.0005f, field(R50FieldAmpRelease));
+        out.filterAttack  = std::max(0.0005f, field(R50FieldFilterAttack));
+        out.filterDecay   = std::max(0.0005f, field(R50FieldFilterDecay));
+        out.filterSustain = synth::clampf(field(R50FieldFilterSustain), 0.0f, 1.0f);
+        out.filterRelease = std::max(0.0005f, field(R50FieldFilterRelease));
+
+        out.level = synth::clampf(field(R50FieldLevel), 0.0f, 1.0f);
+        out.pan   = synth::clampf(field(R50FieldPan), -1.0f, 1.0f);
     }
 
     /// Derive the denormalised block the voices read from the atomic store.
@@ -217,43 +333,21 @@ private:
     /// piece of live DSP state — params_, the voices and the gain smoother —
     /// single-threaded.
     void snapshotParams() {
-        const int wave = static_cast<int>(get(R50ParamOscWave) + 0.5f);
-        params_.waveIndex = wave < 0 ? 0
-                          : (wave >= kWaveCount ? kWaveCount - 1 : wave);
-        params_.pulseWidth      = get(R50ParamPulseWidth);
-        params_.octave          = static_cast<int>(std::lround(get(R50ParamOctave)));
+        for (int i = 0; i < kPartialsPerVoice; ++i) {
+            snapshotPartial(i, params_.partial[i]);
+        }
 
-        params_.cutoffHz        = get(R50ParamCutoff);
-        params_.resonance       = synth::clampf(get(R50ParamResonance), 0.0f, 1.0f);
-        params_.drive           = synth::clampf(get(R50ParamDrive), 0.0f, 1.0f);
-        params_.slope           = synth::clampf(get(R50ParamSlope), 0.0f, 1.0f);
-        params_.keyTrack        = synth::clampf(get(R50ParamKeyTrack), 0.0f, 1.0f);
-        params_.filterEnvAmount = synth::clampf(get(R50ParamFilterEnvAmount), -1.0f, 1.0f);
-
-        params_.ampAttack     = std::max(0.0005f, get(R50ParamAmpAttack));
-        params_.ampDecay      = std::max(0.0005f, get(R50ParamAmpDecay));
-        params_.ampSustain    = synth::clampf(get(R50ParamAmpSustain), 0.0f, 1.0f);
-        params_.ampRelease    = std::max(0.0005f, get(R50ParamAmpRelease));
-        params_.filterAttack  = std::max(0.0005f, get(R50ParamFilterAttack));
-        params_.filterDecay   = std::max(0.0005f, get(R50ParamFilterDecay));
-        params_.filterSustain = synth::clampf(get(R50ParamFilterSustain), 0.0f, 1.0f);
-        params_.filterRelease = std::max(0.0005f, get(R50ParamFilterRelease));
-
-        params_.sourceType = get(R50ParamSourceType) >= 0.5f
-                           ? SourceType::Sample : SourceType::Wave;
-        const int instrument = static_cast<int>(get(R50ParamSampleInstrument) + 0.5f);
-        params_.sampleInstrument = instrument < 0 ? 0 : instrument;
-        params_.sampleStart = synth::clampf(get(R50ParamSampleStart), 0.0f, 1.0f);
-
-        params_.noiseMix = synth::clampf(get(R50ParamNoiseMix), 0.0f, 1.0f);
-        const int spectrum = static_cast<int>(get(R50ParamNoiseSpectrum) + 0.5f);
-        params_.noiseSpectrum = static_cast<NoiseSpectrum>(
-            spectrum < 0 ? 0
-                         : (spectrum >= kNoiseSpectrumCount
-                                ? kNoiseSpectrumCount - 1 : spectrum));
-        params_.noiseTone       = synth::clampf(get(R50ParamNoiseTone), 0.0f, 1.0f);
-        params_.noiseRateHz     = get(R50ParamNoiseRate);
-        params_.noisePitchTrack = get(R50ParamNoisePitchTrack) >= 0.5f;
+        const int structure = static_cast<int>(get(R50ParamToneStructure) + 0.5f);
+        params_.structure = static_cast<ToneStructure>(
+            structure < 0 ? 0
+                          : (structure >= kToneStructureCount
+                                 ? kToneStructureCount - 1 : structure));
+        params_.ringLevel = synth::clampf(get(R50ParamToneRingLevel), 0.0f, 1.0f);
+        params_.blendTime = std::max(0.001f, get(R50ParamToneBlendTime));
+        params_.crossfadeLow =
+            static_cast<int>(std::lround(get(R50ParamToneCrossfadeLow)));
+        params_.crossfadeHigh =
+            static_cast<int>(std::lround(get(R50ParamToneCrossfadeHigh)));
 
         gainSmoother_.setTarget(synth::clampf(get(R50ParamMasterGain), 0.0f, 1.0f));
     }

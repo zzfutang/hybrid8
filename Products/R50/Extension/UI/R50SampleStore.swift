@@ -47,12 +47,20 @@ final class R50SampleStore: ObservableObject {
         loadPersistentSamples()
     }
 
+    /// Which Partial the sample browser edits. The Synth page owns the
+    /// selection; this keeps the two pages pointing at the same Partial.
+    @Published var partial = 0
+
+    private var instrumentAddress: R50Param {
+        r50PartialParam(Int32(partial), R50FieldSampleInstrument)
+    }
+
     var selectedIndex: Int {
-        Int(model.value(R50ParamSampleInstrument).rounded())
+        Int(model.value(instrumentAddress).rounded())
     }
 
     func select(_ entry: SampleEntry) {
-        model.parameter(R50ParamSampleInstrument)?
+        model.parameter(instrumentAddress)?
             .setValue(Float(entry.index), originator: nil)
         model.objectWillChange.send()
     }
