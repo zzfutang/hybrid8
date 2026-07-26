@@ -705,19 +705,65 @@ int main() {
                 if (data->loopMode == r50::LoopMode::Forward) {
                     ++loopedCount;
                     // Seamless by construction: every partial is an integer
-                    // multiple of sr/L, so the wrap is continuous. Compare the
-                    // step across the join with the step just inside it.
+                    // multiple of sr/L, so s[L] == s[0] and the wrap is just
+                    // one more step of the waveform. Compare it against the
+                    // largest step the waveform takes anywhere — comparing it
+                    // against the immediately preceding step instead is
+                    // meaningless, because a loop that happens to end at a
+                    // flat spot makes any legitimate step look like a jump.
                     const int last = static_cast<int>(data->loopEnd) - 1;
                     const float across =
                         std::fabs(data->samples[data->loopStart] - data->samples[last]);
-                    const float inside =
-                        std::fabs(data->samples[last] - data->samples[last - 1]);
-                    if (across > inside * 4.0f + 0.02f) allGood = false;
+                    float largestStep = 0.0f;
+                    for (int n = 1; n <= last; ++n) {
+                        largestStep = std::max(largestStep,
+                            std::fabs(data->samples[n] - data->samples[n - 1]));
+                    }
+                    if (across > largestStep * 1.05f + 0.005f) allGood = false;
                 }
             }
         }
         check(allGood, "generated assets are finite, audible and seamless");
-        check(loopedCount >= 12, "sustains are generated across three key zones");
+        check(loopedCount >= 28, "sustains are generated for every key zone");
+
+        // A zone that fails to generate leaves a hole in the map, and a note
+        // landing in it is silent rather than wrong — easy to miss by ear at
+        // the extremes of the keyboard. Caught exactly that: the top octave
+        // had no region because the loop-length search never reached the
+        // cycle counts a high root needs.
+        bool fullyMapped = true;
+        for (int i = 0; i < library.instrumentCount(); ++i) {
+            const r50::Multisample *instrument = library.instrument(i);
+            if (instrument == nullptr) { fullyMapped = false; continue; }
+            for (int key = 0; key <= 127; ++key) {
+                const r50::SampleRegion *region = instrument->find(key, 100);
+                if (region == nullptr || library.sample(region->slot) == nullptr) {
+                    printf("       instrument %d has no sample for key %d\n", i, key);
+                    fullyMapped = false;
+                    key = 127;   // one report per instrument is enough
+                }
+            }
+        }
+        check(fullyMapped, "every instrument covers all 128 keys");
+
+        // The loop repeats at (loop duration / transposition), and that rate
+        // is what the ear hears as flutter. Keep it low across every zone.
+        double fastestRepeat = 0.0;
+        for (int i = 0; i < library.instrumentCount(); ++i) {
+            const r50::Multisample *instrument = library.instrument(i);
+            for (int r = 0; r < instrument->regionCount; ++r) {
+                const r50::SampleRegion &region = instrument->regions[r];
+                const r50::SampleData *data = library.sample(region.slot);
+                if (data == nullptr || data->loopMode != r50::LoopMode::Forward)
+                    continue;
+                const double seconds = data->samples.size() / data->sourceSampleRate;
+                const double ratio =
+                    std::pow(2.0, (region.highKey - region.rootKey) / 12.0);
+                fastestRepeat = std::max(fastestRepeat, ratio / seconds);
+            }
+        }
+        printf("       fastest loop repeat across all zones: %.1f Hz\n", fastestRepeat);
+        check(fastestRepeat < 5.0, "loop repetition stays below 5 Hz everywhere");
     }
 
     // --- Sample playback through the engine ---------------------------------

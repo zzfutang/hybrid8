@@ -21,6 +21,7 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
     // announces itself); in a third-party DAW the host owns the keyboard.
     private var standaloneMusicalTyping = false
     private let typing = MusicalTypingStateMachine()
+    private var clickMonitor: Any?
 
     public override func loadView() {
         let keyView = MusicalTypingView(
@@ -43,7 +44,35 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
                 // second grabs first responder so typing works from launch.
                 self?.grabKeyboardFocus()
             }
+
+        // Anything that takes first responder away — the sample file panel,
+        // switching apps, clicking a control — leaves keys falling through to
+        // super, where macOS answers every keystroke with the alert sound.
+        // Reclaiming it whenever our window becomes key covers all of those.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil, queue: .main) { [weak self] notification in
+                guard let self,
+                      let window = notification.object as? NSWindow,
+                      window === self.view.window else { return }
+                self.grabKeyboardFocus()
+            }
+
+        // A click inside the editor can leave focus on whichever control was
+        // hit; take it back once the click finishes.
+        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp]) {
+            [weak self] event in
+            if let self, event.window === self.view.window {
+                DispatchQueue.main.async { self.grabKeyboardFocus() }
+            }
+            return event
+        }
+
         if audioUnit != nil { setupUI() }
+    }
+
+    deinit {
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
     }
 
     public override func viewDidAppear() {
@@ -80,6 +109,7 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
         host.frame = view.bounds
         host.autoresizingMask = [.width, .height]
         view.addSubview(host)
+        grabKeyboardFocus()
     }
 
     /// Returns true when the event was consumed (so the view must not fall

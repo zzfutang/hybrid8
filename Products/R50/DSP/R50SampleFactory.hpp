@@ -37,13 +37,20 @@ inline int chooseLoopLength(double frequency, double sampleRate,
                             double minSeconds, double maxSeconds) {
     const double minLength = minSeconds * sampleRate;
     const double maxLength = maxSeconds * sampleRate;
+
+    // Derive the cycle-count range from the wanted duration rather than
+    // scanning from 1. A high root needs thousands of cycles to fill a
+    // second, and a fixed scan limit silently produced no length at all —
+    // which mapped as a missing region, and a silent top octave.
+    const int firstCycle = std::max(1,
+        static_cast<int>(std::ceil(minLength * frequency / sampleRate)));
+    const int lastCycle =
+        static_cast<int>(std::floor(maxLength * frequency / sampleRate));
+
     int bestLength = 0;
     double bestError = 1e9;
-
-    for (int harmonicIndex = 1; harmonicIndex < 2000; ++harmonicIndex) {
-        const double exact = harmonicIndex * sampleRate / frequency;
-        if (exact < minLength) continue;
-        if (exact > maxLength) break;
+    for (int cycles = firstCycle; cycles <= lastCycle; ++cycles) {
+        const double exact = cycles * sampleRate / frequency;
         const int rounded = static_cast<int>(std::lround(exact));
         const double error = std::fabs(exact - rounded);
         if (error < bestError) { bestError = error; bestLength = rounded; }
@@ -105,7 +112,7 @@ enum class SustainVoicing { Choir, Strings, WarmPad, GlassPad };
 /// copies one or two bins apart, which is what produces the slow beating.
 inline SampleData generateSustain(SustainVoicing voicing, double frequency,
                                   int rootKey, double sampleRate) {
-    const int length = chooseLoopLength(frequency, sampleRate, 0.25, 0.60);
+    const int length = chooseLoopLength(frequency, sampleRate, 0.70, 1.15);
     if (length <= 0) return SampleData{};
 
     const int fundamental = static_cast<int>(
@@ -113,7 +120,7 @@ inline SampleData generateSustain(SustainVoicing voicing, double frequency,
     const int seed = static_cast<int>(voicing) * 101 + rootKey;
 
     std::vector<GeneratedPartial> partials;
-    const int maxHarmonic = 40;
+    const int maxHarmonic = 26;
 
     for (int harmonic = 1; harmonic <= maxHarmonic; ++harmonic) {
         const int bin = fundamental * harmonic;
@@ -152,7 +159,7 @@ inline SampleData generateSustain(SustainVoicing voicing, double frequency,
         if (amplitude <= 0.0f) continue;
 
         // Detuned copies, offset by whole bins so periodicity is preserved.
-        const int spread = (voicing == SustainVoicing::Strings) ? 2 : 1;
+        const int spread = 2;
         partials.push_back({bin, amplitude, generatedPhase(bin, seed)});
         for (int offset = 1; offset <= spread; ++offset) {
             const float sideAmplitude = amplitude * (offset == 1 ? 0.7f : 0.4f);
@@ -260,10 +267,18 @@ inline void buildFactoryContent(SampleLibrary &library) {
     const double sampleRate = 44100.0;
 
     struct ZoneSpec { int rootKey, lowKey, highKey; };
-    static const ZoneSpec zones[3] = {
-        {48,  0, 53},
-        {60, 54, 65},
-        {72, 66, 127},
+    // One zone per octave. Transposition inside a zone is at most a few
+    // semitones, so the loop keeps very nearly its generated duration — with
+    // three zones the top one stretched from root 72 to key 127 and turned a
+    // 0.5 s loop into a 21 ms, 48 Hz buzz.
+    static const ZoneSpec zones[7] = {
+        { 36,   0,  41},
+        { 48,  42,  53},
+        { 60,  54,  65},
+        { 72,  66,  77},
+        { 84,  78,  89},
+        { 96,  90, 101},
+        {108, 102, 127},
     };
 
     struct SustainSpec { SustainVoicing voicing; const char *name; };

@@ -37,6 +37,7 @@ final class R50AudioUnitHost: ObservableObject, PerformanceEventSink {
         self.product = product
         load()
         setupMIDI()
+        observeActivation()
         typingKeyboard = MusicalTypingController(sink: self) { [weak self] state in
             DispatchQueue.main.async { self?.typingInfo = state.description }
         }
@@ -88,6 +89,19 @@ final class R50AudioUnitHost: ObservableObject, PerformanceEventSink {
     /// standalone host, so it enables computer-keyboard musical typing. Keys
     /// routed to the remote view never reach this process's event handling, so
     /// the typing responder has to live in the extension.
+    ///
+    /// Announced again on every activation, not just once after loading: the
+    /// single post races the editor's observer registration, and if the editor
+    /// misses it the flag never gets set and every keystroke draws the macOS
+    /// alert sound instead of a note.
+    private func observeActivation() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil, queue: .main) { [weak self] _ in
+                self?.announceStandaloneHost()
+            }
+    }
+
     private func announceStandaloneHost() {
         DistributedNotificationCenter.default().postNotificationName(
             Notification.Name("com.johangorsjo.R50.standaloneActive"),
