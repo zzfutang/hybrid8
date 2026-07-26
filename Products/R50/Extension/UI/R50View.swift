@@ -12,6 +12,11 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Which button opened the browser's file panel.
+enum BrowserFileAction {
+    case importAudio, exportFolder
+}
+
 enum R50Page: String, CaseIterable {
     case partial   = "Partial"
     case envelopes = "Envelopes"
@@ -25,8 +30,12 @@ struct R50View: View {
     @ObservedObject var model: R50ParameterModel
     @ObservedObject var samples: R50SampleStore
     @State private var page: R50Page = .partial
-    @State private var showingImporter = false
-    @State private var showingExporter = false
+    /// One file panel, not two. SwiftUI honours a single presentation modifier
+    /// of each kind per view, so a second .fileImporter silently shadows the
+    /// first — which is exactly what stopped IMPORT opening anything once
+    /// EXPORT was added beside it.
+    @State private var showingFilePanel = false
+    @State private var fileAction: BrowserFileAction = .importAudio
     @State private var showingPresets = false
     /// Which Partial the Partial and Envelopes pages are editing.
     @State private var partial = 0
@@ -627,8 +636,14 @@ struct R50View: View {
                 VStack(alignment: .leading, spacing: 8) {
                     sampleTable
                     HStack(spacing: 8) {
-                        actionButton("IMPORT…") { showingImporter = true }
-                        actionButton("EXPORT…") { showingExporter = true }
+                        actionButton("IMPORT…") {
+                            fileAction = .importAudio
+                            showingFilePanel = true
+                        }
+                        actionButton("EXPORT…") {
+                            fileAction = .exportFolder
+                            showingFilePanel = true
+                        }
                         actionButton("DELETE") {
                             if let entry = samples.entries
                                 .first(where: { $0.index == samples.selectedIndex }) {
@@ -686,23 +701,24 @@ struct R50View: View {
             .frame(width: 330)
         }
         .frame(maxHeight: .infinity)
-        .fileImporter(isPresented: $showingImporter,
-                      allowedContentTypes: [.wav, .aiff, .audio],
+        // Export picks a folder, not a file: a generated multisample is five
+        // zones and they are only useful together. `fileAction` is deliberately
+        // not cleared by the binding — the completion handler needs to still
+        // know which button opened the panel.
+        .fileImporter(isPresented: $showingFilePanel,
+                      allowedContentTypes: fileAction == .exportFolder
+                          ? [.folder] : [.wav, .aiff, .audio],
                       allowsMultipleSelection: false) { result in
-            if case let .success(urls) = result, let url = urls.first {
+            guard case let .success(urls) = result, let url = urls.first else { return }
+            switch fileAction {
+            case .importAudio:
                 samples.importAudioFile(at: url)
+            case .exportFolder:
+                if let entry = samples.entries
+                    .first(where: { $0.index == samples.selectedIndex }) {
+                    samples.exportInstrument(entry, to: url)
+                }
             }
-        }
-        // A folder, not a file: a generated multisample is five zones and they
-        // all have to come out to be worth anything.
-        .fileImporter(isPresented: $showingExporter,
-                      allowedContentTypes: [.folder],
-                      allowsMultipleSelection: false) { result in
-            guard case let .success(urls) = result, let directory = urls.first,
-                  let entry = samples.entries
-                      .first(where: { $0.index == samples.selectedIndex })
-            else { return }
-            samples.exportInstrument(entry, to: directory)
         }
     }
 
