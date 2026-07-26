@@ -674,6 +674,7 @@ struct R50View: View {
                     R50Value(title: "Octave", address: addr(R50FieldOctave), model: model)
 
                     rootKeyEditor
+                    factoryFolderRow
 
                     // Multisamples exist because they do not sound the same
                     // across the keyboard, so a preview fixed at middle C would
@@ -770,6 +771,27 @@ struct R50View: View {
             .stroke(Color(white: 0.32), lineWidth: 1))
     }
 
+    /// The factory samples are real files now, so the only thing standing
+    /// between someone and editing one is knowing where they are — and they are
+    /// inside the sandbox container, which is not a guessable path.
+    private var factoryFolderRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text("FACTORY FILES")
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundColor(R50Palette.engrave)
+                Spacer()
+                actionButton("REVEAL") { samples.revealFactoryDirectory() }
+            }
+            Text("Edit a WAV here and relaunch to hear it. Delete one to get the generated version back.")
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .foregroundColor(R50Palette.engrave)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     /// Root key of the selected import. Detection is a guess — it is right far
     /// more often than a hardcoded middle C, but a one-shot or a noisy sample
     /// can defeat it, so it has to be correctable by hand.
@@ -856,7 +878,7 @@ struct R50View: View {
         if let message = samples.errorMessage { return message }
         let sourceIsSample = model.value(addr(R50FieldSourceType)) >= 0.5
         return sourceIsSample
-            ? "Sample source active on Partial \(partial + 1). Factory samples are generated at startup."
+            ? "Sample source active on Partial \(partial + 1). Factory samples load from WAV files on disk."
             : "Set Source to Sample on the Partial page to hear these."
     }
 

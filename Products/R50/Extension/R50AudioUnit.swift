@@ -148,6 +148,9 @@ public final class R50AudioUnit: AUAudioUnit {
         kernel.sampleInfo(at: index)
     }
 
+    /// Where the factory WAV files live.
+    var factoryDirectory: String { kernel.factoryDirectory() }
+
     /// One zone's audio and metadata, for writing out.
     func zone(instrument: Int, zone: Int) -> [String: Any]? {
         kernel.zone(ofInstrument: instrument, zone: zone)

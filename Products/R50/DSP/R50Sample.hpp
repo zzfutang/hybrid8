@@ -145,6 +145,26 @@ public:
         return slot;
     }
 
+    /// Swap the audio behind a slot. The pointer store is atomic, so a voice
+    /// either sees the old asset or the new one and never a torn mixture; a
+    /// note already sounding keeps playing the asset it started on, because the
+    /// player holds its own pointer for the life of the note.
+    ///
+    /// The old asset is deliberately not freed — see the lifetime note above.
+    /// An audio callback may still be inside it, and nothing here can know when
+    /// it leaves.
+    bool replaceSample(int slot, SampleData &&data) {
+        if (slot < 0 || slot >= slotCount_.load(std::memory_order_acquire)) return false;
+        if (data.samples.empty()) return false;
+        SampleData *published = new SampleData(std::move(data));
+        if (published->loopEnd == 0
+         || published->loopEnd > static_cast<uint32_t>(published->length())) {
+            published->loopEnd = static_cast<uint32_t>(published->length());
+        }
+        slots_[slot].store(published, std::memory_order_release);
+        return true;
+    }
+
     /// Publish an instrument. Fill it completely before calling: the release
     /// of the count is what makes it visible to the render thread.
     int addInstrument(const Multisample &instrument) {

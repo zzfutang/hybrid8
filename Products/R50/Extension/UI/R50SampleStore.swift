@@ -9,6 +9,7 @@
 //  Application Support to survive a relaunch.
 //
 
+import AppKit
 import AVFoundation
 import SwiftUI
 
@@ -109,6 +110,17 @@ final class R50SampleStore: ObservableObject {
         model.parameter(instrumentAddress)?
             .setValue(Float(entry.index), originator: nil)
         model.objectWillChange.send()
+    }
+
+    /// Where the factory WAVs are written and read back from.
+    var factoryDirectory: String { audioUnit?.factoryDirectory ?? "" }
+
+    /// Open the factory folder in Finder. It sits inside the sandbox container,
+    /// which is not a path anyone would navigate to by hand.
+    func revealFactoryDirectory() {
+        let path = factoryDirectory
+        guard !path.isEmpty else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
     }
 
     /// Retune an imported entry. Writes through to the engine, which picks it

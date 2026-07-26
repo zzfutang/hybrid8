@@ -7,7 +7,24 @@
 #import "R50DSPKernelAdapter.h"
 #import "R50PitchDetect.hpp"
 #import "R50WavWriter.hpp"
+#import "R50FactoryFiles.hpp"
+
+#include <mutex>
 #import "R50Engine.hpp"
+
+/// Application Support/R50/Factory. Resolved here rather than in C++ because
+/// the sandbox container is a Foundation question, and done once per process.
+static std::string R50FactoryDirectory(void) {
+    NSArray<NSURL *> *urls = [NSFileManager.defaultManager
+        URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask];
+    if (urls.count == 0) return std::string();
+    NSURL *directory = [[urls.firstObject URLByAppendingPathComponent:@"R50"]
+                        URLByAppendingPathComponent:@"Factory"];
+    [NSFileManager.defaultManager createDirectoryAtURL:directory
+                           withIntermediateDirectories:YES
+                                            attributes:nil error:nil];
+    return std::string(directory.path.UTF8String ?: "");
+}
 
 @implementation R50DSPKernelAdapter {
     r50::R50Engine _engine;
@@ -19,6 +36,16 @@
     if (self) {
         _sampleRate = 44100.0;
         _engine.setSampleRate(_sampleRate);
+
+        // Mirror the generated content to disk, and load back anything that is
+        // already there. Once per process — the library is a process-wide
+        // singleton, so a second instance would only redo the same work.
+        static std::once_flag once;
+        std::call_once(once, []{
+            const std::string directory = R50FactoryDirectory();
+            if (directory.empty()) return;
+            r50::syncFactoryDirectory(r50::SampleLibrary::shared(), directory);
+        });
     }
     return self;
 }
@@ -74,6 +101,11 @@
     instrument.regions[0] = region;
     instrument.regionCount = 1;
     return library.addInstrument(instrument);
+}
+
+- (NSString *)factoryDirectory {
+    const std::string directory = R50FactoryDirectory();
+    return [NSString stringWithUTF8String:directory.c_str()];
 }
 
 - (NSDictionary<NSString *, id> *)zoneOfInstrument:(NSInteger)index

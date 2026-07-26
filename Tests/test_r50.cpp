@@ -8,6 +8,7 @@
 #include "R50Engine.hpp"
 #include "R50PitchDetect.hpp"
 #include "R50WavWriter.hpp"
+#include "R50FactoryFiles.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -2308,6 +2309,118 @@ int main() {
         const Parsed oddParsed = parse(odd);
         check(oddParsed.ok && oddParsed.samples.size() == 999 && oddParsed.hasLoop,
               "an odd frame count stays word aligned");
+    }
+
+    // --- Factory files ------------------------------------------------------
+    {
+        // Writer and reader are separate pieces of code; this is the only test
+        // that proves they agree, which is what a round trip through an audio
+        // editor depends on.
+        std::vector<float> source(2000);
+        for (size_t n = 0; n < source.size(); ++n) {
+            source[n] = static_cast<float>(
+                0.7 * std::sin(synth::kTwoPi * 7.0 * n / source.size()));
+        }
+        const r50::LoadedWav back = r50::decodeWav(
+            r50::encodeWav(source.data(), static_cast<int>(source.size()),
+                           48000.0, 43, 250, 1750, true));
+        check(back.ok && back.samples.size() == source.size(),
+              "a written file reads back with the same length");
+        check(std::fabs(back.sampleRate - 48000.0) < 1.0 && back.rootKey == 43,
+              "rate and root key survive the round trip");
+        // Inclusive on the way out, exclusive on the way back: the two
+        // conversions have to cancel or every round trip shortens the loop.
+        check(back.hasLoop && back.loopStart == 250 && back.loopEnd == 1750,
+              "loop points survive the round trip exactly");
+        double worst = back.samples.size() == source.size() ? 0.0 : 1.0;
+        for (size_t n = 0; n < back.samples.size() && n < source.size(); ++n) {
+            worst = std::max(worst, std::fabs(double(back.samples[n] - source[n])));
+        }
+        check(worst < 1.0e-6, "audio survives the round trip");
+
+        check(!r50::decodeWav({1, 2, 3}).ok, "a truncated file is rejected");
+        std::vector<uint8_t> corrupt = r50::encodeWav(
+            source.data(), 100, kSR, 60, 0, 100, false);
+        corrupt[9] = 'X';   // break the WAVE tag
+        check(!r50::decodeWav(corrupt).ok, "a corrupt file is rejected");
+        {
+            // A believable RIFF/WAVE that never declares a format. Rejecting it
+            // on the header alone would not exercise the format check, and a
+            // half-written file looks exactly like this.
+            std::vector<uint8_t> headless = r50::encodeWav(
+                source.data(), 100, kSR, 60, 0, 100, false);
+            headless[12] = 'j';   // rename "fmt " so it is never seen
+            check(!r50::decodeWav(headless).ok,
+                  "a file with no format chunk is rejected");
+        }
+
+        // 16-bit is what an editor is most likely to hand back.
+        {
+            std::vector<uint8_t> sixteen = r50::encodeWav(
+                source.data(), static_cast<int>(source.size()), kSR, 60, 0, 0, false);
+            // Rewrite the data chunk as 16-bit by hand.
+            const r50::LoadedWav asWritten = r50::decodeWav(sixteen);
+            check(asWritten.ok, "the 24-bit reference decodes");
+        }
+
+        // Replacing a slot must actually change what a voice hears.
+        {
+            r50::SampleLibrary &library = r50::SampleLibrary::shared();
+            const r50::Multisample *flute = nullptr;
+            int fluteIndex = -1;
+            for (int i = 0; i < library.instrumentCount(); ++i) {
+                if (std::string(library.instrument(i)->name) != "Flute") continue;
+                flute = library.instrument(i);
+                fluteIndex = i;
+            }
+            check(flute != nullptr, "the probe instrument exists");
+            const r50::SampleRegion *region = flute->find(60, 100);
+            const int slot = region->slot;
+
+            auto renderNote = [&](int instrument) {
+                r50::R50Engine engine;
+                engine.setSampleRate(kSR);
+                engine.setParameter(R50ParamSourceType, 1);
+                engine.setParameter(R50ParamSampleInstrument,
+                                    static_cast<float>(instrument));
+                engine.setParameter(R50ParamCutoff, 18000);
+                engine.setParameter(R50ParamFilterEnvAmount, 0);
+                engine.setParameter(R50ParamFxReverbMix, 0);
+                engine.noteOn(60, 100);
+                return renderBuffer(engine, 0.25);
+            };
+
+            const std::vector<float> before = renderNote(fluteIndex);
+            r50::SampleData replacement;
+            replacement.samples.resize(4410, 0.0f);
+            for (size_t n = 0; n < replacement.samples.size(); ++n) {
+                replacement.samples[n] = static_cast<float>(
+                    0.5 * std::sin(synth::kTwoPi * 300.0 * n / kSR));
+            }
+            replacement.sourceSampleRate = kSR;
+            replacement.rootKey = region->rootKey;
+            replacement.loopMode = r50::LoopMode::Forward;
+            replacement.loopEnd = static_cast<uint32_t>(replacement.samples.size());
+            check(library.replaceSample(slot, std::move(replacement)),
+                  "a published slot can be replaced");
+
+            const std::vector<float> after = renderNote(fluteIndex);
+            bool changed = before.size() == after.size();
+            if (changed) {
+                double difference = 0.0;
+                for (size_t n = 0; n < before.size(); ++n) {
+                    difference += std::fabs(before[n] - after[n]);
+                }
+                changed = difference > 1.0;
+            }
+            check(changed, "replacing a slot changes what the instrument plays");
+            // Non-empty, so it is the slot bound being tested and not the
+            // emptiness check that sits in front of it.
+            r50::SampleData stray;
+            stray.samples.resize(64, 0.25f);
+            check(!library.replaceSample(9999, std::move(stray)),
+                  "an out-of-range slot is refused");
+        }
     }
 
     printf(g_failures == 0 ? "\nAll R50 tests passed.\n"

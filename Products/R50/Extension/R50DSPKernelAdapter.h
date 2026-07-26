@@ -47,6 +47,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// from the UI thread.
 - (nullable NSDictionary<NSString *, id> *)sampleInfoAtIndex:(NSInteger)index;
 
+/// Where the factory WAV files live. Inside the sandbox container, so it is
+/// not somewhere anyone would find by guessing — the editor shows it.
+- (NSString *)factoryDirectory;
+
 /// One zone encoded as a ready-to-write WAV, so generated content can be
 /// opened in an editor. The bytes carry a `smpl` chunk with the loop points,
 /// which is the most valuable part of a generated sustain. UI thread only.
