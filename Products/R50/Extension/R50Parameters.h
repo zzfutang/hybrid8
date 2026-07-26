@@ -43,6 +43,11 @@ typedef enum R50Param : unsigned long long {
     R50ParamNoiseRate,           // Hz (Sample & Hold step rate)
     R50ParamNoisePitchTrack,     // 0 = fixed, 1 = follows the note
 
+    // Appended with the sample engine.
+    R50ParamSourceType,          // 0 = wave table, 1 = sample
+    R50ParamSampleInstrument,    // index into the SampleLibrary
+    R50ParamSampleStart,         // 0 .. 1 scrub into the asset
+
     R50ParamCount
 } R50Param;
 

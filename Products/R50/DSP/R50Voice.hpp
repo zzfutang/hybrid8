@@ -13,6 +13,8 @@
 #include "ADSR.hpp"
 #include "Filter.hpp"
 #include "R50Noise.hpp"
+#include "R50SampleFactory.hpp"
+#include "R50SamplePlayer.hpp"
 #include "R50WaveOscillator.hpp"
 #include "Utils.hpp"
 
@@ -20,7 +22,13 @@ namespace r50 {
 
 /// Denormalised parameter block shared by every voice, rebuilt by the engine
 /// whenever a parameter changes.
+enum class SourceType { Wave = 0, Sample };
+
 struct VoiceParams {
+    SourceType sourceType     = SourceType::Wave;
+    int   sampleInstrument    = 0;      // index into SampleLibrary
+    float sampleStart         = 0.0f;   // 0..1 scrub into the asset
+
     int   waveIndex           = 0;      // index into waveDescriptors()
     float pulseWidth          = 0.5f;   // only read by Difference-mode waves
     int   octave              = 0;
@@ -57,6 +65,7 @@ public:
     void setSeed(uint64_t seed) { noise_.setSeed(seed); }
 
     void reset() {
+        sample_.stop();
         noise_.reset();
         filter_.reset();
         ampEnv_.resetHard();
@@ -73,6 +82,25 @@ public:
         // A fresh note starts from a known phase so repeated notes are
         // identical — R50 is deliberately a tight, repeatable digital voice.
         osc_.reset(0.0f);
+
+        // Resolve the region once, here: the scan is bounded but it has no
+        // business running per sample, and the asset pointer must stay fixed
+        // for the life of the note so a library publish cannot tear it.
+        sample_.stop();
+        if (p.sourceType == SourceType::Sample) {
+            const Multisample *instrument =
+                SampleLibrary::shared().instrument(p.sampleInstrument);
+            const SampleRegion *region = instrument
+                ? instrument->find(note, static_cast<int>(velocity * 127.0f + 0.5f))
+                : nullptr;
+            if (region != nullptr) {
+                sample_.start(SampleLibrary::shared().sample(region->slot),
+                              region, p.sampleStart);
+                sampleRootKey_  = region->rootKey;
+                sampleTuneCents_ = region->tuneCents;
+            }
+        }
+
         applyEnvelopeTimes(p);
         ampEnv_.gate(true);
         filterEnv_.gate(true);
@@ -104,6 +132,17 @@ public:
         noise_.updateBlock(p.noiseSpectrum, p.noiseTone, p.noiseRateHz,
                            p.noisePitchTrack, noteHz);
 
+        // Sample playback rate follows the same pitch as the oscillator, but
+        // relative to the region's root key rather than to concert pitch.
+        sourceType_ = p.sourceType;
+        if (sample_.isActive()) {
+            const double semitones = (note_ - sampleRootKey_)
+                                   + p.octave * 12.0
+                                   + sampleTuneCents_ / 100.0
+                                   + pitchBendSemitones;
+            sample_.setPlaybackRatio(std::pow(2.0, semitones / 12.0), sampleRate_);
+        }
+
         // Cutoff in octaves: base + key tracking + bipolar envelope.
         const double keyOctaves = p.keyTrack * (note_ - 60) / 12.0;
         const double envOctaves = p.filterEnvAmount * 4.0 * filterLevel_;
@@ -128,9 +167,11 @@ public:
 
         // Crossfade the two sources before the filter, so the filter and its
         // envelope shape noise exactly as they shape the oscillator.
-        const float osc   = osc_.process();
+        const float tonal = (sourceType_ == SourceType::Sample)
+                          ? sample_.process()
+                          : osc_.process();
         const float noise = noise_.process();
-        const float source = osc + (noise - osc) * noiseMix_;
+        const float source = tonal + (noise - tonal) * noiseMix_;
         return filter_.process(source) * ampLevel_ * velocity_;
     }
 
@@ -147,6 +188,7 @@ private:
     }
 
     WaveOscillator     osc_;
+    SamplePlayer       sample_;
     NoiseSource        noise_;
     synth::LadderFilter filter_;
     synth::ADSR        ampEnv_;
@@ -157,6 +199,9 @@ private:
     float  velocity_    = 1.0f;
     bool   held_        = false;
     bool   active_      = false;
+    SourceType sourceType_ = SourceType::Wave;
+    int    sampleRootKey_   = 60;
+    float  sampleTuneCents_ = 0.0f;
     float  noiseMix_    = 0.0f;
     float  ampLevel_    = 0.0f;
     float  filterLevel_ = 0.0f;

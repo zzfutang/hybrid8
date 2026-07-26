@@ -22,6 +22,7 @@
 		47F141DCE65FEF40141E5DC2 /* PerformanceKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D27DAF314B0D8B1899F4BC3 /* PerformanceKeyboardView.swift */; };
 		6875C8DE26DA8E611737B311 /* AudioUnitHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3032319806890090FD341B50 /* AudioUnitHost.swift */; };
 		6A03304627D01F357CFD14DA /* R50Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 43741427DD1185348DACAEA1 /* R50Extension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		6E67E81BCA7DE5C0E773DB5D /* R50SampleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112FD104BE725349BC5B06E2 /* R50SampleStore.swift */; };
 		72436329A7C6BD802D294AF2 /* InstrumentProduct.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C2CF0929FB2CD6E611FF697 /* InstrumentProduct.swift */; };
 		73C1B6C0A75B2B9E49B9C48A /* Hybrid8Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 120104614B6CF8293F99DD17 /* Hybrid8Extension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		73D7E97129915CC85F59436F /* SynthDSPKernelAdapter.mm in Sources */ = {isa = PBXBuildFile; fileRef = B969D4EA2487259367B0EEB7 /* SynthDSPKernelAdapter.mm */; };
@@ -100,7 +101,9 @@
 		0849F4EBC3B7AC32F39479EF /* WavetablePianoData.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = WavetablePianoData.hpp; sourceTree = "<group>"; };
 		084F96412A2DD5355819DB83 /* Hybrid8Wavetable.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Hybrid8Wavetable.hpp; sourceTree = "<group>"; };
 		0E382714EED6BD5CE5890E88 /* R50-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "R50-Bridging-Header.h"; sourceTree = "<group>"; };
+		112FD104BE725349BC5B06E2 /* R50SampleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50SampleStore.swift; sourceTree = "<group>"; };
 		120104614B6CF8293F99DD17 /* Hybrid8Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Hybrid8Extension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		19FA9B3BB4AE406828814F9A /* R50Sample.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Sample.hpp; sourceTree = "<group>"; };
 		23D32892482F96EDA9B11D12 /* SynthParameters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SynthParameters.h; sourceTree = "<group>"; };
 		25CBC5D8B70379456237CDEA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		28045EECD214931C4F493FF4 /* SynthHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthHelp.swift; sourceTree = "<group>"; };
@@ -127,11 +130,13 @@
 		81DE5D8AC0351437DC2CE76B /* MIDIEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIDIEvent.swift; sourceTree = "<group>"; };
 		858F1E9DA80548BB0FC91928 /* R50FactoryPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50FactoryPresets.swift; sourceTree = "<group>"; };
 		8D27DAF314B0D8B1899F4BC3 /* PerformanceKeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceKeyboardView.swift; sourceTree = "<group>"; };
+		8DAF2A33D71D5EE6461A540D /* R50SampleFactory.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50SampleFactory.hpp; sourceTree = "<group>"; };
 		8FB5F915331861EE4ED079E0 /* R50Parameters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = R50Parameters.h; sourceTree = "<group>"; };
 		90C36064148CBB1BA047620D /* SynthTimeMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthTimeMapping.swift; sourceTree = "<group>"; };
 		97914D3D466CC0071C9535CD /* PresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetStore.swift; sourceTree = "<group>"; };
 		A4EE673DC8E4D1CB2783E28A /* PresetDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDocument.swift; sourceTree = "<group>"; };
 		AA3098E2CA53815C28DFBDFF /* SynthTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthTheme.swift; sourceTree = "<group>"; };
+		AA5A665188698ADB50316116 /* R50SamplePlayer.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50SamplePlayer.hpp; sourceTree = "<group>"; };
 		ADFAAC8942C83291B677DAB8 /* R50ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50ContentView.swift; sourceTree = "<group>"; };
 		B03850F9ED8AC10D7B9481FA /* SynthAudioUnit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthAudioUnit.swift; sourceTree = "<group>"; };
 		B1F99D67BD35FB874E88A075 /* R50Engine.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Engine.hpp; sourceTree = "<group>"; };
@@ -263,6 +268,9 @@
 			children = (
 				B1F99D67BD35FB874E88A075 /* R50Engine.hpp */,
 				4E1AA536D5BCEFC6B916629C /* R50Noise.hpp */,
+				19FA9B3BB4AE406828814F9A /* R50Sample.hpp */,
+				8DAF2A33D71D5EE6461A540D /* R50SampleFactory.hpp */,
+				AA5A665188698ADB50316116 /* R50SamplePlayer.hpp */,
 				C1767F6F1334E44D6F16411B /* R50Voice.hpp */,
 				7915BC69DA6FDB8EC6117CD2 /* R50Wave.hpp */,
 				4531DF6E83F3C47C88B2DB27 /* R50WaveOscillator.hpp */,
@@ -313,6 +321,7 @@
 			isa = PBXGroup;
 			children = (
 				B552FFA0A3EC1055376BC7DF /* R50ParameterModel.swift */,
+				112FD104BE725349BC5B06E2 /* R50SampleStore.swift */,
 				CC907F34AF0F106EAB6BD154 /* R50Theme.swift */,
 				DD9BD8CBC130F448D3ADF1F9 /* R50View.swift */,
 			);
@@ -566,6 +575,7 @@
 				40E305DBE7FE4C5436CFD61E /* R50FactoryPresets.swift in Sources */,
 				14360062978DE98839567A6C /* R50ParameterModel.swift in Sources */,
 				E8D6963CF636921BF9F37976 /* R50ParametersTree.swift in Sources */,
+				6E67E81BCA7DE5C0E773DB5D /* R50SampleStore.swift in Sources */,
 				2A1BCEA56988EF92C3E12C6F /* R50Theme.swift in Sources */,
 				C3C2917FCEACF97697615F27 /* R50View.swift in Sources */,
 			);

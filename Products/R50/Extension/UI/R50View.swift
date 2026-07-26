@@ -6,9 +6,18 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
+
+enum R50Page: String, CaseIterable {
+    case synth = "Synth"
+    case samples = "Samples"
+}
 
 struct R50View: View {
     @ObservedObject var model: R50ParameterModel
+    @ObservedObject var samples: R50SampleStore
+    @State private var page: R50Page = .synth
+    @State private var showingImporter = false
 
     var body: some View {
         GeometryReader { geo in
@@ -25,20 +34,139 @@ struct R50View: View {
     private var fascia: some View {
         VStack(spacing: 12) {
             header
-            HStack(alignment: .top, spacing: 10) {
-                oscillator.frame(width: 190)
-                noise.frame(width: 230)
-                filter.frame(width: 300)
-                ampEnvelope.frame(width: 190)
-                filterEnvelope.frame(width: 190)
+            switch page {
+            case .synth:   synthPage
+            case .samples: samplePage
             }
-            .frame(height: 300)
             footer
         }
         .padding(16)
         .background(
             LinearGradient(colors: [R50Palette.chassisTop, R50Palette.chassisLow],
                            startPoint: .top, endPoint: .bottom))
+    }
+
+    // MARK: - Pages
+
+    private var synthPage: some View {
+        HStack(alignment: .top, spacing: 10) {
+            oscillator.frame(width: 190)
+            noise.frame(width: 230)
+            filter.frame(width: 300)
+            ampEnvelope.frame(width: 190)
+            filterEnvelope.frame(width: 190)
+        }
+        .frame(height: 300)
+    }
+
+    private var samplePage: some View {
+        HStack(alignment: .top, spacing: 10) {
+            R50Panel(title: "Instruments") {
+                VStack(alignment: .leading, spacing: 8) {
+                    instrumentGrid
+                    HStack(spacing: 8) {
+                        actionButton("IMPORT…") { showingImporter = true }
+                        actionButton("DELETE") {
+                            if let entry = samples.entries
+                                .first(where: { $0.index == samples.selectedIndex }) {
+                                samples.delete(entry)
+                            }
+                        }
+                        if samples.isImporting {
+                            Text("LOADING…")
+                                .font(.system(size: 8, weight: .medium,
+                                              design: .monospaced))
+                                .foregroundColor(R50Palette.glow)
+                        }
+                    }
+                }
+            }
+            .frame(width: 620)
+
+            R50Panel(title: "Playback") {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 4) {
+                        R50Knob(title: "Start", address: R50ParamSampleStart,
+                                model: model)
+                        R50Knob(title: "Octave", address: R50ParamOctave,
+                                model: model)
+                    }
+                    Text(statusText)
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundColor(R50Palette.engrave)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: 270)
+        }
+        .frame(height: 300)
+        .fileImporter(isPresented: $showingImporter,
+                      allowedContentTypes: [.wav, .aiff, .audio],
+                      allowsMultipleSelection: false) { result in
+            if case let .success(urls) = result, let url = urls.first {
+                samples.importAudioFile(at: url)
+            }
+        }
+    }
+
+    private var instrumentGrid: some View {
+        let columns = 4
+        let rows = max(1, Int(ceil(Double(samples.entries.count) / Double(columns))))
+        return VStack(spacing: 1) {
+            ForEach(0..<rows, id: \.self) { row in
+                HStack(spacing: 1) {
+                    ForEach(0..<columns, id: \.self) { column in
+                        let index = row * columns + column
+                        if index < samples.entries.count {
+                            instrumentCell(samples.entries[index])
+                        } else {
+                            Color.clear.frame(maxWidth: .infinity, minHeight: 22)
+                        }
+                    }
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 2))
+        .overlay(RoundedRectangle(cornerRadius: 2)
+            .stroke(Color(white: 0.32), lineWidth: 1))
+    }
+
+    private func instrumentCell(_ entry: SampleEntry) -> some View {
+        let selected = entry.index == samples.selectedIndex
+        return Text(entry.name)
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .foregroundColor(selected ? Color.black
+                                      : (entry.isFactory ? R50Palette.legend
+                                                         : R50Palette.glow))
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .frame(maxWidth: .infinity, minHeight: 22)
+            .background(selected ? R50Palette.glow : Color(white: 0.13))
+            .contentShape(Rectangle())
+            .onTapGesture { samples.select(entry) }
+    }
+
+    private func actionButton(_ title: String,
+                              action: @escaping () -> Void) -> some View {
+        Text(title)
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .foregroundColor(R50Palette.legend)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color(white: 0.15))
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color(white: 0.32), lineWidth: 1))
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+    }
+
+    private var statusText: String {
+        if let message = samples.errorMessage { return message }
+        let sourceIsSample = model.value(R50ParamSourceType) >= 0.5
+        return sourceIsSample
+            ? "Sample source active. Factory instruments are generated at startup."
+            : "Set Source to Sample on the Synth page to hear these."
     }
 
     // MARK: - Header
@@ -56,12 +184,33 @@ struct R50View: View {
                     .foregroundColor(R50Palette.engrave)
             }
 
+            pageTabs
             Spacer()
             presetBrowser
             Spacer()
             R50Meter(level: model.outputLevel)
         }
         .padding(.horizontal, 4)
+    }
+
+    private var pageTabs: some View {
+        HStack(spacing: 2) {
+            ForEach(R50Page.allCases, id: \.self) { candidate in
+                let selected = candidate == page
+                Text(candidate.rawValue.uppercased())
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .tracking(1.2)
+                    .foregroundColor(selected ? Color.black : R50Palette.legend)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(selected ? R50Palette.glow : Color(white: 0.14))
+                    .contentShape(Rectangle())
+                    .onTapGesture { page = candidate }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 2))
+        .overlay(RoundedRectangle(cornerRadius: 2)
+            .stroke(Color(white: 0.32), lineWidth: 1))
     }
 
     private var presetBrowser: some View {
@@ -100,7 +249,9 @@ struct R50View: View {
 
     private var oscillator: some View {
         R50Panel(title: "Oscillator") {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
+                R50Selector(title: "Source", address: R50ParamSourceType,
+                            options: R50Parameters.sourceTypeNames, model: model)
                 R50WaveGrid(title: "Wave", address: R50ParamOscWave,
                             options: R50Parameters.waveformNames,
                             columns: 3, model: model)

@@ -512,6 +512,249 @@ int main() {
               "voices use decorrelated noise streams");
     }
 
+    // --- Sample player: loop-boundary interpolation -------------------------
+    {
+        // The gate for the sample engine. Build a ramp whose loop region is a
+        // straight line when read cyclically; a reader whose taps wrap
+        // correctly reproduces that line exactly, one whose taps run off the
+        // end of the loop does not.
+        r50::SampleData data;
+        const int length = 600;
+        data.samples.resize(length);
+        for (int i = 0; i < length; ++i) {
+            // Inside [100, 500) the signal is a pure sinusoid with exactly 8
+            // periods across the loop, so it is continuous when wrapped.
+            // Everything outside the loop is silence — deliberately NOT a
+            // continuation of the sinusoid, so a reader whose taps run off the
+            // end of the loop instead of wrapping produces a visible error.
+            data.samples[i] = (i >= 100 && i < 500)
+                ? std::sin(synth::kTwoPi * 8.0 * (i - 100) / 400.0)
+                : 0.0f;
+        }
+        data.loopStart = 100;
+        data.loopEnd   = 500;
+        data.loopMode  = r50::LoopMode::Forward;
+        data.sourceSampleRate = kSR;
+        data.rootKey = 60;
+
+        r50::SampleRegion region;
+        region.rootKey = 60;
+
+        r50::SamplePlayer player;
+        player.start(&data, &region, 100.0f / length);   // start at the loop
+        // A fractional rate is essential: at exactly 1.0 the interpolation
+        // fraction is always zero, Catmull-Rom returns the centre tap alone,
+        // and the wrapping of the neighbouring taps is never exercised.
+        player.setPlaybackRatio(0.75, kSR);
+
+        // Run several loop passes and compare against the analytic sinusoid,
+        // tracking the expected read position by hand.
+        double position = 100.0;
+        double worst = 0.0;
+        bool finite = true;
+        for (int n = 0; n < 4000; ++n) {
+            const float actual = player.process();
+            const double expected =
+                std::sin(synth::kTwoPi * 8.0 * (position - 100.0) / 400.0);
+            if (!std::isfinite(actual)) finite = false;
+            if (n > 600) worst = std::max(worst, std::fabs(actual - expected));
+
+            position += 0.75;
+            while (position >= 500.0) position -= 400.0;
+        }
+        printf("       loop-boundary worst interpolation error: %.6f\n", worst);
+        check(finite, "looped playback stays finite");
+        check(worst < 0.002,
+              "interpolation taps wrap correctly across the loop boundary");
+    }
+    {
+        // Continuity: no single-sample jump at the join beyond what the signal
+        // itself contains.
+        r50::SampleData data;
+        const int length = 512;
+        data.samples.resize(length);
+        for (int i = 0; i < length; ++i)
+            data.samples[i] = std::sin(synth::kTwoPi * 4.0 * i / length);
+        data.loopStart = 0;
+        data.loopEnd   = length;
+        data.loopMode  = r50::LoopMode::Forward;
+        data.sourceSampleRate = kSR;
+
+        r50::SampleRegion region;
+        r50::SamplePlayer player;
+        player.start(&data, &region, 0.0f);
+        player.setPlaybackRatio(1.0, kSR);
+
+        float previous = player.process();
+        float biggestStep = 0.0f;
+        for (int n = 0; n < 3000; ++n) {
+            const float value = player.process();
+            biggestStep = std::max(biggestStep, std::fabs(value - previous));
+            previous = value;
+        }
+        // One period of a 4-cycle/512-sample sine steps by at most ~0.05.
+        check(biggestStep < 0.08f, "no discontinuity at the loop join");
+    }
+    {
+        // Ping-pong reverses without repeating the turning sample.
+        r50::SampleData data;
+        const int length = 64;
+        data.samples.resize(length);
+        for (int i = 0; i < length; ++i) data.samples[i] = i / 63.0f;
+        data.loopStart = 0;
+        data.loopEnd   = length;
+        data.loopMode  = r50::LoopMode::PingPong;
+        data.sourceSampleRate = kSR;
+
+        r50::SampleRegion region;
+        r50::SamplePlayer player;
+        player.start(&data, &region, 0.0f);
+        player.setPlaybackRatio(1.0, kSR);
+
+        float peak = 0.0f, trough = 1.0f;
+        bool finite = true;
+        for (int n = 0; n < 400; ++n) {
+            const float value = player.process();
+            if (!std::isfinite(value)) finite = false;
+            peak = std::max(peak, value);
+            trough = std::min(trough, value);
+        }
+        check(finite && peak > 0.9f && trough < 0.1f,
+              "ping-pong sweeps the full loop in both directions");
+    }
+    {
+        // One-shot must stop, not read past the end.
+        r50::SampleData data;
+        data.samples.assign(200, 0.5f);
+        data.loopMode = r50::LoopMode::None;
+        data.loopEnd  = 200;
+        data.sourceSampleRate = kSR;
+
+        r50::SampleRegion region;
+        r50::SamplePlayer player;
+        player.start(&data, &region, 0.0f);
+        player.setPlaybackRatio(1.0, kSR);
+
+        bool finite = true;
+        for (int n = 0; n < 400; ++n) {
+            const float value = player.process();
+            if (!std::isfinite(value)) finite = false;
+        }
+        check(finite && player.isFinished(), "one-shot ends without overrunning");
+    }
+
+    // --- Region mapping -----------------------------------------------------
+    {
+        r50::Multisample instrument;
+        instrument.regionCount = 3;
+        instrument.regions[0] = {}; instrument.regions[0].lowKey = 0;
+        instrument.regions[0].highKey = 53; instrument.regions[0].slot = 10;
+        instrument.regions[1] = {}; instrument.regions[1].lowKey = 54;
+        instrument.regions[1].highKey = 65; instrument.regions[1].slot = 11;
+        instrument.regions[2] = {}; instrument.regions[2].lowKey = 66;
+        instrument.regions[2].highKey = 127; instrument.regions[2].slot = 12;
+
+        const bool boundaries =
+            instrument.find(53, 100) && instrument.find(53, 100)->slot == 10 &&
+            instrument.find(54, 100) && instrument.find(54, 100)->slot == 11 &&
+            instrument.find(65, 100) && instrument.find(65, 100)->slot == 11 &&
+            instrument.find(66, 100) && instrument.find(66, 100)->slot == 12;
+        check(boundaries, "region lookup is correct at zone boundaries");
+
+        r50::Multisample layered;
+        layered.regionCount = 2;
+        layered.regions[0] = {}; layered.regions[0].lowVelocity = 1;
+        layered.regions[0].highVelocity = 63; layered.regions[0].slot = 20;
+        layered.regions[1] = {}; layered.regions[1].lowVelocity = 64;
+        layered.regions[1].highVelocity = 127; layered.regions[1].slot = 21;
+        check(layered.find(60, 63) && layered.find(60, 63)->slot == 20 &&
+              layered.find(60, 64) && layered.find(60, 64)->slot == 21,
+              "region lookup splits on velocity");
+
+        check(instrument.find(60, 0) == nullptr ||
+              instrument.find(60, 0)->slot == 11,
+              "out-of-range velocity does not match a keyed-only region wrongly");
+    }
+
+    // --- Generated factory content ------------------------------------------
+    {
+        const r50::SampleLibrary &library = r50::SampleLibrary::shared();
+        check(library.instrumentCount() >= 9,
+              "factory instruments are generated");
+
+        bool allGood = true;
+        int loopedCount = 0;
+        for (int i = 0; i < library.instrumentCount(); ++i) {
+            const r50::Multisample *instrument = library.instrument(i);
+            if (instrument == nullptr || instrument->regionCount == 0) {
+                allGood = false;
+                continue;
+            }
+            for (int r = 0; r < instrument->regionCount; ++r) {
+                const r50::SampleData *data =
+                    library.sample(instrument->regions[r].slot);
+                if (data == nullptr || data->samples.empty()) { allGood = false; continue; }
+
+                float peak = 0.0f;
+                for (float value : data->samples) {
+                    if (!std::isfinite(value)) allGood = false;
+                    peak = std::max(peak, std::fabs(value));
+                }
+                if (peak < 0.2f || peak > 1.0f) allGood = false;
+
+                if (data->loopMode == r50::LoopMode::Forward) {
+                    ++loopedCount;
+                    // Seamless by construction: every partial is an integer
+                    // multiple of sr/L, so the wrap is continuous. Compare the
+                    // step across the join with the step just inside it.
+                    const int last = static_cast<int>(data->loopEnd) - 1;
+                    const float across =
+                        std::fabs(data->samples[data->loopStart] - data->samples[last]);
+                    const float inside =
+                        std::fabs(data->samples[last] - data->samples[last - 1]);
+                    if (across > inside * 4.0f + 0.02f) allGood = false;
+                }
+            }
+        }
+        check(allGood, "generated assets are finite, audible and seamless");
+        check(loopedCount >= 12, "sustains are generated across three key zones");
+    }
+
+    // --- Sample playback through the engine ---------------------------------
+    {
+        r50::R50Engine engine;
+        setupSpectralTone(engine, 0);
+        engine.setParameter(R50ParamSourceType, 1.0f);       // sample
+        engine.setParameter(R50ParamSampleInstrument, 0.0f); // Choir
+        engine.noteOn(60, 100);
+        const float peak = render(engine, 0.4);
+        check(std::isfinite(peak) && peak > 0.02f, "sample source produces audio");
+
+        engine.noteOff(60);
+        check(render(engine, 2.0, 0.2) < 0.001f, "sample voice releases to silence");
+    }
+    {
+        // Each zone must play at the pitch asked for, not at its root.
+        auto fundamentalError = [](int note) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(R50ParamSourceType, 1.0f);
+            engine.setParameter(R50ParamSampleInstrument, 1.0f);   // Strings
+            engine.noteOn(static_cast<uint8_t>(note), 100);
+            const std::vector<float> buffer = renderBuffer(engine, 0.5);
+            const int from = static_cast<int>(buffer.size()) - kAnalysisLength;
+            const double f0 = midiToHz(note);
+            const double atF0 = magAt(buffer, f0, kSR, from);
+            const double detuned = magAt(buffer, f0 * 1.35, kSR, from);
+            return atF0 / (detuned + 1e-12);
+        };
+        // One note per zone: below 54, inside 54..65, above 65.
+        const bool tuned = fundamentalError(45) > 8.0
+                        && fundamentalError(60) > 8.0
+                        && fundamentalError(72) > 8.0;
+        check(tuned, "every key zone plays at the requested pitch");
+    }
+
     // --- Determinism --------------------------------------------------------
     {
         auto renderOnce = [] {

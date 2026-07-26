@@ -27,6 +27,20 @@ NS_ASSUME_NONNULL_BEGIN
 /// Peak output level of the last render quantum, for the UI meter.
 - (AUValue)outputMeter;
 
+/// Decode-side sample installation. Allocates and copies, so it must never be
+/// called from the render thread. Adds the asset plus a single-region
+/// instrument covering the whole keyboard, and returns the new instrument
+/// index, or -1 if the library is full.
+- (NSInteger)installSampleNamed:(NSString *)name
+                        samples:(NSData *)samples
+                     sampleRate:(double)sampleRate
+                        rootKey:(NSInteger)rootKey
+                       loopMode:(NSInteger)loopMode;
+
+/// Instrument catalog, for the editor's sample browser.
+- (NSInteger)instrumentCount;
+- (nullable NSString *)instrumentNameAtIndex:(NSInteger)index;
+
 /// The real-time render block handed to the AUAudioUnit.
 - (AUInternalRenderBlock)internalRenderBlock;
 

@@ -126,4 +126,21 @@ public final class R50AudioUnit: AUAudioUnit {
     }
 
     func outputMeter() -> Float { kernel.outputMeter() }
+
+    // MARK: - Sample library
+
+    /// Offline install — call from a loader queue, never from the render thread.
+    func installSample(name: String, samples: [Float], sampleRate: Double,
+                       rootKey: Int, loopMode: Int) -> Int {
+        let data = samples.withUnsafeBytes { Data($0) }
+        return kernel.installSampleNamed(name, samples: data,
+                                         sampleRate: sampleRate,
+                                         rootKey: rootKey, loopMode: loopMode)
+    }
+
+    var instrumentCount: Int { kernel.instrumentCount() }
+
+    func instrumentName(at index: Int) -> String? {
+        kernel.instrumentName(at: index)
+    }
 }

@@ -75,7 +75,8 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
         let model = R50ParameterModel(tree: tree,
                                       meterProvider: { r50.outputMeter() },
                                       presetApplier: { r50.applyFactoryPreset($0) })
-        let host = NSHostingView(rootView: R50View(model: model))
+        let samples = R50SampleStore(model: model, audioUnit: r50)
+        let host = NSHostingView(rootView: R50View(model: model, samples: samples))
         host.frame = view.bounds
         host.autoresizingMask = [.width, .height]
         view.addSubview(host)

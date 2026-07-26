@@ -25,6 +25,10 @@ public:
     R50Engine() {
         setDefaults();
         snapshotParams();
+        // Force the generated libraries to build here, on whatever thread
+        // constructs the engine — never lazily from the render thread.
+        (void)waveLibrary();
+        (void)SampleLibrary::shared();
         for (int i = 0; i < kNumVoices; ++i) {
             voices_[i].setSampleRate(sampleRate_);
             // Distinct, fixed per-voice noise seeds: voices decorrelate from
@@ -201,6 +205,9 @@ private:
         set(R50ParamNoiseTone,       0.5f);
         set(R50ParamNoiseRate,       4000.0f);
         set(R50ParamNoisePitchTrack, 0.0f);
+        set(R50ParamSourceType,       0.0f);   // wave table
+        set(R50ParamSampleInstrument, 0.0f);
+        set(R50ParamSampleStart,      0.0f);
     }
 
     /// Derive the denormalised block the voices read from the atomic store.
@@ -231,6 +238,12 @@ private:
         params_.filterDecay   = std::max(0.0005f, get(R50ParamFilterDecay));
         params_.filterSustain = synth::clampf(get(R50ParamFilterSustain), 0.0f, 1.0f);
         params_.filterRelease = std::max(0.0005f, get(R50ParamFilterRelease));
+
+        params_.sourceType = get(R50ParamSourceType) >= 0.5f
+                           ? SourceType::Sample : SourceType::Wave;
+        const int instrument = static_cast<int>(get(R50ParamSampleInstrument) + 0.5f);
+        params_.sampleInstrument = instrument < 0 ? 0 : instrument;
+        params_.sampleStart = synth::clampf(get(R50ParamSampleStart), 0.0f, 1.0f);
 
         params_.noiseMix = synth::clampf(get(R50ParamNoiseMix), 0.0f, 1.0f);
         const int spectrum = static_cast<int>(get(R50ParamNoiseSpectrum) + 0.5f);

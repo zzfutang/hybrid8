@@ -20,6 +20,7 @@ enum R50Parameters {
         "White", "Pink", "Brown", "Blue", "Violet", "Band", "S&H"
     ]
     static let trackNames = ["Fixed", "Track"]
+    static let sourceTypeNames = ["Wave", "Sample"]
 
     private static let readWrite: AudioUnitParameterOptions =
         [.flag_IsReadable, .flag_IsWritable]
@@ -61,6 +62,17 @@ enum R50Parameters {
                       min: 0.02, max: 0.98, value: 0.5),
                 param(R50ParamOctave, "octave", "Octave",
                       min: -2, max: 2, value: 0, unit: .indexed),
+            ])
+
+        let sample = AUParameterTree.createGroup(
+            withIdentifier: "sample", name: "Sample", children: [
+                param(R50ParamSourceType, "sourceType", "Source",
+                      min: 0, max: 1, value: 0, unit: .indexed,
+                      strings: sourceTypeNames),
+                param(R50ParamSampleInstrument, "sampleInstrument", "Instrument",
+                      min: 0, max: 63, value: 0, unit: .indexed),
+                param(R50ParamSampleStart, "sampleStart", "Sample Start",
+                      min: 0, max: 1, value: 0),
             ])
 
         let noise = AUParameterTree.createGroup(
@@ -137,6 +149,6 @@ enum R50Parameters {
             ])
 
         return AUParameterTree.createTree(
-            withChildren: [osc, noise, filter, ampEnv, filterEnv, global])
+            withChildren: [osc, sample, noise, filter, ampEnv, filterEnv, global])
     }
 }

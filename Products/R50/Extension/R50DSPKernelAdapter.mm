@@ -42,6 +42,49 @@
     return (AUValue)_engine.outputMeter();
 }
 
+- (NSInteger)installSampleNamed:(NSString *)name
+                        samples:(NSData *)samples
+                     sampleRate:(double)sampleRate
+                        rootKey:(NSInteger)rootKey
+                       loopMode:(NSInteger)loopMode {
+    if (samples.length == 0 || samples.length % sizeof(float) != 0) return -1;
+
+    const float *values = (const float *)samples.bytes;
+    const int count = (int)(samples.length / sizeof(float));
+
+    r50::SampleData data;
+    data.samples.assign(values, values + count);
+    data.sourceSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
+    data.rootKey   = (int)rootKey;
+    data.loopStart = 0;
+    data.loopEnd   = (uint32_t)count;
+    data.loopMode  = (r50::LoopMode)loopMode;
+
+    r50::SampleLibrary &library = r50::SampleLibrary::shared();
+    const int slot = library.addSample(std::move(data));
+    if (slot < 0) return -1;
+
+    r50::Multisample instrument;
+    instrument.setName(name.UTF8String ?: "Imported");
+    r50::SampleRegion region;
+    region.rootKey = (int)rootKey;
+    region.slot    = slot;
+    instrument.regions[0] = region;
+    instrument.regionCount = 1;
+    return library.addInstrument(instrument);
+}
+
+- (NSInteger)instrumentCount {
+    return r50::SampleLibrary::shared().instrumentCount();
+}
+
+- (NSString *)instrumentNameAtIndex:(NSInteger)index {
+    const r50::Multisample *instrument =
+        r50::SampleLibrary::shared().instrument((int)index);
+    if (instrument == nullptr) return nil;
+    return [NSString stringWithUTF8String:instrument->name];
+}
+
 - (AUInternalRenderBlock)internalRenderBlock {
     // Capture a raw pointer to the C++ engine so the audio thread never does
     // ARC retain/release or ObjC message sends.
