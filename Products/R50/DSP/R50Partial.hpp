@@ -106,6 +106,7 @@ public:
         filterEnv_.resetHard();
         pitchEnv_.resetHard();
         active_ = false;
+        tail_   = 0.0f;
     }
 
     void noteOn(int note, float velocity, const PartialParams &p,
@@ -142,6 +143,7 @@ public:
         ampEnv_.gate(true);
         filterEnv_.gate(true);
         pitchEnv_.gate(true);
+        tail_ = 0.0f;
     }
 
     void noteOff() {
@@ -236,11 +238,43 @@ public:
         const float noise = noise_.process();
         float source = tonal + (noise - tonal) * noiseMix_;
 
+        float out;
         if (shaper_.position() == ShaperPosition::PreFilter) {
             source = shaper_.process(source);
-            return filter_.process(source) * ampLevel_ * velocity_;
+            out = filter_.process(source) * ampLevel_ * velocity_;
+        } else {
+            out = shaper_.process(filter_.process(source)) * ampLevel_ * velocity_;
         }
-        return shaper_.process(filter_.process(source)) * ampLevel_ * velocity_;
+
+        // A one-shot sample that has played to its end can never produce
+        // another frame, so once it finishes — and nothing else is feeding the
+        // chain — the note is over no matter what the amp envelope still
+        // intends. Without this the Partial stays active for as long as the
+        // envelope sustains, which on a held key is forever: the voice sits
+        // there rendering silence, and allocateVoice() ranks held voices as the
+        // *last* to steal, so a held one-shot chord quietly eats the polyphony.
+        //
+        // The end is detected from the output rather than from the sample's
+        // last frame, because a resonant filter fed a marimba transient is
+        // still ringing after the source has stopped and cutting at the final
+        // frame would truncate it. Following the rectified output through a
+        // one-pole lets that ring finish and makes the cut click-free by
+        // construction — it only ever fires on silence.
+        // The follower runs unconditionally: if it only started once the sample
+        // had finished it would read silence on its first update and cut the
+        // ring it exists to preserve.
+        //
+        // It is also the only thing guarding the mix. Noise is a source in its
+        // own right and can outlive an exhausted one-shot, but that needs no
+        // separate test here — noise that is audible holds the follower up, and
+        // noise that is not is not worth a voice.
+        tail_ += (std::fabs(out) - tail_) * kTailCoefficient;
+        if (tail_ < kTailSilence
+         && sourceType_ == SourceType::Sample && sample_.isFinished()) {
+            active_ = false;
+            filter_.reset();
+        }
+        return out;
     }
 
     float level() const { return level_; }
@@ -287,6 +321,14 @@ private:
     float  velocity_    = 1.0f;
     bool   active_      = false;
     SourceType sourceType_ = SourceType::Wave;
+
+    /// Follower for the exhausted-one-shot check above. The coefficient is a
+    /// ~5 ms time constant at 44.1 kHz, long enough to bridge a low note's zero
+    /// crossings and short enough that the voice is back in the pool before the
+    /// player could ask for it again. The threshold is -80 dBFS.
+    static constexpr float kTailCoefficient = 0.0045f;
+    static constexpr float kTailSilence     = 1.0e-4f;
+    float tail_ = 0.0f;
     int    sampleRootKey_   = 60;
     float  sampleTuneCents_ = 0.0f;
     float  noiseMix_    = 0.0f;

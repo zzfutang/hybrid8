@@ -1579,6 +1579,112 @@ int main() {
               "pitch bend extremes stay finite and audible");
     }
 
+    // --- One-shot samples end the note -------------------------------------
+    // A one-shot cannot produce another frame once it reaches its end, so the
+    // Partial has to stop even though the amp envelope is still sustaining.
+    // Before this, a held one-shot note kept its voice alive forever rendering
+    // silence, and the allocator ranks held voices last for stealing.
+    {
+        const r50::SampleLibrary &lib = r50::SampleLibrary::shared();
+        int oneShot = -1, looped = -1;
+        for (int i = 0; i < lib.instrumentCount() && (oneShot < 0 || looped < 0); ++i) {
+            const r50::SampleData *d = lib.sample(lib.instrument(i)->regions[0].slot);
+            if (d == nullptr) continue;
+            if (d->loopMode == r50::LoopMode::None && oneShot < 0) oneShot = i;
+            if (d->loopMode == r50::LoopMode::Forward && looped < 0) looped = i;
+        }
+        check(oneShot >= 0 && looped >= 0, "library has both one-shot and looped content");
+
+        // Sustaining forever, key never released: only the source running out
+        // can end these.
+        auto held = [](int instrument, float noiseMix) {
+            r50::PartialParams p;
+            p.sourceType = r50::SourceType::Sample;
+            p.sampleInstrument = instrument;
+            p.noiseMix = noiseMix;
+            p.cutoffHz = 18000.0f;
+            p.ampSustain = 1.0f;
+            p.ampRelease = 10.0f;
+            return p;
+        };
+        auto secondsUntilInactive = [](r50::Partial &partial,
+                                       const r50::PartialParams &p, double limit) {
+            const r50::ModulationBlock mod;
+            for (int i = 0; i < static_cast<int>(limit * kSR); ++i) {
+                if (i % 32 == 0) partial.updateBlock(p, 0.0, mod);
+                partial.process();
+                if (!partial.isActive()) return i / kSR;
+            }
+            return limit;
+        };
+
+        {
+            r50::Partial partial;
+            partial.setSampleRate(kSR);
+            const r50::PartialParams p = held(oneShot, 0.0f);
+            partial.noteOn(60, 1.0f, p);
+            const double stopped = secondsUntilInactive(partial, p, 4.0);
+            check(stopped < 3.0, "held one-shot sample ends when the source runs out");
+        }
+        {
+            // The cut must wait for silence, not fire at the sample's last
+            // frame — a resonant filter is still ringing after the source stops.
+            r50::Partial partial;
+            partial.setSampleRate(kSR);
+            r50::PartialParams p = held(oneShot, 0.0f);
+            p.cutoffHz = 300.0f;
+            p.resonance = 0.95f;
+            partial.noteOn(60, 1.0f, p);
+            const r50::ModulationBlock mod;
+            // Peak over the trailing 20 ms. Comparing against the immediately
+            // preceding sample has no teeth: a ring crosses zero every cycle,
+            // so a cut fired mid-ring still looks like it landed on silence.
+            const int window = static_cast<int>(0.020 * kSR);
+            std::vector<float> recent(window, 0.0f);
+            bool cut = false;
+            for (int i = 0; i < static_cast<int>(4.0 * kSR); ++i) {
+                if (i % 32 == 0) partial.updateBlock(p, 0.0, mod);
+                recent[i % window] = std::fabs(partial.process());
+                if (!partial.isActive()) {
+                    float peak = 0.0f;
+                    for (float v : recent) peak = std::max(peak, v);
+                    check(peak < 1.0e-3f,
+                          "one-shot cut lands after the filter ring, not during it");
+                    cut = true;
+                    break;
+                }
+            }
+            check(cut, "a resonant one-shot still ends");
+        }
+        {
+            r50::Partial partial;
+            partial.setSampleRate(kSR);
+            const r50::PartialParams p = held(looped, 0.0f);
+            partial.noteOn(60, 1.0f, p);
+            const double stopped = secondsUntilInactive(partial, p, 4.0);
+            check(stopped >= 4.0, "held looped sample keeps sounding");
+        }
+        {
+            // Noise is a source in its own right, so an exhausted one-shot must
+            // not take the Partial with it while noise is still mixed in.
+            r50::Partial partial;
+            partial.setSampleRate(kSR);
+            const r50::PartialParams p = held(oneShot, 1.0f);
+            partial.noteOn(60, 1.0f, p);
+            const double stopped = secondsUntilInactive(partial, p, 4.0);
+            check(stopped >= 4.0, "noise keeps a Partial alive past an exhausted one-shot");
+        }
+        {
+            r50::Partial partial;
+            partial.setSampleRate(kSR);
+            r50::PartialParams p = held(oneShot, 0.0f);
+            p.sourceType = r50::SourceType::Wave;
+            partial.noteOn(60, 1.0f, p);
+            const double stopped = secondsUntilInactive(partial, p, 4.0);
+            check(stopped >= 4.0, "a held wave Partial is untouched by the one-shot rule");
+        }
+    }
+
     printf(g_failures == 0 ? "\nAll R50 tests passed.\n"
                            : "\n%d R50 test(s) FAILED.\n", g_failures);
     return g_failures == 0 ? 0 : 1;
