@@ -154,6 +154,7 @@
 		CF158EE98361F6B7CC2CD80E /* R50App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50App.swift; sourceTree = "<group>"; };
 		D054E8BF99F8796D67F830E6 /* WavetableStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WavetableStore.swift; sourceTree = "<group>"; };
 		D275C8F072F3DE08B0B786D3 /* Hybrid8ParameterMapping.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Hybrid8ParameterMapping.hpp; sourceTree = "<group>"; };
+		D27CC9F6C457647AEAEAD9D6 /* R50EffectsRack.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50EffectsRack.hpp; sourceTree = "<group>"; };
 		D744FCCEE79D0D451949CC60 /* Hybrid8VoiceParameters.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Hybrid8VoiceParameters.hpp; sourceTree = "<group>"; };
 		DD9BD8CBC130F448D3ADF1F9 /* R50View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50View.swift; sourceTree = "<group>"; };
 		DE0A2823181C214D850EE6FA /* Extension-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Extension-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -270,6 +271,7 @@
 		9DB5BC8D930E5764A991C44B /* DSP */ = {
 			isa = PBXGroup;
 			children = (
+				D27CC9F6C457647AEAEAD9D6 /* R50EffectsRack.hpp */,
 				B1F99D67BD35FB874E88A075 /* R50Engine.hpp */,
 				035FA057E8E955E7FAC3B81D /* R50Envelope.hpp */,
 				5FF121422DF67029FFE09351 /* R50Levels.hpp */,

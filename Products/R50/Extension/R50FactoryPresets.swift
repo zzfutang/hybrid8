@@ -65,6 +65,8 @@ enum R50FactoryPresets {
         ]),
 
         R50FactoryPreset(name: "Tine Electric", values: [
+            addr(R50ParamFxChorusMix): 0.35,
+            addr(R50ParamFxReverbMix): 0.18,
             addr(R50ParamOscWave): 6,
             addr(R50ParamCutoff): 4200,
             addr(R50ParamKeyTrack): 0.7,
@@ -87,6 +89,10 @@ enum R50FactoryPresets {
         ]),
 
         R50FactoryPreset(name: "String Machine", values: [
+            addr(R50ParamFxChorusMix): 0.45,
+            addr(R50ParamFxChorusRate): 0.4,
+            addr(R50ParamFxReverbMix): 0.30,
+            addr(R50ParamFxReverbDecay): 3.2,
             addr(R50ParamOscWave): 8,
             addr(R50ParamCutoff): 3400,
             addr(R50ParamResonance): 0.12,
@@ -98,6 +104,9 @@ enum R50FactoryPresets {
         ]),
 
         R50FactoryPreset(name: "Choir Ah", values: [
+            addr(R50ParamFxReverbMix): 0.42,
+            addr(R50ParamFxReverbSize): 0.7,
+            addr(R50ParamFxReverbDecay): 4.0,
             addr(R50ParamOscWave): 9,
             addr(R50ParamCutoff): 6000,
             addr(R50ParamKeyTrack): 0.3,
@@ -120,6 +129,9 @@ enum R50FactoryPresets {
         ]),
 
         R50FactoryPreset(name: "Wind Bed", values: [
+            addr(R50ParamFxReverbMix): 0.55,
+            addr(R50ParamFxReverbSize): 0.85,
+            addr(R50ParamFxReverbDecay): 7.0,
             addr(R50ParamNoiseMix): 1.0,     // noise only
             addr(R50ParamNoiseSpectrum): 1,  // pink
             addr(R50ParamCutoff): 900,
@@ -154,6 +166,8 @@ enum R50FactoryPresets {
         // The structure the instrument is built around: a sampled transient
         // handing over to a sustaining source.
         R50FactoryPreset(name: "◆ Mallet Choir", values: [
+            addr(R50ParamFxReverbMix): 0.32,
+            addr(R50ParamFxReverbDecay): 3.0,
             addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
             addr(R50ParamToneBlendTime): 0.10,
 
@@ -177,6 +191,10 @@ enum R50FactoryPresets {
         ]),
 
         R50FactoryPreset(name: "◆ Struck Glass", values: [
+            addr(R50ParamFxDelayMix): 0.24,
+            addr(R50ParamFxDelayTime): 0.28,
+            addr(R50ParamFxDelayFeedback): 0.30,
+            addr(R50ParamFxReverbMix): 0.35,
             addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
             addr(R50ParamToneBlendTime): 0.06,
 
@@ -200,6 +218,9 @@ enum R50FactoryPresets {
 
         // Ring modulation: a bell against a fifth above it.
         R50FactoryPreset(name: "◆ Ring Bells", values: [
+            addr(R50ParamFxDelayMix): 0.30,
+            addr(R50ParamFxDelayTime): 0.24,
+            addr(R50ParamFxDelayFeedback): 0.42,
             addr(R50ParamToneStructure): AUValue(Structure.ring),
             addr(R50ParamToneRingLevel): 2.2,
 
@@ -244,6 +265,9 @@ enum R50FactoryPresets {
 
         // The keyboard fades from a pad in the bass to voices up top.
         R50FactoryPreset(name: "◆ Key Split Pad", values: [
+            addr(R50ParamFxChorusMix): 0.30,
+            addr(R50ParamFxReverbMix): 0.40,
+            addr(R50ParamFxReverbDecay): 4.5,
             addr(R50ParamToneStructure): AUValue(Structure.keyCrossfade),
             addr(R50ParamToneCrossfadeLow): 48,
             addr(R50ParamToneCrossfadeHigh): 72,
@@ -267,6 +291,8 @@ enum R50FactoryPresets {
         // Two detuned Partials panned apart — width from the stereo field
         // rather than from an effect.
         R50FactoryPreset(name: "◆ Wide Strings", values: [
+            addr(R50ParamFxChorusMix): 0.25,
+            addr(R50ParamFxReverbMix): 0.35,
             addr(R50ParamToneStructure): AUValue(Structure.mix),
 
             p1(R50FieldSourceType): 1,
@@ -292,6 +318,9 @@ enum R50FactoryPresets {
 
         // Sampled choir with a tracked band of noise breathing underneath it.
         R50FactoryPreset(name: "◆ Breath Choir", values: [
+            addr(R50ParamFxReverbMix): 0.45,
+            addr(R50ParamFxReverbSize): 0.75,
+            addr(R50ParamFxReverbDecay): 4.5,
             addr(R50ParamToneStructure): AUValue(Structure.mix),
 
             p1(R50FieldSourceType): 1,
@@ -341,6 +370,8 @@ enum R50FactoryPresets {
         ]),
 
         R50FactoryPreset(name: "Glass Bell", values: [
+            addr(R50ParamFxDelayMix): 0.22,
+            addr(R50ParamFxReverbMix): 0.34,
             addr(R50ParamOscWave): 10,
             addr(R50ParamCutoff): 8500,
             addr(R50ParamKeyTrack): 0.8,

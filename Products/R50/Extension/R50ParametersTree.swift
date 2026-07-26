@@ -237,6 +237,39 @@ enum R50Parameters {
                       min: 0, max: 127, value: 72, unit: .indexed),
             ])
 
+        let effects = AUParameterTree.createGroup(
+            withIdentifier: "fx", name: "Effects", children: [
+                param(R50ParamFxCompressor, "fxCompressor", "Compressor",
+                      min: 0, max: 1, value: 0),
+
+                param(R50ParamFxChorusMix, "fxChorusMix", "Chorus Mix",
+                      min: 0, max: 1, value: 0),
+                param(R50ParamFxChorusRate, "fxChorusRate", "Chorus Rate",
+                      min: 0.05, max: 8, value: 0.6, unit: .hertz, log: true),
+                param(R50ParamFxChorusDepth, "fxChorusDepth", "Chorus Depth",
+                      min: 0, max: 1, value: 0.4),
+
+                param(R50ParamFxDelayMix, "fxDelayMix", "Delay Mix",
+                      min: 0, max: 1, value: 0),
+                param(R50ParamFxDelayTime, "fxDelayTime", "Delay Time",
+                      min: 0.02, max: 2, value: 0.32, unit: .seconds, log: true),
+                param(R50ParamFxDelayFeedback, "fxDelayFeedback", "Delay Feedback",
+                      min: 0, max: 0.95, value: 0.35),
+                param(R50ParamFxDelayTone, "fxDelayTone", "Delay Tone",
+                      min: 0, max: 1, value: 0.5),
+                param(R50ParamFxDelayPingPong, "fxDelayPingPong", "Ping Pong",
+                      min: 0, max: 1, value: 1),
+
+                param(R50ParamFxReverbMix, "fxReverbMix", "Reverb Mix",
+                      min: 0, max: 1, value: 0),
+                param(R50ParamFxReverbSize, "fxReverbSize", "Reverb Size",
+                      min: 0, max: 1, value: 0.55),
+                param(R50ParamFxReverbDecay, "fxReverbDecay", "Reverb Decay",
+                      min: 0.2, max: 12, value: 2.4, unit: .seconds, log: true),
+                param(R50ParamFxReverbTone, "fxReverbTone", "Reverb Tone",
+                      min: 0, max: 1, value: 0.55),
+            ])
+
         let global = AUParameterTree.createGroup(
             withIdentifier: "global", name: "Global", children: [
                 param(R50ParamMasterGain, "masterGain", "Master",
@@ -246,6 +279,6 @@ enum R50Parameters {
             ])
 
         return AUParameterTree.createTree(
-            withChildren: [partialGroup(0), partialGroup(1), tone, global])
+            withChildren: [partialGroup(0), partialGroup(1), tone, effects, global])
     }
 }

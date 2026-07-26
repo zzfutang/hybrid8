@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstring>
 
+#include "R50EffectsRack.hpp"
 #include "R50Parameters.h"
 #include "R50Voice.hpp"
 #include "Utils.hpp"
@@ -40,6 +41,7 @@ public:
     void setSampleRate(double sr) {
         sampleRate_ = sr;
         for (auto &voice : voices_) voice.setSampleRate(sr);
+        effects_.setup(sr);
         gainSmoother_.setSampleRate(sr);
         gainSmoother_.setTimeConstant(20.0);
         gainSmoother_.snap(store_[R50ParamMasterGain].load(std::memory_order_relaxed));
@@ -127,6 +129,7 @@ public:
 
     void allSoundOff() {
         for (auto &voice : voices_) voice.reset();
+        effects_.reset();
         std::memset(keyDown_, 0, sizeof(keyDown_));
     }
 
@@ -149,6 +152,23 @@ public:
             // per control block — the only place params_ is ever written.
             snapshotParams();
 
+            // Effect coefficients are control-rate too; several of them run
+            // trig or allocate delay reads that have no business per sample.
+            effects_.setParams(
+                get(R50ParamFxChorusMix), get(R50ParamFxChorusRate),
+                get(R50ParamFxChorusDepth),
+                get(R50ParamFxDelayMix), get(R50ParamFxDelayTime),
+                get(R50ParamFxDelayFeedback), get(R50ParamFxDelayTone),
+                get(R50ParamFxDelayPingPong),
+                get(R50ParamFxReverbMix), get(R50ParamFxReverbSize),
+                get(R50ParamFxReverbDecay), get(R50ParamFxReverbTone),
+                0.015f,
+                compressorAmount_ > 0.001f ? 1.0f : 0.0f,
+                -6.0f - 24.0f * compressorAmount_,   // threshold
+                1.0f + 7.0f * compressorAmount_,     // ratio
+                0.010f, 0.120f,
+                6.0f * compressorAmount_);           // makeup
+
             for (auto &voice : voices_) {
                 if (voice.isActive()) voice.updateBlock(params_, bendSemitones);
             }
@@ -166,9 +186,16 @@ public:
                 // 0.25 was sized for eight voices all peaking together, which
                 // left a single note at -20 dBFS; the soft clip exists exactly
                 // to catch the rare moment when a dense chord does line up.
-                const float gain = 0.55f * gainSmoother_.next();
-                sumL = synth::softClip(sumL * gain);
-                sumR = synth::softClip(sumR * gain);
+                sumL *= 0.55f;
+                sumR *= 0.55f;
+
+                // Effects run before the master trim, so moving the output
+                // level does not change how hard the compressor works or how
+                // loud the reverb tail sits against the dry signal.
+                const StereoSample wet = effects_.process(sumL, sumR);
+                const float gain = gainSmoother_.next();
+                sumL = synth::softClip(wet.l * gain);
+                sumR = synth::softClip(wet.r * gain);
 
                 outL[offset + i] = sumL;
                 outR[offset + i] = sumR;
@@ -285,6 +312,22 @@ private:
         set(R50ParamToneBlendTime,     0.25f);
         set(R50ParamToneCrossfadeLow,  48.0f);
         set(R50ParamToneCrossfadeHigh, 72.0f);
+
+        // Effects default to silent so an existing preset, which names none of
+        // them, sounds exactly as it did.
+        set(R50ParamFxCompressor,    0.0f);
+        set(R50ParamFxChorusMix,     0.0f);
+        set(R50ParamFxChorusRate,    0.6f);
+        set(R50ParamFxChorusDepth,   0.4f);
+        set(R50ParamFxDelayMix,      0.0f);
+        set(R50ParamFxDelayTime,     0.32f);
+        set(R50ParamFxDelayFeedback, 0.35f);
+        set(R50ParamFxDelayTone,     0.5f);
+        set(R50ParamFxDelayPingPong, 1.0f);
+        set(R50ParamFxReverbMix,     0.0f);
+        set(R50ParamFxReverbSize,    0.55f);
+        set(R50ParamFxReverbDecay,   2.4f);
+        set(R50ParamFxReverbTone,    0.55f);
     }
 
     /// Derive the denormalised block the voices read from the atomic store.
@@ -388,6 +431,7 @@ private:
         params_.crossfadeHigh =
             static_cast<int>(std::lround(get(R50ParamToneCrossfadeHigh)));
 
+        compressorAmount_ = synth::clampf(get(R50ParamFxCompressor), 0.0f, 1.0f);
         gainSmoother_.setTarget(synth::clampf(get(R50ParamMasterGain), 0.0f, 1.0f));
     }
 
@@ -427,6 +471,8 @@ private:
     /// Physical key state, independent of the CC64 gate hold.
     bool   keyDown_[128] = {false};
 
+    GlobalEffects          effects_;
+    float                  compressorAmount_ = 0.0f;
     synth::OnePoleSmoother gainSmoother_;
     std::atomic<float>     meter_{0.0f};
 };

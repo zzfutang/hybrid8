@@ -86,6 +86,22 @@ typedef enum R50Param : unsigned long long {
     R50ParamToneCrossfadeLow,    // MIDI note
     R50ParamToneCrossfadeHigh,   // MIDI note
 
+    // --- Effects ------------------------------------------------------------
+    // A global stage after the voice sum, so none of these are per Partial.
+    R50ParamFxCompressor,        // 0 = off .. 1 = heavily compressed
+    R50ParamFxChorusMix,         // 0 .. 1
+    R50ParamFxChorusRate,        // Hz
+    R50ParamFxChorusDepth,       // 0 .. 1
+    R50ParamFxDelayMix,          // 0 .. 1
+    R50ParamFxDelayTime,         // seconds
+    R50ParamFxDelayFeedback,     // 0 .. 1
+    R50ParamFxDelayTone,         // 0 .. 1 (damping of the repeats)
+    R50ParamFxDelayPingPong,     // 0 .. 1
+    R50ParamFxReverbMix,         // 0 .. 1
+    R50ParamFxReverbSize,        // 0 .. 1
+    R50ParamFxReverbDecay,       // seconds
+    R50ParamFxReverbTone,        // 0 .. 1
+
     R50ParamCount
 } R50Param;
 

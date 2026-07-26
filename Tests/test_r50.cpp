@@ -1239,6 +1239,76 @@ int main() {
         check(bounded, "waveshapers stay bounded at full drive, post-filter");
     }
 
+    // --- Effects ------------------------------------------------------------
+    {
+        // Every effect defaults to silent, so a patch that names none of them
+        // must render exactly as it did before the rack existed. This is the
+        // gate: a rack that colours the signal at zero mix would change every
+        // preset in the instrument.
+        auto renderWith = [](int address, float value) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            if (address >= 0) engine.setParameter(address, value);
+            engine.noteOn(60, 100);
+            return renderBuffer(engine, 0.4);
+        };
+        const std::vector<float> dry = renderWith(-1, 0);
+        check(!dry.empty(), "dry render produced audio");
+
+        for (int address : {R50ParamFxChorusMix, R50ParamFxDelayMix,
+                            R50ParamFxReverbMix, R50ParamFxCompressor}) {
+            const std::vector<float> zeroed = renderWith(address, 0.0f);
+            check(zeroed == dry, "effect at zero mix is a true bypass");
+        }
+
+        // And each one audibly changes the signal when turned up.
+        bool allChange = true;
+        for (int address : {R50ParamFxChorusMix, R50ParamFxDelayMix,
+                            R50ParamFxReverbMix}) {
+            const std::vector<float> wet = renderWith(address, 0.8f);
+            double difference = 0.0;
+            for (size_t n = 0; n < wet.size(); ++n)
+                difference = std::max(difference,
+                                      std::fabs(double(wet[n]) - dry[n]));
+            if (difference < 0.005) allChange = false;
+        }
+        check(allChange, "each effect changes the signal when mixed in");
+    }
+    {
+        // Tails must stay bounded and eventually die. A feedback path that does
+        // not decay is the classic way an effects rack ruins a session.
+        r50::R50Engine engine;
+        setupSpectralTone(engine, 0);
+        engine.setParameter(R50ParamFxDelayMix, 0.7f);
+        engine.setParameter(R50ParamFxDelayFeedback, 0.85f);
+        engine.setParameter(R50ParamFxReverbMix, 0.7f);
+        engine.setParameter(R50ParamFxReverbDecay, 6.0f);
+        engine.noteOn(60, 110);
+        render(engine, 0.5);
+        engine.noteOff(60);
+
+        const float early = render(engine, 2.0, 0.2);
+        const float late  = render(engine, 20.0, 0.2);
+        printf("       fx tail: at 2 s=%.5f  at 22 s=%.5f\n", early, late);
+        check(std::isfinite(early) && std::isfinite(late) && early <= 1.05f,
+              "effect tails stay finite and bounded");
+        check(late < early, "effect tails decay rather than sustain");
+    }
+    {
+        // The compressor should reduce the level of a loud passage.
+        auto peakWith = [](float compressor) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(R50ParamFxCompressor, compressor);
+            for (int note = 55; note < 63; ++note) engine.noteOn(note, 127);
+            return render(engine, 0.6, 0.2);
+        };
+        const float open = peakWith(0.0f);
+        const float squashed = peakWith(1.0f);
+        printf("       compressor: off=%.4f  full=%.4f\n", open, squashed);
+        check(squashed < open, "the compressor reduces a loud passage");
+    }
+
     // --- Determinism --------------------------------------------------------
     {
         auto renderOnce = [] {

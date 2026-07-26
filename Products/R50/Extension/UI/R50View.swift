@@ -16,6 +16,7 @@ enum R50Page: String, CaseIterable {
     case partial   = "Partial"
     case envelopes = "Envelopes"
     case tone      = "Tone"
+    case effects   = "FX"
     case samples   = "Samples"
 }
 
@@ -67,6 +68,7 @@ struct R50View: View {
         case .partial:   partialPage
         case .envelopes: envelopePage
         case .tone:      tonePage
+        case .effects:   effectsPage
         case .samples:   samplePage
         }
     }
@@ -423,6 +425,60 @@ struct R50View: View {
         case 4:  return "Key XF: fades from Partial 1 to Partial 2 between XF Low and XF High."
         default: return "Mix: both Partials sum, balanced by their Levels."
         }
+    }
+
+    // MARK: - Effects page
+
+    /// A global stage after the voice sum, which is why nothing here is per
+    /// Partial. Everything defaults to silent, so a patch only has effects if
+    /// it asks for them.
+    private var effectsPage: some View {
+        HStack(alignment: .top, spacing: 10) {
+            R50Panel(title: "Chorus") {
+                VStack(alignment: .leading, spacing: 8) {
+                    R50Value(title: "Mix", address: R50ParamFxChorusMix, model: model)
+                    R50Value(title: "Rate", address: R50ParamFxChorusRate, model: model)
+                    R50Value(title: "Depth", address: R50ParamFxChorusDepth, model: model)
+                }
+            }
+            .frame(width: 262)
+
+            R50Panel(title: "Delay") {
+                VStack(alignment: .leading, spacing: 8) {
+                    R50Value(title: "Mix", address: R50ParamFxDelayMix, model: model)
+                    R50Value(title: "Time", address: R50ParamFxDelayTime, model: model)
+                    R50Value(title: "Feedback", address: R50ParamFxDelayFeedback,
+                             model: model)
+                    R50Value(title: "Tone", address: R50ParamFxDelayTone, model: model)
+                    R50Value(title: "Ping Pong", address: R50ParamFxDelayPingPong,
+                             model: model)
+                }
+            }
+            .frame(width: 285)
+
+            R50Panel(title: "Reverb") {
+                VStack(alignment: .leading, spacing: 8) {
+                    R50Value(title: "Mix", address: R50ParamFxReverbMix, model: model)
+                    R50Value(title: "Size", address: R50ParamFxReverbSize, model: model)
+                    R50Value(title: "Decay", address: R50ParamFxReverbDecay, model: model)
+                    R50Value(title: "Tone", address: R50ParamFxReverbTone, model: model)
+                }
+            }
+            .frame(width: 285)
+
+            R50Panel(title: "Compressor") {
+                VStack(alignment: .leading, spacing: 8) {
+                    R50Value(title: "Amount", address: R50ParamFxCompressor, model: model)
+                    Text("One control: raising it lowers the threshold, raises the ratio and adds makeup together. Stereo-linked, so it will not pull the image around.")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundColor(R50Palette.engrave)
+                        .lineLimit(8)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: 236)
+        }
+        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Samples page
