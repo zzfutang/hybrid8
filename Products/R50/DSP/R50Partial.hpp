@@ -168,9 +168,12 @@ public:
         filter_.setParams(cutoff, p.resonance, p.slope, 0.0f, p.drive);
     }
 
-    /// One sample, before panning and before the Tone structure. The structure
-    /// needs the bare signal, so pan is applied by the caller via panLeft() and
-    /// panRight().
+    /// One sample, before level, pan and the Tone structure. Level is applied
+    /// by the caller, not here: ring modulation multiplies two Partials, and if
+    /// level were already folded in the product would be quadratic in it — so
+    /// turning a Partial down would attenuate the ring far faster than the dry
+    /// signal. Level is the dry amount, exactly as the architecture's
+    /// dry1*p1 + dry2*p2 + ring*(p1*p2) implies.
     inline float process() {
         if (!active_) return 0.0f;
 
@@ -190,9 +193,10 @@ public:
                           : osc_.process();
         const float noise = noise_.process();
         const float source = tonal + (noise - tonal) * noiseMix_;
-        return filter_.process(source) * ampLevel_ * velocity_ * level_;
+        return filter_.process(source) * ampLevel_ * velocity_;
     }
 
+    float level() const { return level_; }
     float panLeft() const { return panLeft_; }
     float panRight() const { return panRight_; }
 

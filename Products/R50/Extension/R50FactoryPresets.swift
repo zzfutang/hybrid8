@@ -147,6 +147,199 @@ enum R50FactoryPresets {
             addr(R50ParamAmpRelease): 0.2,
         ]),
 
+        // ---- Two-Partial patches -------------------------------------------
+        // Each of these exists to demonstrate one structure or feature. The
+        // patches above are single-Partial and stay that way.
+
+        // The structure the instrument is built around: a sampled transient
+        // handing over to a sustaining source.
+        R50FactoryPreset(name: "◆ Mallet Choir", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.10,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.mallet),
+            p1(R50FieldCutoff): 9000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.3,
+            p1(R50FieldAmpSustain): 0,
+            p1(R50FieldAmpRelease): 0.2,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.choir),
+            p2(R50FieldCutoff): 5000,
+            p2(R50FieldKeyTrack): 0.4,
+            p2(R50FieldFilterEnvAmount): 0.2,
+            p2(R50FieldAmpAttack): 0.06,
+            p2(R50FieldAmpSustain): 0.9,
+            p2(R50FieldAmpRelease): 0.8,
+        ]),
+
+        R50FactoryPreset(name: "◆ Struck Glass", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.06,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.tineStrike),
+            p1(R50FieldCutoff): 12000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.25,
+            p1(R50FieldAmpSustain): 0,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.glassPad),
+            p2(R50FieldCutoff): 7000,
+            p2(R50FieldKeyTrack): 0.7,
+            p2(R50FieldAmpAttack): 0.02,
+            p2(R50FieldAmpDecay): 3.0,
+            p2(R50FieldAmpSustain): 0.35,
+            p2(R50FieldAmpRelease): 1.5,
+        ]),
+
+        // Ring modulation: a bell against a fifth above it.
+        R50FactoryPreset(name: "◆ Ring Bells", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.ring),
+            addr(R50ParamToneRingLevel): 1.0,
+
+            p1(R50FieldOscWave): 10,          // Bell
+            p1(R50FieldCutoff): 9000,
+            p1(R50FieldKeyTrack): 0.6,
+            p1(R50FieldLevel): 0.18,
+            p1(R50FieldAmpDecay): 2.0,
+            p1(R50FieldAmpSustain): 0.2,
+            p1(R50FieldAmpRelease): 1.2,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldOscWave): 0,           // Saw
+            p2(R50FieldSemitone): 7,
+            p2(R50FieldCutoff): 6000,
+            p2(R50FieldLevel): 0.18,
+            p2(R50FieldFilterEnvAmount): 0,
+            p2(R50FieldAmpSustain): 0.6,
+            p2(R50FieldAmpRelease): 1.2,
+        ]),
+
+        // Velocity decides which Partial you hear: soft is a tine, hard is reed.
+        R50FactoryPreset(name: "◆ Velocity Keys", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.velocityCrossfade),
+
+            p1(R50FieldOscWave): 6,           // Tine
+            p1(R50FieldCutoff): 3400,
+            p1(R50FieldKeyTrack): 0.6,
+            p1(R50FieldAmpDecay): 1.6,
+            p1(R50FieldAmpSustain): 0.3,
+            p1(R50FieldAmpRelease): 0.5,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldOscWave): 7,           // Clarinet
+            p2(R50FieldCutoff): 7000,
+            p2(R50FieldKeyTrack): 0.6,
+            p2(R50FieldDrive): 0.2,
+            p2(R50FieldAmpDecay): 1.6,
+            p2(R50FieldAmpSustain): 0.45,
+            p2(R50FieldAmpRelease): 0.5,
+        ]),
+
+        // The keyboard fades from a pad in the bass to voices up top.
+        R50FactoryPreset(name: "◆ Key Split Pad", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.keyCrossfade),
+            addr(R50ParamToneCrossfadeLow): 48,
+            addr(R50ParamToneCrossfadeHigh): 72,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.warmPad),
+            p1(R50FieldCutoff): 2600,
+            p1(R50FieldAmpAttack): 0.15,
+            p1(R50FieldAmpSustain): 1.0,
+            p1(R50FieldAmpRelease): 0.9,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldOscWave): 9,           // Vocal Ah
+            p2(R50FieldCutoff): 6500,
+            p2(R50FieldKeyTrack): 0.3,
+            p2(R50FieldAmpAttack): 0.2,
+            p2(R50FieldAmpSustain): 0.95,
+            p2(R50FieldAmpRelease): 0.9,
+        ]),
+
+        // Two detuned Partials panned apart — width from the stereo field
+        // rather than from an effect.
+        R50FactoryPreset(name: "◆ Wide Strings", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.mix),
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.strings),
+            p1(R50FieldPan): -0.7,
+            p1(R50FieldFine): -7,
+            p1(R50FieldLevel): 0.55,
+            p1(R50FieldCutoff): 4200,
+            p1(R50FieldAmpAttack): 0.25,
+            p1(R50FieldAmpSustain): 1.0,
+            p1(R50FieldAmpRelease): 0.8,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldOscWave): 8,           // Strings wave
+            p2(R50FieldPan): 0.7,
+            p2(R50FieldFine): 7,
+            p2(R50FieldLevel): 0.55,
+            p2(R50FieldCutoff): 3600,
+            p2(R50FieldAmpAttack): 0.3,
+            p2(R50FieldAmpSustain): 1.0,
+            p2(R50FieldAmpRelease): 0.9,
+        ]),
+
+        // Sampled choir with a tracked band of noise breathing underneath it.
+        R50FactoryPreset(name: "◆ Breath Choir", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.mix),
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.choir),
+            p1(R50FieldCutoff): 5200,
+            p1(R50FieldLevel): 0.8,
+            p1(R50FieldAmpAttack): 0.12,
+            p1(R50FieldAmpSustain): 1.0,
+            p1(R50FieldAmpRelease): 0.7,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldNoiseMix): 1.0,
+            p2(R50FieldNoiseSpectrum): 5,     // band-passed
+            p2(R50FieldNoiseTone): 0.28,
+            p2(R50FieldNoisePitchTrack): 1,
+            p2(R50FieldLevel): 0.3,
+            p2(R50FieldCutoff): 9000,
+            p2(R50FieldFilterEnvAmount): 0,
+            p2(R50FieldAmpAttack): 0.2,
+            p2(R50FieldAmpSustain): 0.9,
+            p2(R50FieldAmpRelease): 0.6,
+        ]),
+
+        // Octave stack: a sampled pad under a bright wave an octave up.
+        R50FactoryPreset(name: "◆ Hybrid Stack", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.mix),
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.glassPad),
+            p1(R50FieldOctave): -1,
+            p1(R50FieldLevel): 0.7,
+            p1(R50FieldCutoff): 3000,
+            p1(R50FieldAmpAttack): 0.02,
+            p1(R50FieldAmpSustain): 0.9,
+            p1(R50FieldAmpRelease): 0.6,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldOscWave): 4,           // variable pulse
+            p2(R50FieldPulseWidth): 0.3,
+            p2(R50FieldLevel): 0.45,
+            p2(R50FieldCutoff): 4800,
+            p2(R50FieldResonance): 0.25,
+            p2(R50FieldFilterEnvAmount): 0.4,
+            p2(R50FieldAmpDecay): 0.8,
+            p2(R50FieldAmpSustain): 0.5,
+            p2(R50FieldAmpRelease): 0.5,
+        ]),
+
         R50FactoryPreset(name: "Glass Bell", values: [
             addr(R50ParamOscWave): 10,
             addr(R50ParamCutoff): 8500,
@@ -163,5 +356,26 @@ enum R50FactoryPresets {
 
     private static func addr(_ p: R50Param) -> AUParameterAddress {
         AUParameterAddress(p.rawValue)
+    }
+
+    /// Address of a field on a given Partial. Partial 1's fields resolve to the
+    /// original addresses, so the older presets above stay valid unchanged.
+    private static func p1(_ field: R50PartialField) -> AUParameterAddress {
+        AUParameterAddress(r50PartialParam(0, field).rawValue)
+    }
+    private static func p2(_ field: R50PartialField) -> AUParameterAddress {
+        AUParameterAddress(r50PartialParam(1, field).rawValue)
+    }
+
+    /// Factory instrument indices, in the order buildFactoryContent() publishes
+    /// them in R50SampleFactory.hpp.
+    private enum Instrument {
+        static let choir = 0, strings = 1, warmPad = 2, glassPad = 3
+        static let mallet = 4, pluck = 5, chiff = 6, noiseBurst = 7, tineStrike = 8
+    }
+
+    private enum Structure {
+        static let mix = 0, ring = 1, attackSustain = 2
+        static let velocityCrossfade = 3, keyCrossfade = 4
     }
 }

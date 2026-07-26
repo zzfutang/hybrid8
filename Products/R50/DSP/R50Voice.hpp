@@ -117,7 +117,11 @@ public:
             return;
         }
 
-        float weightA = weightA_, weightB = weightB_;
+        // Structure weight times the Partial's own level. Kept separate from
+        // the ring product below, which deliberately uses the unscaled
+        // signals so level behaves as a dry amount.
+        float weightA = weightA_ * partials_[0].level();
+        float weightB = weightB_ * partials_[1].level();
         float extra = 0.0f;
 
         switch (structure_) {
@@ -137,8 +141,8 @@ public:
                 // Explicit timed handover: the transient Partial gives way to
                 // the sustaining one over blendTime.
                 const float x = static_cast<float>(blendPosition_);
-                weightA = 1.0f - x;
-                weightB = x;
+                weightA = (1.0f - x) * partials_[0].level();
+                weightB = x * partials_[1].level();
                 if (blendPosition_ < 1.0) {
                     blendPosition_ += blendRate_;
                     if (blendPosition_ > 1.0) blendPosition_ = 1.0;
