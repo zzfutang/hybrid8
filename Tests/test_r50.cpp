@@ -7,6 +7,7 @@
 
 #include "R50Engine.hpp"
 #include "R50PitchDetect.hpp"
+#include "R50WavWriter.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -2194,6 +2195,119 @@ int main() {
         check(zoneBefore.valid && zoneAfter.valid
            && std::fabs(1200.0 * std::log2(zoneAfter.hertz / zoneBefore.hertz)) < 15.0,
               "a multi-zone instrument ignores a root override");
+    }
+
+    // --- WAV export ---------------------------------------------------------
+    {
+        // A minimal reader, deliberately independent of the writer: walking the
+        // chunk list is the only way to prove the sizes are right, and reusing
+        // the writer's own idea of the layout would prove nothing.
+        struct Parsed {
+            bool ok = false;
+            uint32_t rate = 0, bits = 0, channels = 0;
+            std::vector<float> samples;
+            bool hasLoop = false;
+            uint32_t loopStart = 0, loopEnd = 0, rootKey = 0;
+        };
+        auto readU32 = [](const std::vector<uint8_t> &b, size_t at) {
+            return static_cast<uint32_t>(b[at]) | (static_cast<uint32_t>(b[at + 1]) << 8)
+                 | (static_cast<uint32_t>(b[at + 2]) << 16)
+                 | (static_cast<uint32_t>(b[at + 3]) << 24);
+        };
+        auto readU16 = [](const std::vector<uint8_t> &b, size_t at) {
+            return static_cast<uint32_t>(b[at]) | (static_cast<uint32_t>(b[at + 1]) << 8);
+        };
+        auto tagAt = [](const std::vector<uint8_t> &b, size_t at, const char *tag) {
+            return b[at] == (uint8_t)tag[0] && b[at + 1] == (uint8_t)tag[1]
+                && b[at + 2] == (uint8_t)tag[2] && b[at + 3] == (uint8_t)tag[3];
+        };
+        auto parse = [&](const std::vector<uint8_t> &bytes) {
+            Parsed out;
+            if (bytes.size() < 12 || !tagAt(bytes, 0, "RIFF")
+             || !tagAt(bytes, 8, "WAVE")) return out;
+            // The declared RIFF size must match the file, or editors truncate.
+            if (readU32(bytes, 4) != bytes.size() - 8) return out;
+
+            size_t at = 12;
+            while (at + 8 <= bytes.size()) {
+                const uint32_t size = readU32(bytes, at + 4);
+                const size_t body = at + 8;
+                if (body + size > bytes.size()) return out;
+                if (tagAt(bytes, at, "fmt ")) {
+                    out.channels = readU16(bytes, body + 2);
+                    out.rate     = readU32(bytes, body + 4);
+                    out.bits     = readU16(bytes, body + 14);
+                } else if (tagAt(bytes, at, "data")) {
+                    for (uint32_t i = 0; i + 2 < size; i += 3) {
+                        int32_t v = static_cast<int32_t>(bytes[body + i])
+                                  | (static_cast<int32_t>(bytes[body + i + 1]) << 8)
+                                  | (static_cast<int32_t>(bytes[body + i + 2]) << 16);
+                        if (v & 0x800000) v |= ~0xFFFFFF;   // sign extend
+                        out.samples.push_back(v / 8388607.0f);
+                    }
+                } else if (tagAt(bytes, at, "smpl")) {
+                    out.rootKey   = readU32(bytes, body + 12);
+                    out.hasLoop   = readU32(bytes, body + 28) == 1;
+                    out.loopStart = readU32(bytes, body + 44);
+                    out.loopEnd   = readU32(bytes, body + 48);
+                }
+                at = body + size + (size & 1u);
+            }
+            out.ok = true;
+            return out;
+        };
+
+        std::vector<float> source(1000);
+        for (size_t n = 0; n < source.size(); ++n) {
+            source[n] = static_cast<float>(std::sin(synth::kTwoPi * 5.0 * n / source.size()));
+        }
+        source[0] = 1.0f;
+        source[1] = -1.0f;
+
+        const std::vector<uint8_t> encoded =
+            r50::encodeWav(source.data(), static_cast<int>(source.size()),
+                           kSR, 55, 100, 900, true);
+        const Parsed parsed = parse(encoded);
+        check(parsed.ok, "the exported file parses as a RIFF WAVE");
+        check(parsed.rate == 44100 && parsed.bits == 24 && parsed.channels == 1,
+              "the exported file declares 24-bit mono at the source rate");
+        check(parsed.samples.size() == source.size(),
+              "every frame is written");
+
+        // Seeded high so a file that failed to parse fails this rather than
+        // sailing through a loop that never runs.
+        double worst = parsed.samples.size() == source.size() ? 0.0 : 1.0;
+        for (size_t n = 0; n < parsed.samples.size() && n < source.size(); ++n) {
+            worst = std::max(worst, std::fabs(double(parsed.samples[n] - source[n])));
+        }
+        printf("       wav round-trip worst error: %.2e\n", worst);
+        check(worst < 1.0e-6, "24-bit quantisation round-trips within a bit");
+        // Full scale must not wrap to the opposite rail, which is what scaling
+        // by 8388608 instead of 8388607 would do. Guarded, because a failed
+        // parse leaves nothing to index and a crash reports nothing at all.
+        check(parsed.samples.size() > 1 && parsed.samples[0] > 0.99f
+           && parsed.samples[1] < -0.99f,
+              "full scale does not wrap");
+
+        check(parsed.hasLoop && parsed.rootKey == 55,
+              "the loop and root key travel with the file");
+        // R50's loopEnd is exclusive, smpl's is inclusive. One frame out is a
+        // click on a short loop.
+        check(parsed.loopStart == 100 && parsed.loopEnd == 899,
+              "the smpl loop end is inclusive");
+
+        const std::vector<uint8_t> oneShot =
+            r50::encodeWav(source.data(), static_cast<int>(source.size()),
+                           kSR, 60, 0, 1000, false);
+        check(!parse(oneShot).hasLoop, "a one-shot exports without a loop");
+
+        // Odd frame counts make the data chunk odd, and a RIFF chunk has to be
+        // word aligned or every following chunk is misread.
+        const std::vector<uint8_t> odd =
+            r50::encodeWav(source.data(), 999, kSR, 60, 100, 900, true);
+        const Parsed oddParsed = parse(odd);
+        check(oddParsed.ok && oddParsed.samples.size() == 999 && oddParsed.hasLoop,
+              "an odd frame count stays word aligned");
     }
 
     printf(g_failures == 0 ? "\nAll R50 tests passed.\n"

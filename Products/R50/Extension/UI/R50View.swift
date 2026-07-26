@@ -26,6 +26,7 @@ struct R50View: View {
     @ObservedObject var samples: R50SampleStore
     @State private var page: R50Page = .partial
     @State private var showingImporter = false
+    @State private var showingExporter = false
     @State private var showingPresets = false
     /// Which Partial the Partial and Envelopes pages are editing.
     @State private var partial = 0
@@ -627,6 +628,7 @@ struct R50View: View {
                     sampleTable
                     HStack(spacing: 8) {
                         actionButton("IMPORT…") { showingImporter = true }
+                        actionButton("EXPORT…") { showingExporter = true }
                         actionButton("DELETE") {
                             if let entry = samples.entries
                                 .first(where: { $0.index == samples.selectedIndex }) {
@@ -639,7 +641,7 @@ struct R50View: View {
                                               design: .monospaced))
                                 .foregroundColor(R50Palette.glow)
                         } else {
-                            Text("+ MARKS AN IMPORTED SAMPLE — ONLY THOSE CAN BE DELETED")
+                            Text("EXPORT WRITES THE SELECTED SAMPLE'S ZONES AS WAV — + MARKS AN IMPORT")
                                 .font(.system(size: 8, weight: .medium,
                                               design: .monospaced))
                                 .tracking(0.8)
@@ -690,6 +692,17 @@ struct R50View: View {
             if case let .success(urls) = result, let url = urls.first {
                 samples.importAudioFile(at: url)
             }
+        }
+        // A folder, not a file: a generated multisample is five zones and they
+        // all have to come out to be worth anything.
+        .fileImporter(isPresented: $showingExporter,
+                      allowedContentTypes: [.folder],
+                      allowsMultipleSelection: false) { result in
+            guard case let .success(urls) = result, let directory = urls.first,
+                  let entry = samples.entries
+                      .first(where: { $0.index == samples.selectedIndex })
+            else { return }
+            samples.exportInstrument(entry, to: directory)
         }
     }
 

@@ -245,6 +245,54 @@ final class R50SampleStore: ObservableObject {
         errorMessage = "\(manifest.name) will disappear from the list after a restart."
     }
 
+    // MARK: - Export
+
+    /// Write every zone of an instrument into `directory` as WAV. Generated
+    /// content is synthesised into memory and has never existed as a file, so
+    /// without this there is no way to open a factory sample in an editor and
+    /// work on it.
+    ///
+    /// Zone files are named with their root key and key span, which is what you
+    /// need to put a multisample back together — a bare name loses which of the
+    /// five zones you were looking at.
+    @discardableResult
+    func exportInstrument(_ entry: SampleEntry, to directory: URL) -> Int {
+        guard let audioUnit else { return 0 }
+        let scoped = directory.startAccessingSecurityScopedResource()
+        defer { if scoped { directory.stopAccessingSecurityScopedResource() } }
+
+        var written = 0
+        for zoneIndex in 0..<max(1, entry.zones) {
+            guard let zone = audioUnit.zone(instrument: entry.index, zone: zoneIndex),
+                  let wav = zone["wav"] as? Data else { continue }
+
+            let rootKey = zone["rootKey"] as? Int ?? 60
+            let low = zone["lowKey"] as? Int ?? 0
+            let high = zone["highKey"] as? Int ?? 127
+            let safeName = entry.name.replacingOccurrences(of: "/", with: "-")
+            let fileName = entry.zones > 1
+                ? "\(safeName) \(SampleEntry.noteName(rootKey)) "
+                  + "[\(SampleEntry.noteName(low))-\(SampleEntry.noteName(high))].wav"
+                : "\(safeName).wav"
+
+            do {
+                try wav.write(to: directory.appendingPathComponent(fileName))
+                written += 1
+            } catch {
+                errorMessage = "Could not write \(fileName): \(error.localizedDescription)"
+                return written
+            }
+        }
+
+        let loopNote = entry.loopMode == 0 ? "" :
+            " Loop points travel with the file in its smpl chunk."
+        errorMessage = written > 0
+            ? "Exported \(written) file\(written == 1 ? "" : "s") from \(entry.name)."
+              + loopNote
+            : "Nothing to export from \(entry.name)."
+        return written
+    }
+
     // MARK: - Persistence
 
     private var samplesDirectory: URL {

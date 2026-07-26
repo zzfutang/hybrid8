@@ -6,6 +6,7 @@
 
 #import "R50DSPKernelAdapter.h"
 #import "R50PitchDetect.hpp"
+#import "R50WavWriter.hpp"
 #import "R50Engine.hpp"
 
 @implementation R50DSPKernelAdapter {
@@ -73,6 +74,36 @@
     instrument.regions[0] = region;
     instrument.regionCount = 1;
     return library.addInstrument(instrument);
+}
+
+- (NSDictionary<NSString *, id> *)zoneOfInstrument:(NSInteger)index
+                                              zone:(NSInteger)zone {
+    r50::SampleLibrary &library = r50::SampleLibrary::shared();
+    const r50::Multisample *instrument = library.instrument((int)index);
+    if (instrument == nullptr || zone < 0 || zone >= instrument->regionCount) {
+        return nil;
+    }
+    const r50::SampleRegion &region = instrument->regions[zone];
+    const r50::SampleData *data = library.sample(region.slot);
+    if (data == nullptr || data->samples.empty()) return nil;
+
+    const std::vector<uint8_t> wav =
+        r50::encodeWav(data->samples.data(), data->length(),
+                       data->sourceSampleRate, region.rootKey,
+                       data->loopStart, data->loopEnd,
+                       data->loopMode != r50::LoopMode::None);
+
+    return @{
+        @"name":       [NSString stringWithUTF8String:instrument->name],
+        @"wav":        [NSData dataWithBytes:wav.data() length:wav.size()],
+        @"sampleRate": @(data->sourceSampleRate),
+        @"rootKey":    @(region.rootKey),
+        @"lowKey":     @(region.lowKey),
+        @"highKey":    @(region.highKey),
+        @"loopStart":  @(data->loopStart),
+        @"loopEnd":    @(data->loopEnd),
+        @"loopMode":   @((int)data->loopMode),
+    };
 }
 
 - (NSDictionary<NSString *, id> *)detectPitchOf:(NSData *)samples

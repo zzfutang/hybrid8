@@ -161,6 +161,7 @@
 		DD9BD8CBC130F448D3ADF1F9 /* R50View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50View.swift; sourceTree = "<group>"; };
 		DE0A2823181C214D850EE6FA /* Extension-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Extension-Bridging-Header.h"; sourceTree = "<group>"; };
 		E278E8B3AFB116734B0AF070 /* ParameterModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParameterModel.swift; sourceTree = "<group>"; };
+		EC0106283DBE9D65B851E8DF /* R50WavWriter.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50WavWriter.hpp; sourceTree = "<group>"; };
 		EC7E11D10EAACE898A3DC8D7 /* SynthDSPKernelAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SynthDSPKernelAdapter.h; sourceTree = "<group>"; };
 		EEE51E42B7E45C92A7F722E2 /* ModMatrix.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ModMatrix.h; sourceTree = "<group>"; };
 		F4430C160A054E3F2F0FFAFE /* AudioUnitViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioUnitViewController.swift; sourceTree = "<group>"; };
@@ -288,6 +289,7 @@
 				7915BC69DA6FDB8EC6117CD2 /* R50Wave.hpp */,
 				4531DF6E83F3C47C88B2DB27 /* R50WaveOscillator.hpp */,
 				67713C77EF118D8CE3CD5898 /* R50Waveshaper.hpp */,
+				EC0106283DBE9D65B851E8DF /* R50WavWriter.hpp */,
 			);
 			path = DSP;
 			sourceTree = "<group>";

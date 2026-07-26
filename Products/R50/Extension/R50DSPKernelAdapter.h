@@ -47,6 +47,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// from the UI thread.
 - (nullable NSDictionary<NSString *, id> *)sampleInfoAtIndex:(NSInteger)index;
 
+/// One zone encoded as a ready-to-write WAV, so generated content can be
+/// opened in an editor. The bytes carry a `smpl` chunk with the loop points,
+/// which is the most valuable part of a generated sustain. UI thread only.
+- (nullable NSDictionary<NSString *, id> *)zoneOfInstrument:(NSInteger)index
+                                                       zone:(NSInteger)zone;
+
 /// Estimate the pitch of a decoded mono buffer. Returns nil when the material
 /// has no period worth trusting — a noise burst has no root key, and inventing
 /// one for it is worse than declining.

@@ -148,6 +148,11 @@ public final class R50AudioUnit: AUAudioUnit {
         kernel.sampleInfo(at: index)
     }
 
+    /// One zone's audio and metadata, for writing out.
+    func zone(instrument: Int, zone: Int) -> [String: Any]? {
+        kernel.zone(ofInstrument: instrument, zone: zone)
+    }
+
     /// Estimate a buffer's pitch. Nil when the material is not pitched.
     func detectPitch(samples: [Float], sampleRate: Double) -> [String: Any]? {
         samples.withUnsafeBufferPointer { buffer in
