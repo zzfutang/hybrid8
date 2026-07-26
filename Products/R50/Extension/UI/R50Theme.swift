@@ -269,6 +269,117 @@ struct R50WaveGrid: View {
     }
 }
 
+// MARK: - Name selector
+
+/// Readout plus steppers for an indexed parameter whose list is too long to
+/// show as buttons — waves today, sample instruments as soon as a user imports
+/// a few. The name is always visible, which a grid of abbreviated buttons
+/// cannot promise once the list grows.
+///
+/// A custom button and popover rather than the system Menu, matching Hybrid 8's
+/// note that macOS overrides Menu's label styling and breaks the fascia look.
+struct R50NameSelector: View {
+    let title: String
+    let address: R50Param
+    let names: [String]
+    @ObservedObject var model: R50ParameterModel
+
+    @State private var showingList = false
+
+    private var index: Int {
+        min(max(Int(model.value(address).rounded()), 0), max(names.count - 1, 0))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if !title.isEmpty {
+                Text(title.uppercased())
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundColor(R50Palette.engrave)
+            }
+
+            HStack(spacing: 2) {
+                stepper("◀") { step(-1) }
+
+                Button { showingList.toggle() } label: {
+                    HStack(spacing: 4) {
+                        Text(names.isEmpty ? "—" : names[index])
+                            .font(.system(size: 10, weight: .semibold,
+                                          design: .monospaced))
+                            .foregroundColor(R50Palette.glow)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Spacer(minLength: 2)
+                        Text("▾")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(R50Palette.engrave)
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 5)
+                    .frame(maxWidth: .infinity)
+                    .background(R50Palette.track)
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showingList, arrowEdge: .bottom) {
+                    listPopover
+                }
+
+                stepper("▶") { step(1) }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color(white: 0.32), lineWidth: 1))
+        }
+    }
+
+    private var listPopover: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(Array(names.enumerated()), id: \.offset) { offset, name in
+                    let selected = offset == index
+                    Text(name)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(selected ? Color.black : R50Palette.legend)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(selected ? R50Palette.glow : Color.clear)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            select(offset)
+                            showingList = false
+                        }
+                }
+            }
+            .padding(4)
+        }
+        .frame(width: 190, height: min(CGFloat(names.count) * 26 + 12, 320))
+        .background(Color(white: 0.13))
+    }
+
+    private func stepper(_ glyph: String, action: @escaping () -> Void) -> some View {
+        Text(glyph)
+            .font(.system(size: 8, weight: .bold))
+            .foregroundColor(R50Palette.legend)
+            .frame(width: 18)
+            .padding(.vertical, 5)
+            .background(Color(white: 0.15))
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+    }
+
+    private func step(_ delta: Int) {
+        guard !names.isEmpty else { return }
+        select((index + delta + names.count) % names.count)
+    }
+
+    private func select(_ newIndex: Int) {
+        model.parameter(address)?.setValue(Float(newIndex), originator: nil)
+        model.objectWillChange.send()
+    }
+}
+
 // MARK: - Meter
 
 struct R50Meter: View {

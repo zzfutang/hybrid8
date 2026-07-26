@@ -369,16 +369,32 @@ struct R50View: View {
 
     // MARK: - Panels
 
+    /// The Partial's sound source. Whichever kind is selected, its *name* is on
+    /// screen here — a grid with one button per entry cannot do that once the
+    /// list is a dozen waves plus however many samples have been imported.
     private var oscillator: some View {
-        R50Panel(title: "Oscillator") {
+        let isSample = model.value(addr(R50FieldSourceType)) >= 0.5
+        return R50Panel(title: "Source") {
             VStack(alignment: .leading, spacing: 12) {
-                R50Selector(title: "Source", address: addr(R50FieldSourceType),
+                R50Selector(title: "Type", address: addr(R50FieldSourceType),
                             options: R50Parameters.sourceTypeNames, model: model)
-                R50WaveGrid(title: "Wave", address: addr(R50FieldOscWave),
-                            options: R50Parameters.waveformNames,
-                            columns: 3, model: model)
+
+                R50NameSelector(
+                    title: isSample ? "Instrument" : "Wave",
+                    address: isSample ? addr(R50FieldSampleInstrument)
+                                      : addr(R50FieldOscWave),
+                    names: isSample ? samples.entries.map(\.name)
+                                    : R50Parameters.waveformNames,
+                    model: model)
+
                 HStack(spacing: 4) {
-                    R50Knob(title: "Width", address: addr(R50FieldPulseWidth), model: model)
+                    if isSample {
+                        R50Knob(title: "Start", address: addr(R50FieldSampleStart),
+                                model: model)
+                    } else {
+                        R50Knob(title: "Width", address: addr(R50FieldPulseWidth),
+                                model: model)
+                    }
                     R50Knob(title: "Octave", address: addr(R50FieldOctave), model: model)
                 }
             }
