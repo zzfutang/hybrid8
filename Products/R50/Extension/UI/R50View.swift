@@ -16,6 +16,7 @@ enum R50Page: String, CaseIterable {
     case partial   = "Partial"
     case envelopes = "Envelopes"
     case tone      = "Tone"
+    case modulation = "Mod"
     case effects   = "FX"
     case samples   = "Samples"
 }
@@ -69,6 +70,7 @@ struct R50View: View {
         case .partial:   partialPage
         case .envelopes: envelopePage
         case .tone:      tonePage
+        case .modulation: modPage
         case .effects:   effectsPage
         case .samples:   samplePage
         }
@@ -472,6 +474,92 @@ struct R50View: View {
         case 3:  return "Vel XF: soft notes favour Partial 1, hard notes Partial 2."
         case 4:  return "Key XF: fades from Partial 1 to Partial 2 between XF Low and XF High."
         default: return "Mix: both Partials sum, balanced by their Levels."
+        }
+    }
+
+    // MARK: - Mod page
+
+    /// Two LFOs, a six-slot matrix and four macros. The matrix is a table for
+    /// the same reason the sample browser is: source, target, destination and
+    /// amount are four facts about one route, and they read across.
+    private var modPage: some View {
+        HStack(alignment: .top, spacing: 10) {
+            R50Panel(title: "LFO 1") { lfoControls(0) }.frame(width: 215)
+            R50Panel(title: "LFO 2") { lfoControls(1) }.frame(width: 215)
+
+            R50Panel(title: "Modulation Matrix") {
+                modMatrixTable
+            }
+            .frame(width: 470)
+
+            R50Panel(title: "Macros") {
+                VStack(alignment: .leading, spacing: 8) {
+                    R50Value(title: "Macro 1", address: R50ParamMacro1, model: model)
+                    R50Value(title: "Macro 2", address: R50ParamMacro2, model: model)
+                    R50Value(title: "Macro 3", address: R50ParamMacro3, model: model)
+                    R50Value(title: "Macro 4", address: R50ParamMacro4, model: model)
+                    Text("Macros are matrix sources. Route one to several destinations to sweep them together.")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundColor(R50Palette.engrave)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: 218)
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private func lfoControls(_ index: Int) -> some View {
+        let base = index == 0 ? R50ParamLfo1Wave.rawValue : R50ParamLfo2Wave.rawValue
+        func at(_ offset: UInt64) -> R50Param { R50Param(base + offset) }
+        return VStack(alignment: .leading, spacing: 8) {
+            R50NameSelector(title: "Wave", address: at(0),
+                            names: R50Parameters.lfoWaveNames, model: model)
+            R50Value(title: "Rate", address: at(1), model: model)
+            R50Value(title: "Delay", address: at(2), model: model)
+            R50Value(title: "Fade", address: at(3), model: model)
+            R50Selector(title: "Phase Source", address: at(4),
+                        options: ["Free", "Note"], model: model)
+            R50Value(title: "Phase", address: at(5), model: model)
+        }
+    }
+
+    private var modMatrixTable: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                tableCell("SOURCE", width: 130, header: true)
+                tableCell("TARGET", width: 70, header: true)
+                tableCell("DESTINATION", width: 130, header: true)
+                tableCell("AMOUNT", width: 110, header: true)
+            }
+            .background(Color(white: 0.17))
+            Rectangle().fill(R50Palette.panelEdge).frame(height: 1)
+
+            ForEach(0..<6, id: \.self) { slot in
+                HStack(spacing: 4) {
+                    R50NameSelector(
+                        title: "",
+                        address: r50ModSlotParam(Int32(slot), R50ModFieldSource),
+                        names: R50Parameters.modSourceNames, model: model)
+                        .frame(width: 126)
+                    R50NameSelector(
+                        title: "",
+                        address: r50ModSlotParam(Int32(slot), R50ModFieldTarget),
+                        names: R50Parameters.modTargetNames, model: model)
+                        .frame(width: 66)
+                    R50NameSelector(
+                        title: "",
+                        address: r50ModSlotParam(Int32(slot), R50ModFieldDestination),
+                        names: R50Parameters.modDestinationNames, model: model)
+                        .frame(width: 126)
+                    R50Value(title: "",
+                             address: r50ModSlotParam(Int32(slot), R50ModFieldAmount),
+                             model: model)
+                        .frame(width: 106)
+                }
+                .padding(.vertical, 1)
+            }
         }
     }
 

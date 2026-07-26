@@ -19,6 +19,7 @@
 #include "ADSR.hpp"
 #include "Filter.hpp"
 #include "R50Envelope.hpp"
+#include "R50Modulation.hpp"
 #include "R50Noise.hpp"
 #include "R50SampleFactory.hpp"
 #include "R50SamplePlayer.hpp"
@@ -107,7 +108,8 @@ public:
         active_ = false;
     }
 
-    void noteOn(int note, float velocity, const PartialParams &p) {
+    void noteOn(int note, float velocity, const PartialParams &p,
+                float startOffset = 0.0f) {
         note_     = note;
         velocity_ = velocity;
         active_   = p.enabled;
@@ -129,7 +131,8 @@ public:
                 : nullptr;
             if (region != nullptr) {
                 sample_.start(SampleLibrary::shared().sample(region->slot),
-                              region, p.sampleStart);
+                              region,
+                              synth::clampf(p.sampleStart + startOffset, 0.0f, 1.0f));
                 sampleRootKey_   = region->rootKey;
                 sampleTuneCents_ = region->tuneCents;
             }
@@ -149,28 +152,38 @@ public:
 
     bool  isActive() const { return active_; }
     float ampLevel() const { return ampLevel_; }
+    float filterEnvLevel() const { return filterLevel_; }
+    float pitchEnvLevel() const { return pitchLevel_; }
 
     /// Per-control-block update: envelope times, pitch and filter coefficients.
-    void updateBlock(const PartialParams &p, double pitchBendSemitones) {
+    /// Modulation is applied here, on top of the snapshotted parameters, in the
+    /// same place the fixed detune and cutoff offsets are already combined.
+    void updateBlock(const PartialParams &p, double pitchBendSemitones,
+                     const ModulationBlock &mod) {
         if (!p.enabled) { active_ = false; return; }
         applyEnvelopeTimes(p);
 
-        osc_.setWave(p.waveIndex);
-        osc_.setWidth(p.pulseWidth);
-        noiseMix_ = synth::clampf(p.noiseMix, 0.0f, 1.0f);
-        level_    = p.level;
+        const int waveIndex = static_cast<int>(
+            std::lround(p.waveIndex + mod.waveIndex));
+        osc_.setWave(waveIndex);
+        osc_.setWidth(p.pulseWidth + mod.pulseWidth);
+        noiseMix_ = synth::clampf(p.noiseMix + mod.noiseMix, 0.0f, 1.0f);
+        level_    = synth::clampf(p.level + mod.level, 0.0f, 2.0f);
         // Equal-power pan, so a centred Partial is not louder than a panned one.
-        const float panPosition = synth::clampf(p.pan, -1.0f, 1.0f);
+        const float panPosition = synth::clampf(p.pan + mod.pan, -1.0f, 1.0f);
         const float angle = (panPosition + 1.0f) * 0.25f
                           * static_cast<float>(synth::kPi);
         panLeft_  = std::cos(angle);
         panRight_ = std::sin(angle);
 
-        shaper_.setParams(p.shaperType, p.shaperDrive, p.shaperPosition);
+        shaper_.setParams(p.shaperType,
+                          synth::clampf(p.shaperDrive + mod.shaperDrive, 0.0f, 1.0f),
+                          p.shaperPosition);
 
         const double detune = p.octave * 12.0 + p.semitone
                             + p.fineCents / 100.0 + pitchBendSemitones
-                            + p.pitchAmount * pitchLevel_;
+                            + p.pitchAmount * pitchLevel_
+                            + mod.pitchSemitones;
         const double noteHz = synth::noteToHz(note_ + detune);
         osc_.setFrequency(noteHz);
         noise_.updateBlock(p.noiseSpectrum, p.noiseTone, p.noiseRateHz,
@@ -188,10 +201,12 @@ public:
         // Cutoff in octaves: base + key tracking + bipolar envelope.
         const double keyOctaves = p.keyTrack * (note_ - 60) / 12.0;
         const double envOctaves = p.filterEnvAmount * 4.0 * filterLevel_;
-        double cutoff = p.cutoffHz * std::pow(2.0, keyOctaves + envOctaves);
+        double cutoff = p.cutoffHz
+                      * std::pow(2.0, keyOctaves + envOctaves + mod.cutoffOctaves);
         cutoff = synth::clampf(static_cast<float>(cutoff), 20.0f,
                                static_cast<float>(sampleRate_ * 0.45));
-        filter_.setParams(cutoff, p.resonance, p.slope, 0.0f, p.drive);
+        const float resonance = synth::clampf(p.resonance + mod.resonance, 0.0f, 1.0f);
+        filter_.setParams(cutoff, resonance, p.slope, 0.0f, p.drive);
     }
 
     /// One sample, before level, pan and the Tone structure. Level is applied

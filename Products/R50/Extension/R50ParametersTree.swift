@@ -32,6 +32,21 @@ enum R50Parameters {
     static let shaperTypeNames = ["Off", "Soft", "Hard", "Fold", "Rect"]
     static let shaperPositionNames = ["Pre", "Post"]
 
+    /// Order must match ModSource / ModDestination / ModTarget in
+    /// R50Modulation.hpp, and LFOWave in Shared/DSPCore/LFO.hpp.
+    static let lfoWaveNames = ["Sine", "Square", "Saw Up", "Saw Down", "S&H"]
+    static let modSourceNames = [
+        "—", "LFO 1", "LFO 2", "Amp Env", "Filter Env", "Pitch Env",
+        "Velocity", "Key Track", "Mod Wheel", "Aftertouch", "Random",
+        "Macro 1", "Macro 2", "Macro 3", "Macro 4"
+    ]
+    static let modDestinationNames = [
+        "—", "Pitch", "Cutoff", "Resonance", "Level", "Pan",
+        "Wave", "Pulse Width", "Noise Mix", "Sample Start", "Shaper Drive",
+        "Ring Level"
+    ]
+    static let modTargetNames = ["Both", "P1", "P2"]
+
     /// Order must match ToneStructure in R50Voice.hpp.
     static let toneStructureNames = [
         "Mix", "Ring", "Atk/Sus", "Vel XF", "Key XF"
@@ -270,6 +285,61 @@ enum R50Parameters {
                       min: 0, max: 1, value: 0.55),
             ])
 
+        var lfoChildren: [AUParameter] = []
+        for index in 0..<2 {
+            let base = index == 0 ? R50ParamLfo1Wave : R50ParamLfo2Wave
+            func at(_ offset: UInt64) -> R50Param {
+                R50Param(base.rawValue + offset)
+            }
+            lfoChildren += [
+                param(at(0), "lfo\(index + 1)Wave", "LFO \(index + 1) Wave",
+                      min: 0, max: AUValue(lfoWaveNames.count - 1), value: 0,
+                      unit: .indexed, strings: lfoWaveNames),
+                param(at(1), "lfo\(index + 1)Rate", "LFO \(index + 1) Rate",
+                      min: 0.02, max: 24, value: index == 0 ? 5 : 0.6,
+                      unit: .hertz, log: true),
+                param(at(2), "lfo\(index + 1)Delay", "LFO \(index + 1) Delay",
+                      min: 0, max: 5, value: 0, unit: .seconds),
+                param(at(3), "lfo\(index + 1)Fade", "LFO \(index + 1) Fade",
+                      min: 0, max: 5, value: 0, unit: .seconds),
+                param(at(4), "lfo\(index + 1)Retrigger", "LFO \(index + 1) Retrigger",
+                      min: 0, max: 1, value: 1, unit: .indexed,
+                      strings: ["Free", "Note"]),
+                param(at(5), "lfo\(index + 1)Phase", "LFO \(index + 1) Phase",
+                      min: 0, max: 1, value: 0),
+            ]
+        }
+
+        var slotChildren: [AUParameter] = []
+        for slot in 0..<6 {
+            slotChildren += [
+                param(r50ModSlotParam(Int32(slot), R50ModFieldSource),
+                      "mod\(slot + 1)Source", "Mod \(slot + 1) Source",
+                      min: 0, max: AUValue(modSourceNames.count - 1), value: 0,
+                      unit: .indexed, strings: modSourceNames),
+                param(r50ModSlotParam(Int32(slot), R50ModFieldDestination),
+                      "mod\(slot + 1)Dest", "Mod \(slot + 1) Destination",
+                      min: 0, max: AUValue(modDestinationNames.count - 1), value: 0,
+                      unit: .indexed, strings: modDestinationNames),
+                param(r50ModSlotParam(Int32(slot), R50ModFieldTarget),
+                      "mod\(slot + 1)Target", "Mod \(slot + 1) Target",
+                      min: 0, max: 2, value: 0, unit: .indexed,
+                      strings: modTargetNames),
+                param(r50ModSlotParam(Int32(slot), R50ModFieldAmount),
+                      "mod\(slot + 1)Amount", "Mod \(slot + 1) Amount",
+                      min: -1, max: 1, value: 0),
+            ]
+        }
+
+        let modulation = AUParameterTree.createGroup(
+            withIdentifier: "mod", name: "Modulation",
+            children: lfoChildren + slotChildren + [
+                param(R50ParamMacro1, "macro1", "Macro 1", min: 0, max: 1, value: 0),
+                param(R50ParamMacro2, "macro2", "Macro 2", min: 0, max: 1, value: 0),
+                param(R50ParamMacro3, "macro3", "Macro 3", min: 0, max: 1, value: 0),
+                param(R50ParamMacro4, "macro4", "Macro 4", min: 0, max: 1, value: 0),
+            ])
+
         let global = AUParameterTree.createGroup(
             withIdentifier: "global", name: "Global", children: [
                 param(R50ParamMasterGain, "masterGain", "Master",
@@ -279,6 +349,7 @@ enum R50Parameters {
             ])
 
         return AUParameterTree.createTree(
-            withChildren: [partialGroup(0), partialGroup(1), tone, effects, global])
+            withChildren: [partialGroup(0), partialGroup(1), tone,
+                           modulation, effects, global])
     }
 }

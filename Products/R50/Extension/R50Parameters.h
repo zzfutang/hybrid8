@@ -102,6 +102,32 @@ typedef enum R50Param : unsigned long long {
     R50ParamFxReverbDecay,       // seconds
     R50ParamFxReverbTone,        // 0 .. 1
 
+    // --- Modulation ---------------------------------------------------------
+    // Per voice, not per Partial, so these are plain appended addresses rather
+    // than fields on r50PartialParam.
+    R50ParamLfo1Wave,            // 0..4, see synth::LFOWave
+    R50ParamLfo1Rate,            // Hz
+    R50ParamLfo1Delay,           // seconds before it starts
+    R50ParamLfo1Fade,            // seconds to reach full depth
+    R50ParamLfo1Retrigger,       // 0 = free-running and shared, 1 = per note
+    R50ParamLfo1Phase,           // 0 .. 1
+    R50ParamLfo2Wave,
+    R50ParamLfo2Rate,
+    R50ParamLfo2Delay,
+    R50ParamLfo2Fade,
+    R50ParamLfo2Retrigger,
+    R50ParamLfo2Phase,
+
+    // Six slots of source / destination / target / amount. Address these with
+    // r50ModSlotParam() rather than by name.
+    R50ParamModSlotBase,
+    R50ParamModSlotLast = R50ParamModSlotBase + 23,
+
+    R50ParamMacro1,              // 0 .. 1, usable as a matrix source
+    R50ParamMacro2,
+    R50ParamMacro3,
+    R50ParamMacro4,
+
     R50ParamCount
 } R50Param;
 
@@ -155,6 +181,23 @@ typedef enum R50PartialField {
 
     R50PartialFieldCount
 } R50PartialField;
+
+/// Fields a matrix slot owns. The order defines the slot block's layout, so it
+/// is append-only for the same reason the parameter enum is.
+typedef enum R50ModSlotField {
+    R50ModFieldSource = 0,
+    R50ModFieldDestination,
+    R50ModFieldTarget,
+    R50ModFieldAmount,
+    R50ModSlotFieldCount
+} R50ModSlotField;
+
+/// Address of one field of one matrix slot.
+static inline R50Param r50ModSlotParam(int slot, R50ModSlotField field) {
+    return (R50Param)((unsigned long long)R50ParamModSlotBase
+                    + (unsigned long long)slot * R50ModSlotFieldCount
+                    + (unsigned long long)field);
+}
 
 /// The single authority mapping (Partial, field) to an address. Partial 1 uses
 /// the original scattered addresses so saved state keeps its meaning; Partial 2

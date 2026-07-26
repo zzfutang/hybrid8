@@ -12,12 +12,18 @@
 
 #include <cmath>
 
+#include "R50Modulation.hpp"
 #include "R50Partial.hpp"
 #include "Utils.hpp"
 
 namespace r50 {
 
 static constexpr int kPartialsPerVoice = 2;
+
+/// Must match kControlBlock in R50Engine.hpp. Declared here because the voice
+/// needs it to run its LFOs at the block rate and the engine includes the voice
+/// rather than the other way round.
+static constexpr int kControlBlockForLfo = 32;
 
 enum class ToneStructure {
     Mix = 0,
@@ -31,6 +37,7 @@ static constexpr int kToneStructureCount = 5;
 
 struct VoiceParams {
     PartialParams partial[kPartialsPerVoice];
+    ModParams     modulation;
 
     ToneStructure structure     = ToneStructure::Mix;
     float         ringLevel     = 1.0f;
@@ -44,9 +51,11 @@ public:
     void setSampleRate(double sr) {
         sampleRate_ = sr;
         for (Partial &partial : partials_) partial.setSampleRate(sr);
+        for (ModLfo &lfo : lfos_) lfo.setBlockRate(sr / kControlBlockForLfo);
     }
 
     void setSeed(uint64_t seed) {
+        randomSource_ = synth::FastRandom(seed ^ 0x5DEECE66DULL);
         // Distinct per Partial as well as per voice, so two Partials both using
         // noise do not produce the same stream and sum to 6 dB of one source.
         for (int i = 0; i < kPartialsPerVoice; ++i) {
@@ -60,15 +69,31 @@ public:
         note_ = -1;
     }
 
-    void noteOn(int note, float velocity, const VoiceParams &p) {
+    void noteOn(int note, float velocity, const VoiceParams &p,
+                float sharedLfoPhase, float modWheel, float aftertouch) {
         note_     = note;
         velocity_ = velocity;
         held_     = true;
         active_   = true;
         blendPosition_ = 0.0;
+
+        // One random value per note, fixed for its lifetime — a source that
+        // changed under a held note would be a slow noise generator, not the
+        // per-note variation this is for.
+        random_ = randomSource_.nextBipolar();
+
+        for (int i = 0; i < kLfoCount; ++i) {
+            lfos_[i].noteOn(p.modulation.lfo[i], sharedLfoPhase);
+        }
+        gatherSources(p, modWheel, aftertouch);
         computeStructureWeights(p);
+
         for (int i = 0; i < kPartialsPerVoice; ++i) {
-            partials_[i].noteOn(note, velocity, p.partial[i]);
+            const ModulationBlock mod =
+                evaluateMatrix(p.modulation, sources_, i);
+            // Sample start is chosen when the note begins, so modulating it is
+            // a note-on decision rather than a running one.
+            partials_[i].noteOn(note, velocity, p.partial[i], mod.sampleStart);
         }
     }
 
@@ -91,15 +116,32 @@ public:
         return loudest;
     }
 
-    void updateBlock(const VoiceParams &p, double pitchBendSemitones) {
+    void updateBlock(const VoiceParams &p, double pitchBendSemitones,
+                     float modWheel, float aftertouch) {
         structure_ = p.structure;
-        ringLevel_ = p.ringLevel;
         blendRate_ = (p.blendTime > 0.0001f)
                    ? 1.0 / (p.blendTime * sampleRate_) : 1.0;
         computeStructureWeights(p);
-        for (int i = 0; i < kPartialsPerVoice; ++i) {
-            partials_[i].updateBlock(p.partial[i], pitchBendSemitones);
+
+        // Advance the LFOs once per block whether or not anything is routed —
+        // a free-running LFO that stalls when unrouted would jump when a slot
+        // is assigned mid-note.
+        for (int i = 0; i < kLfoCount; ++i) {
+            sources_.lfo[i] = lfos_[i].process(p.modulation.lfo[i]);
         }
+        gatherSources(p, modWheel, aftertouch);
+
+        ringLevel_ = p.ringLevel;
+        for (int i = 0; i < kPartialsPerVoice; ++i) {
+            sources_.ampEnv    = partials_[i].ampLevel();
+            sources_.filterEnv = partials_[i].filterEnvLevel();
+            sources_.pitchEnv  = partials_[i].pitchEnvLevel();
+            const ModulationBlock mod =
+                evaluateMatrix(p.modulation, sources_, i);
+            ringLevel_ += mod.ringLevel;
+            partials_[i].updateBlock(p.partial[i], pitchBendSemitones, mod);
+        }
+        ringLevel_ = synth::clampf(ringLevel_, 0.0f, 8.0f);
     }
 
     /// One stereo sample.
@@ -162,6 +204,19 @@ public:
     }
 
 private:
+    /// Voice-wide source values. Envelope levels are filled in per Partial by
+    /// the caller, since each Partial has its own.
+    void gatherSources(const VoiceParams &p, float modWheel, float aftertouch) {
+        sources_.velocity   = velocity_;
+        sources_.keyTrack   = synth::clampf((note_ - 60) / 60.0f, -1.0f, 1.0f);
+        sources_.modWheel   = modWheel;
+        sources_.aftertouch = aftertouch;
+        sources_.random     = random_;
+        for (int i = 0; i < kMacroCount; ++i) {
+            sources_.macros[i] = p.modulation.macros[i];
+        }
+    }
+
     /// Equal-power crossfade weights, resolved once per block rather than per
     /// sample: velocity is fixed for the note and key position cannot change.
     void computeStructureWeights(const VoiceParams &p) {
@@ -187,6 +242,10 @@ private:
     }
 
     Partial partials_[kPartialsPerVoice];
+    ModLfo  lfos_[kLfoCount];
+    ModSourceValues sources_;
+    synth::FastRandom randomSource_{0x853C49E6748FEA9BULL};
+    float   random_ = 0.0f;
 
     double sampleRate_ = 44100.0;
     int    note_       = -1;

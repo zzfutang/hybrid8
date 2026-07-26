@@ -108,6 +108,7 @@
 		23D32892482F96EDA9B11D12 /* SynthParameters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SynthParameters.h; sourceTree = "<group>"; };
 		25CBC5D8B70379456237CDEA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		28045EECD214931C4F493FF4 /* SynthHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthHelp.swift; sourceTree = "<group>"; };
+		2C1C0196DB15AA627ECB89AD /* R50Modulation.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Modulation.hpp; sourceTree = "<group>"; };
 		3032319806890090FD341B50 /* AudioUnitHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioUnitHost.swift; sourceTree = "<group>"; };
 		30348A168347EA9A2A7B5095 /* FactoryPresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactoryPresets.swift; sourceTree = "<group>"; };
 		33F329CBCC076644995FD3A6 /* KnobShapes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KnobShapes.swift; sourceTree = "<group>"; };
@@ -275,6 +276,7 @@
 				B1F99D67BD35FB874E88A075 /* R50Engine.hpp */,
 				035FA057E8E955E7FAC3B81D /* R50Envelope.hpp */,
 				5FF121422DF67029FFE09351 /* R50Levels.hpp */,
+				2C1C0196DB15AA627ECB89AD /* R50Modulation.hpp */,
 				4E1AA536D5BCEFC6B916629C /* R50Noise.hpp */,
 				8D90BFA8D15AB1DC1692CC68 /* R50Partial.hpp */,
 				19FA9B3BB4AE406828814F9A /* R50Sample.hpp */,

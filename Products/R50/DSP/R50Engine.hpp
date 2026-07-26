@@ -84,7 +84,9 @@ public:
         // Re-use the voice already playing this note (retrigger) if there is one.
         Voice *voice = findVoice(note);
         if (voice == nullptr) voice = allocateVoice();
-        voice->noteOn(note, velocity / 127.0f, params_);
+        voice->noteOn(note, velocity / 127.0f, params_,
+                      static_cast<float>(sharedLfoPhase_[0]),
+                      modWheel_, aftertouch_);
     }
 
     void noteOff(uint8_t note) {
@@ -105,6 +107,10 @@ public:
         // 0 .. 16383, centre 8192.
         bendNorm_ = (value14 - 8192) / 8192.0f;
     }
+
+    /// Matrix sources, so they only do anything once something routes them.
+    void modWheel(float value)   { modWheel_ = synth::clampf(value, 0.0f, 1.0f); }
+    void aftertouch(float value) { aftertouch_ = synth::clampf(value, 0.0f, 1.0f); }
 
     void sustainPedal(bool down) {
         if (down == sustain_) return;
@@ -169,8 +175,19 @@ public:
                 0.010f, 0.120f,
                 6.0f * compressorAmount_);           // makeup
 
+            // One free-running phase per LFO, so voices whose LFO is not set to
+            // retrigger all agree with each other across a held chord.
+            for (int i = 0; i < kLfoCount; ++i) {
+                sharedLfoPhase_[i] += params_.modulation.lfo[i].rateHz
+                                    * kControlBlock / sampleRate_;
+                sharedLfoPhase_[i] -= std::floor(sharedLfoPhase_[i]);
+            }
+
             for (auto &voice : voices_) {
-                if (voice.isActive()) voice.updateBlock(params_, bendSemitones);
+                if (voice.isActive()) {
+                    voice.updateBlock(params_, bendSemitones,
+                                      modWheel_, aftertouch_);
+                }
             }
 
             for (int i = 0; i < block; ++i) {
@@ -328,6 +345,23 @@ private:
         set(R50ParamFxReverbSize,    0.55f);
         set(R50ParamFxReverbDecay,   2.4f);
         set(R50ParamFxReverbTone,    0.55f);
+
+        // Modulation defaults to nothing routed, so an existing preset — which
+        // names no slot — sounds exactly as it did.
+        set(R50ParamLfo1Wave, 0.0f);  set(R50ParamLfo1Rate, 5.0f);
+        set(R50ParamLfo1Delay, 0.0f); set(R50ParamLfo1Fade, 0.0f);
+        set(R50ParamLfo1Retrigger, 1.0f); set(R50ParamLfo1Phase, 0.0f);
+        set(R50ParamLfo2Wave, 0.0f);  set(R50ParamLfo2Rate, 0.6f);
+        set(R50ParamLfo2Delay, 0.0f); set(R50ParamLfo2Fade, 0.0f);
+        set(R50ParamLfo2Retrigger, 1.0f); set(R50ParamLfo2Phase, 0.0f);
+        for (int slot = 0; slot < kModSlots; ++slot) {
+            store_[r50ModSlotParam(slot, R50ModFieldSource)].store(0.0f);
+            store_[r50ModSlotParam(slot, R50ModFieldDestination)].store(0.0f);
+            store_[r50ModSlotParam(slot, R50ModFieldTarget)].store(0.0f);
+            store_[r50ModSlotParam(slot, R50ModFieldAmount)].store(0.0f);
+        }
+        set(R50ParamMacro1, 0.0f); set(R50ParamMacro2, 0.0f);
+        set(R50ParamMacro3, 0.0f); set(R50ParamMacro4, 0.0f);
     }
 
     /// Derive the denormalised block the voices read from the atomic store.
@@ -431,8 +465,49 @@ private:
         params_.crossfadeHigh =
             static_cast<int>(std::lround(get(R50ParamToneCrossfadeHigh)));
 
+        snapshotModulation();
         compressorAmount_ = synth::clampf(get(R50ParamFxCompressor), 0.0f, 1.0f);
         gainSmoother_.setTarget(synth::clampf(get(R50ParamMasterGain), 0.0f, 1.0f));
+    }
+
+    void snapshotModulation() {
+        ModParams &mod = params_.modulation;
+        for (int i = 0; i < kLfoCount; ++i) {
+            const R50Param base = (i == 0) ? R50ParamLfo1Wave : R50ParamLfo2Wave;
+            const int wave = static_cast<int>(
+                get(static_cast<R50Param>(base + 0)) + 0.5f);
+            mod.lfo[i].wave = static_cast<synth::LFOWave>(
+                wave < 0 ? 0 : (wave > 4 ? 4 : wave));
+            mod.lfo[i].rateHz       = get(static_cast<R50Param>(base + 1));
+            mod.lfo[i].delaySeconds = get(static_cast<R50Param>(base + 2));
+            mod.lfo[i].fadeSeconds  = get(static_cast<R50Param>(base + 3));
+            mod.lfo[i].retrigger    = get(static_cast<R50Param>(base + 4)) >= 0.5f;
+            mod.lfo[i].phase        = get(static_cast<R50Param>(base + 5));
+        }
+
+        for (int slot = 0; slot < kModSlots; ++slot) {
+            const auto field = [&](R50ModSlotField f) {
+                return store_[r50ModSlotParam(slot, f)]
+                           .load(std::memory_order_relaxed);
+            };
+            const int source = static_cast<int>(field(R50ModFieldSource) + 0.5f);
+            const int destination =
+                static_cast<int>(field(R50ModFieldDestination) + 0.5f);
+            const int target = static_cast<int>(field(R50ModFieldTarget) + 0.5f);
+            mod.slots[slot].source = static_cast<ModSource>(
+                source < 0 ? 0 : (source >= kModSourceCount ? 0 : source));
+            mod.slots[slot].destination = static_cast<ModDestination>(
+                destination < 0 ? 0
+                                : (destination >= kModDestinationCount ? 0 : destination));
+            mod.slots[slot].target = static_cast<ModTarget>(
+                target < 0 ? 0 : (target >= kModTargetCount ? 0 : target));
+            mod.slots[slot].amount = synth::clampf(field(R50ModFieldAmount), -1.0f, 1.0f);
+        }
+
+        mod.macros[0] = synth::clampf(get(R50ParamMacro1), 0.0f, 1.0f);
+        mod.macros[1] = synth::clampf(get(R50ParamMacro2), 0.0f, 1.0f);
+        mod.macros[2] = synth::clampf(get(R50ParamMacro3), 0.0f, 1.0f);
+        mod.macros[3] = synth::clampf(get(R50ParamMacro4), 0.0f, 1.0f);
     }
 
     Voice *findVoice(int note) {
@@ -467,6 +542,9 @@ private:
     VoiceParams params_;
     double sampleRate_ = 44100.0;
     float  bendNorm_   = 0.0f;
+    float  modWheel_   = 0.0f;
+    float  aftertouch_ = 0.0f;
+    double sharedLfoPhase_[kLfoCount] = {0.0, 0.0};
     bool   sustain_    = false;
     /// Physical key state, independent of the CC64 gate hold.
     bool   keyDown_[128] = {false};

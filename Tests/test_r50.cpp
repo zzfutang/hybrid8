@@ -1309,6 +1309,171 @@ int main() {
         check(squashed < open, "the compressor reduces a loud passage");
     }
 
+    // --- Modulation ---------------------------------------------------------
+    {
+        // Nothing is routed by default, so the matrix must be inert. A
+        // modulation system that is not fully off would change every patch in
+        // the instrument the moment it shipped.
+        auto renderDefault = [] {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.noteOn(60, 100);
+            return renderBuffer(engine, 0.3);
+        };
+        const std::vector<float> quiet = renderDefault();
+
+        r50::R50Engine routed;
+        setupSpectralTone(routed, 0);
+        // A slot with a source and destination but zero amount must also be
+        // inert — amount is what arms it.
+        routed.setParameter(r50ModSlotParam(0, R50ModFieldSource),
+                            float(int(r50::ModSource::Lfo1)));
+        routed.setParameter(r50ModSlotParam(0, R50ModFieldDestination),
+                            float(int(r50::ModDestination::Cutoff)));
+        routed.setParameter(r50ModSlotParam(0, R50ModFieldAmount), 0.0f);
+        routed.noteOn(60, 100);
+        check(renderBuffer(routed, 0.3) == quiet,
+              "a slot with zero amount changes nothing");
+    }
+    {
+        // Each destination must actually move.
+        auto renderRouted = [](r50::ModSource source, r50::ModDestination dest,
+                               float amount, float lfoRate, int wave = 0) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, wave);
+            engine.setParameter(R50ParamLfo1Rate, lfoRate);
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldSource),
+                                float(int(source)));
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldDestination),
+                                float(int(dest)));
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldAmount), amount);
+            engine.noteOn(60, 100);
+            return renderBuffer(engine, 0.5);
+        };
+
+        struct Case {
+            r50::ModSource source; r50::ModDestination dest;
+            const char *name; int wave;
+        };
+        const Case cases[] = {
+            {r50::ModSource::Lfo1, r50::ModDestination::Pitch, "pitch", 0},
+            {r50::ModSource::Lfo1, r50::ModDestination::Cutoff, "cutoff", 0},
+            {r50::ModSource::Lfo1, r50::ModDestination::Level, "level", 0},
+            // Pulse width only exists for the difference-read waves, so this
+            // one has to be tested on the variable pulse rather than a saw.
+            {r50::ModSource::Lfo1, r50::ModDestination::PulseWidth, "pulse width", 4},
+            {r50::ModSource::Lfo1, r50::ModDestination::WaveIndex, "wave index", 0},
+            {r50::ModSource::Velocity, r50::ModDestination::Cutoff, "velocity to cutoff", 0},
+            {r50::ModSource::AmpEnv, r50::ModDestination::Cutoff, "amp env to cutoff", 0},
+        };
+        bool allMove = true;
+        for (const Case &test : cases) {
+            const std::vector<float> reference =
+                renderRouted(r50::ModSource::None, r50::ModDestination::None,
+                             0, 5, test.wave);
+            const std::vector<float> wet =
+                renderRouted(test.source, test.dest, 0.8f, 5, test.wave);
+            double difference = 0.0;
+            for (size_t n = 0; n < wet.size(); ++n)
+                difference = std::max(difference,
+                                      std::fabs(double(wet[n]) - reference[n]));
+            if (difference < 0.005) {
+                printf("       %s did not move the signal\n", test.name);
+                allMove = false;
+            }
+        }
+        check(allMove, "every routed destination changes the signal");
+
+        // Amount is bipolar: opposite signs must move opposite ways.
+        auto meanPitch = [&](float amount) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(R50ParamLfo1Wave, 0);      // sine
+            engine.setParameter(R50ParamLfo1Rate, 0.5f);
+            engine.setParameter(R50ParamLfo1Phase, 0.25f); // hold near the peak
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldSource),
+                                float(int(r50::ModSource::Lfo1)));
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldDestination),
+                                float(int(r50::ModDestination::Pitch)));
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldAmount), amount);
+            engine.noteOn(60, 100);
+            const std::vector<float> buffer = renderBuffer(engine, 0.25);
+            const int from = static_cast<int>(buffer.size()) - kAnalysisLength;
+            const double f0 = midiToHz(60);
+            return magAt(buffer, f0 * 1.15, kSR, from)
+                 - magAt(buffer, f0 / 1.15, kSR, from);
+        };
+        check(meanPitch(0.5f) * meanPitch(-0.5f) < 0.0,
+              "amount is bipolar: opposite signs bend opposite ways");
+    }
+    {
+        // Two slots on one destination sum rather than the last one winning.
+        auto cutoffEnergy = [](float amountA, float amountB) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(R50ParamCutoff, 1200.0f);
+            for (int slot = 0; slot < 2; ++slot) {
+                engine.setParameter(r50ModSlotParam(slot, R50ModFieldSource),
+                                    float(int(r50::ModSource::Velocity)));
+                engine.setParameter(r50ModSlotParam(slot, R50ModFieldDestination),
+                                    float(int(r50::ModDestination::Cutoff)));
+            }
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldAmount), amountA);
+            engine.setParameter(r50ModSlotParam(1, R50ModFieldAmount), amountB);
+            engine.noteOn(60, 127);
+            const std::vector<float> buffer = renderBuffer(engine, 0.4);
+            const int from = static_cast<int>(buffer.size()) - kAnalysisLength;
+            double high = 0.0;
+            const double f0 = midiToHz(60);
+            for (int k = 6; k * f0 < 12000; ++k) high += magAt(buffer, k * f0, kSR, from);
+            return high;
+        };
+        const double one = cutoffEnergy(0.3f, 0.0f);
+        const double two = cutoffEnergy(0.3f, 0.3f);
+        printf("       summed slots: one=%.4f two=%.4f\n", one, two);
+        check(two > one * 1.2, "two slots on one destination sum");
+    }
+    {
+        // Targeting one Partial must leave the other alone.
+        auto render = [](int target) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(r50PartialParam(1, R50FieldEnabled), 1.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldOscWave), 0.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldAmpSustain), 1.0f);
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldSource),
+                                float(int(r50::ModSource::Velocity)));
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldDestination),
+                                float(int(r50::ModDestination::Pitch)));
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldTarget),
+                                static_cast<float>(target));
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldAmount), 0.5f);
+            engine.noteOn(60, 127);
+            return renderBuffer(engine, 0.3);
+        };
+        const std::vector<float> both = render(0);
+        const std::vector<float> onlyFirst = render(1);
+        check(both != onlyFirst, "slot target selects which Partial is modulated");
+    }
+    {
+        // The mod wheel has to reach the matrix from MIDI.
+        auto wheelPeak = [](bool raise) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(R50ParamCutoff, 900.0f);
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldSource),
+                                float(int(r50::ModSource::ModWheel)));
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldDestination),
+                                float(int(r50::ModDestination::Cutoff)));
+            engine.setParameter(r50ModSlotParam(0, R50ModFieldAmount), 0.9f);
+            if (raise) engine.modWheel(1.0f);
+            engine.noteOn(60, 100);
+            return render(engine, 0.3, 0.1);
+        };
+        check(wheelPeak(true) != wheelPeak(false),
+              "the mod wheel reaches the matrix");
+    }
+
     // --- Determinism --------------------------------------------------------
     {
         auto renderOnce = [] {

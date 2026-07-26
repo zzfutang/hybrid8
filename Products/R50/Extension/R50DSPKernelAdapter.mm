@@ -184,10 +184,13 @@
                             case 0x80: engine->noteOff(d1); break;
                             case 0xE0: engine->pitchBend((int)d1 | ((int)d2 << 7)); break;
                             case 0xB0: // control change
-                                if (d1 == 64) engine->sustainPedal(d2 >= 64);
+                                if (d1 == 1) engine->modWheel(d2 / 127.0f);
+                                else if (d1 == 64) engine->sustainPedal(d2 >= 64);
                                 else if (d1 == 120) engine->allSoundOff();
                                 else if (d1 == 123) engine->allNotesOff();
                                 break;
+                            case 0xD0: engine->aftertouch(d1 / 127.0f); break;
+                            case 0xA0: engine->aftertouch(d2 / 127.0f); break;
                             default: break;
                         }
                         break;
