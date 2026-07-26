@@ -43,11 +43,11 @@ struct R50View: View {
     private var fascia: some View {
         VStack(spacing: 12) {
             header
-            switch page {
-            case .partial: partialPage
-            case .tone:    tonePage
-            case .samples: samplePage
-            }
+            pageContent
+                .frame(maxWidth: .infinity,
+                       minHeight: R50Layout.pageHeight,
+                       maxHeight: R50Layout.pageHeight,
+                       alignment: .top)
             footer
         }
         .padding(16)
@@ -57,6 +57,15 @@ struct R50View: View {
     }
 
     // MARK: - Pages
+
+    @ViewBuilder
+    private var pageContent: some View {
+        switch page {
+        case .partial: partialPage
+        case .tone:    tonePage
+        case .samples: samplePage
+        }
+    }
 
     private var partialPage: some View {
         VStack(spacing: 8) {
@@ -68,7 +77,7 @@ struct R50View: View {
                 ampEnvelope.frame(width: 175)
                 filterEnvelope.frame(width: 175)
             }
-            .frame(height: 292)
+            .frame(maxHeight: .infinity)
         }
     }
 
@@ -168,7 +177,7 @@ struct R50View: View {
             }
             .frame(width: 330)
         }
-        .frame(height: 292)
+        .frame(maxHeight: .infinity)
     }
 
     private var structureHelp: String {
@@ -228,7 +237,7 @@ struct R50View: View {
             }
             .frame(width: 330)
         }
-        .frame(height: 300)
+        .frame(maxHeight: .infinity)
         .fileImporter(isPresented: $showingImporter,
                       allowedContentTypes: [.wav, .aiff, .audio],
                       allowsMultipleSelection: false) { result in

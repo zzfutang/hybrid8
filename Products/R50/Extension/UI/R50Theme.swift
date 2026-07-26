@@ -14,6 +14,10 @@ import SwiftUI
 enum R50Layout {
     static let width: CGFloat  = 1180
     static let height: CGFloat = 545
+    /// Every page occupies exactly this much vertical space. Without a fixed
+    /// page area the pages have different intrinsic heights, and switching
+    /// tabs re-centres the whole fascia — the header and footer visibly jump.
+    static let pageHeight: CGFloat = 330
 }
 
 enum R50Palette {
