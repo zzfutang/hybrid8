@@ -569,6 +569,79 @@ enum R50FactoryPresets {
             p2(R50FieldFilterSustain): 0.15,
         ]),
 
+        R50FactoryPreset(name: "◆ Pizzagogo", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.05,
+            addr(R50ParamFxReverbMix): 0.34,
+            addr(R50ParamFxReverbSize): 0.7,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.pizzicato),
+            p1(R50FieldCutoff): 9000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.4,
+            p1(R50FieldAmpSustain): 0,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.strings),
+            p2(R50FieldLevel): 0.55,
+            p2(R50FieldCutoff): 3600,
+            p2(R50FieldKeyTrack): 0.5,
+            p2(R50FieldAmpAttack): 0.02,
+            p2(R50FieldAmpDecay): 1.2,
+            p2(R50FieldAmpSustain): 0.1,
+            p2(R50FieldAmpRelease): 0.4,
+        ]),
+
+        R50FactoryPreset(name: "◆ Spectrum Bell", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.06,
+            addr(R50ParamFxReverbMix): 0.40,
+            addr(R50ParamFxReverbDecay): 5.0,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.tineStrike),
+            p1(R50FieldCutoff): 12000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.3,
+            p1(R50FieldAmpSustain): 0,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.spectrum4),
+            p2(R50FieldCutoff): 7000,
+            p2(R50FieldKeyTrack): 0.6,
+            p2(R50FieldAmpDecay): 2.5,
+            p2(R50FieldAmpSustain): 0.2,
+            p2(R50FieldAmpRelease): 1.2,
+        ]),
+
+        R50FactoryPreset(name: "◆ Spectral Glass", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.mix),
+            addr(R50ParamFxChorusMix): 0.30,
+            addr(R50ParamFxReverbMix): 0.45,
+            addr(R50ParamFxReverbSize): 0.8,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.spectrum3),
+            p1(R50FieldCutoff): 8000,
+            p1(R50FieldKeyTrack): 0.5,
+            p1(R50FieldAmpAttack): 0.3,
+            p1(R50FieldAmpSustain): 0.85,
+            p1(R50FieldAmpRelease): 1.4,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.spectrum7),
+            p2(R50FieldLevel): 0.5,
+            p2(R50FieldOctave): -1,
+            p2(R50FieldCutoff): 5000,
+            p2(R50FieldAmpAttack): 0.5,
+            p2(R50FieldAmpSustain): 0.8,
+            p2(R50FieldAmpRelease): 1.8,
+        ]),
+
         R50FactoryPreset(name: "Glass Bell", values: [
             addr(R50ParamFxDelayMix): 0.22,
             addr(R50ParamFxReverbMix): 0.34,
@@ -610,6 +683,11 @@ enum R50FactoryPresets {
         static let kalimba = 21, slapBass = 22, pullBass = 23, pick = 24
         static let pianoHammer = 25, anvil = 26, taikoDrum = 27, lipBuzz = 28
         static let breath = 29, bowScrape = 30
+        // Registered after everything above, so these indices are append-only.
+        static let spectrum1 = 31, spectrum2 = 32, spectrum3 = 33
+        static let spectrum4 = 34, spectrum5 = 35, spectrum6 = 36
+        static let spectrum7 = 37, spectrum8 = 38, spectrum9 = 39
+        static let pizzicato = 40
     }
 
     private enum Structure {

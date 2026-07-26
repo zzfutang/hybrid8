@@ -36,9 +36,14 @@ namespace r50 {
 
 enum class LoopMode { None = 0, Forward, PingPong };
 
-static constexpr int kMaxSampleSlots = 128;
+// Sized well above what the factory content needs, because running out is
+// silent: addSample returns -1, the region is skipped, and an instrument simply
+// does not appear. Adding the nine Spectrum waves took the count to 129 against
+// a limit of 128, and the casualty was the last attack in the list rather than
+// anything to do with what had just been added.
+static constexpr int kMaxSampleSlots = 256;
 static constexpr int kMaxRegions     = 16;
-static constexpr int kMaxInstruments = 64;
+static constexpr int kMaxInstruments = 96;
 static constexpr int kInstrumentNameLength = 32;
 
 /// One immutable block of audio. Mono: the voice is mono until the pan stage.

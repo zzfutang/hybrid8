@@ -684,6 +684,42 @@ int main() {
         check(library.instrumentCount() >= 9,
               "factory instruments are generated");
 
+        // Every declared voicing and attack has to actually arrive. Running out
+        // of sample slots is silent — addSample returns -1, the region is
+        // skipped, and the instrument never appears — and when the Spectrum
+        // waves pushed the count past the limit the casualty was the last
+        // attack in the list, nowhere near the change that caused it.
+        check(library.instrumentCount()
+                  == r50::kSustainVoicingCount + r50::kAttackKindCount,
+              "every declared instrument survives into the library");
+        int assets = 0;
+        for (int i = 0; i < library.instrumentCount(); ++i) {
+            assets += library.instrument(i)->regionCount;
+        }
+        check(assets < r50::kMaxSampleSlots,
+              "the library has room to spare for its own content");
+
+        // Presets store an instrument index, so the order content is
+        // registered in is a compatibility surface. Adding the Spectrum waves
+        // to the sustain list moved every attack down by nine and silently
+        // repointed all 29 presets; nothing failed except the sound.
+        struct Anchor { int index; const char *name; };
+        static const Anchor anchors[] = {
+            {0,  "Choir"},   {12, "Fat Block"}, {13, "Mallet"},
+            {22, "Slap Bass"}, {30, "Bow Scrape"},
+        };
+        bool ordered = true;
+        for (const Anchor &anchor : anchors) {
+            const r50::Multisample *instrument = library.instrument(anchor.index);
+            if (instrument == nullptr
+             || std::string(instrument->name) != anchor.name) {
+                ordered = false;
+                printf("       index %d is '%s', expected '%s'\n", anchor.index,
+                       instrument ? instrument->name : "(none)", anchor.name);
+            }
+        }
+        check(ordered, "instrument indices presets depend on have not moved");
+
         bool allGood = true;
         int loopedCount = 0;
         for (int i = 0; i < library.instrumentCount(); ++i) {
@@ -1795,6 +1831,13 @@ int main() {
             }
             return {nullptr, 0.0, 0.0};
         };
+        // A missing name is a dropped instrument, not a typo in the test — the
+        // library silently skips content it has no room for.
+        auto zone = [&](const char *name) {
+            const Zone z = zoneFor(name);
+            check(z.samples != nullptr, name);
+            return z;
+        };
         auto magnitude = [](const Zone &z, double hz, int count) {
             double re = 0.0, im = 0.0;
             for (int n = 0; n < count; ++n) {
@@ -1808,7 +1851,7 @@ int main() {
         // Ratio of the strongest to the weakest of the first 14 harmonics: a
         // formant bank carves deep valleys, a source rolloff does not.
         auto formantDepth = [&](const char *name) {
-            const Zone z = zoneFor(name);
+            const Zone z = zone(name);
             if (z.samples == nullptr) return 0.0;
             const int count = std::min<int>(16384, static_cast<int>(z.samples->size()));
             double hi = 0.0, lo = 1e9;
@@ -1827,7 +1870,7 @@ int main() {
         {
             // The Vocal Ah lesson, finally guarded: Gaussian formants killed
             // everything below F1 and the fundamental went with it.
-            const Zone z = zoneFor("Choir");
+            const Zone z = zone("Choir");
             const int count = std::min<int>(16384, static_cast<int>(z.samples->size()));
             double hi = 0.0;
             for (int h = 1; h <= 14; ++h) hi = std::max(hi, magnitude(z, z.f0 * h, count));
@@ -1835,7 +1878,7 @@ int main() {
                   "the vowel fundamental survives its own formants");
         }
         {
-            const Zone z = zoneFor("Flute");
+            const Zone z = zone("Flute");
             const int count = std::min<int>(16384, static_cast<int>(z.samples->size()));
             double odd = 0.0, even = 0.0;
             for (int h = 1; h <= 12; ++h) {
@@ -1846,7 +1889,8 @@ int main() {
 
         // Attacks. Band energy and onset are measured on the raw one-shot.
         auto bandShare = [&](const char *name, double from, double to) {
-            const Zone z = zoneFor(name);
+            const Zone z = zone(name);
+            if (z.samples == nullptr) return 0.0;
             const int count = std::min<int>(4096, static_cast<int>(z.samples->size()));
             double inBand = 0.0, total = 0.0;
             for (double hz = 60.0; hz < 14000.0; hz *= 1.12) {
@@ -1857,7 +1901,8 @@ int main() {
             return inBand / std::max(total, 1e-12);
         };
         auto riseSeconds = [&](const char *name) {
-            const Zone z = zoneFor(name);
+            const Zone z = zone(name);
+            if (z.samples == nullptr) return 0.0;
             float peak = 0.0f;
             for (float v : *z.samples) peak = std::max(peak, std::fabs(v));
             for (size_t n = 0; n < z.samples->size(); ++n) {
@@ -1868,7 +1913,8 @@ int main() {
         // On-harmonic against off-harmonic energy: a pitched sound peaks on the
         // grid, noise is indifferent to it.
         auto pitchedness = [&](const char *name) {
-            const Zone z = zoneFor(name);
+            const Zone z = zone(name);
+            if (z.samples == nullptr) return 0.0;
             const int count = std::min<int>(4096, static_cast<int>(z.samples->size()));
             double on = 0.0, off = 0.0;
             for (int h = 1; h <= 10; ++h) {
@@ -1880,7 +1926,8 @@ int main() {
         // Wobble in the short-time level. A scrape is irregular; a filtered
         // noise burst is smooth.
         auto roughness = [&](const char *name) {
-            const Zone z = zoneFor(name);
+            const Zone z = zone(name);
+            if (z.samples == nullptr) return 0.0;
             const int window = static_cast<int>(0.001 * z.sr);
             std::vector<double> levels;
             const int limit = static_cast<int>(0.6 * z.samples->size());
@@ -1914,8 +1961,69 @@ int main() {
               "the pick scratches rather than hissing");
         check(pitchedness("Lip Buzz") > 50.0, "lips buzz at a pitch");
         check(pitchedness("Slap Bass") > 100.0, "slap is a note, not a snare");
-        check(zoneFor("Slap Bass").samples->size() < 0.12 * kSR,
+        check(zone("Slap Bass").samples->size() < 0.12 * kSR,
               "slap is short");
+
+        // Pizzicato is the point of adding it: pitched, unlike Pluck, which is
+        // mostly a noise burst, and unlike Pick, which is a scrape.
+        check(pitchedness("Pizzicato") > 20.0, "a pizzicato has a pitch");
+        check(pitchedness("Pizzicato") > 3.0 * pitchedness("Pluck"),
+              "pizzicato is more pitched than pluck");
+
+        // Nine Spectrum waves have to be nine different waves, not one rolloff
+        // sampled nine times. Compared as normalised harmonic profiles, so a
+        // level difference cannot pass for a spectral one.
+        {
+            std::vector<std::vector<double>> profiles;
+            for (int i = 1; i <= 9; ++i) {
+                char name[16];
+                snprintf(name, sizeof name, "Spectrum %d", i);
+                const Zone z = zone(name);
+                if (z.samples == nullptr) continue;
+                // Measured over exactly one loop period with no window. The
+                // loop is periodic by construction, so every bin is resolved
+                // exactly and the detuned copies one bin away — which a 16k
+                // Hann window smears into the harmonic, with their randomised
+                // phases scrambling the result — are separable and can be
+                // summed back in deliberately.
+                const int period = static_cast<int>(z.samples->size());
+                const int root = static_cast<int>(std::lround(z.f0 * period / z.sr));
+                std::vector<double> profile;
+                double sum = 0.0;
+                for (int h = 1; h <= 20; ++h) {
+                    double m = 0.0;
+                    for (int offset = -1; offset <= 1; ++offset) {
+                        const int bin = root * h + offset;
+                        if (bin <= 0 || bin >= period / 2) continue;
+                        double re = 0.0, im = 0.0;
+                        for (int n = 0; n < period; ++n) {
+                            const double phase = synth::kTwoPi * bin * n / period;
+                            re += (*z.samples)[n] * std::cos(phase);
+                            im -= (*z.samples)[n] * std::sin(phase);
+                        }
+                        m += std::sqrt(re * re + im * im) / period;
+                    }
+                    profile.push_back(m);
+                    sum += m;
+                }
+                for (double &v : profile) v /= std::max(sum, 1e-12);
+                profiles.push_back(profile);
+            }
+            check(profiles.size() == 9, "all nine Spectrum waves are present");
+
+            double closest = 1e9;
+            for (size_t a = 0; a < profiles.size(); ++a) {
+                for (size_t b = a + 1; b < profiles.size(); ++b) {
+                    double distance = 0.0;
+                    for (size_t h = 0; h < profiles[a].size(); ++h) {
+                        distance += std::fabs(profiles[a][h] - profiles[b][h]);
+                    }
+                    closest = std::min(closest, distance);
+                }
+            }
+            printf("       closest pair of Spectrum waves: %.2f\n", closest);
+            check(closest > 0.5, "no two Spectrum waves are the same wave");
+        }
     }
 
     printf(g_failures == 0 ? "\nAll R50 tests passed.\n"

@@ -125,10 +125,17 @@ inline float generatedPhase(int bin, int seed) {
 
 enum class SustainVoicing {
     Choir, Strings, WarmPad, GlassPad,
-    VoiceOoh, Flute, Trumpet, Organ, NylonGuitar, Piano, Gong, Nasty, FatBlock
+    VoiceOoh, Flute, Trumpet, Organ, NylonGuitar, Piano, Gong, Nasty, FatBlock,
+    // The D-50's Spectrum waves are the half of LA synthesis that is not an
+    // imitation of anything: bright, cold, deliberately synthetic loops that
+    // the acoustic attack transients are layered onto. They are what "many
+    // patches use the Spectrum waveforms" refers to, and R50 had no equivalent
+    // at all — only Nasty sat anywhere near this territory.
+    Spectrum1, Spectrum2, Spectrum3, Spectrum4, Spectrum5,
+    Spectrum6, Spectrum7, Spectrum8, Spectrum9
 };
 
-static constexpr int kSustainVoicingCount = 13;
+static constexpr int kSustainVoicingCount = 22;
 
 /// Magnitude of one two-pole resonance. The shape matters more than it looks:
 /// a resonance is *flat* below its centre frequency and only falls away above
@@ -283,6 +290,107 @@ inline SampleData generateSustain(SustainVoicing voicing, double frequency,
                           * std::exp(-harmonic / 16.0f);
                 break;
 
+            // --- Spectrum family -------------------------------------------
+            // Each is a different rule for *which* harmonics exist, not a
+            // different rolloff. That is what separates them from each other
+            // and from the imitative voicings above, all of which are some
+            // curve applied to a full harmonic series.
+            //
+            // A seamless loop is periodic by construction, so genuinely
+            // inharmonic partials are impossible — the same wall Gong ran into.
+            // Sparse and uneven harmonic subsets are how you get the cold,
+            // struck-metal quality without them.
+            case SustainVoicing::Spectrum1: {
+                // Hollow and bright: odd harmonics with a peak high up rather
+                // than at the fundamental.
+                if ((harmonic % 2) == 0) break;
+                const float n = static_cast<float>(harmonic);
+                amplitude = std::exp(-std::pow((n - 7.0f) / 5.0f, 2.0f)) * 0.9f
+                          + 0.12f / n;
+                break;
+            }
+            case SustainVoicing::Spectrum2:
+                // A comb: every third harmonic, evenly weighted. The gaps are
+                // wide enough to read as a chord rather than as a timbre.
+                amplitude = (harmonic % 3) == 1
+                    ? 0.75f / std::sqrt(static_cast<float>(harmonic)) : 0.0f;
+                break;
+            case SustainVoicing::Spectrum3: {
+                // Almost no fundamental — the energy sits in a band two to
+                // three octaves up, which is what makes it read as glass. The
+                // thin trickle underneath is not decoration: in the top key
+                // zone the whole band lands above Nyquist, and without it the
+                // asset generates as silence.
+                const float n = static_cast<float>(harmonic);
+                amplitude = std::exp(-std::pow((n - 14.0f) / 3.5f, 2.0f)) * 1.0f
+                          + 0.10f / n;
+                break;
+            }
+            case SustainVoicing::Spectrum4: {
+                // Prime harmonics only. They share no common divisor above the
+                // fundamental, so the result beats against itself the way a
+                // struck bell does without leaving the periodic grid.
+                static const int primes[9] = {1, 2, 3, 5, 7, 11, 13, 17, 19};
+                amplitude = 0.0f;
+                for (int prime : primes) {
+                    if (harmonic == prime) {
+                        amplitude = 0.9f / std::sqrt(static_cast<float>(harmonic));
+                        break;
+                    }
+                }
+                break;
+            }
+            case SustainVoicing::Spectrum5: {
+                // Two narrow bands far apart, with a hole between them. The
+                // most used Spectrum wave in the bank, so it earns the most
+                // distinctive shape.
+                const float n = static_cast<float>(harmonic);
+                amplitude = std::exp(-std::pow((n - 2.0f) / 1.4f, 2.0f)) * 0.9f
+                          + std::exp(-std::pow((n - 15.0f) / 3.0f, 2.0f)) * 0.55f;
+                break;
+            }
+            case SustainVoicing::Spectrum6: {
+                // Even harmonics only — the mirror of Spectrum 1. The missing
+                // fundamental pushes the perceived pitch an octave up while the
+                // note keeps its real one, which is a distinctly digital effect
+                // and nothing else here does it. It replaced a 1/n series with
+                // notches, which measured too close to both Spectrum 4 and
+                // Spectrum 9 to be worth its own slot.
+                if ((harmonic % 2) != 0) break;
+                amplitude = 0.9f / static_cast<float>(harmonic / 2);
+                break;
+            }
+            case SustainVoicing::Spectrum7: {
+                // A single tight cluster high up: a ringing metallic band with
+                // just enough fundamental to give it a pitch.
+                const float n = static_cast<float>(harmonic);
+                amplitude = std::exp(-std::pow((n - 9.0f) / 2.0f, 2.0f)) * 1.0f
+                          + (harmonic == 1 ? 0.3f : 0.0f);
+                break;
+            }
+            case SustainVoicing::Spectrum8: {
+                // Widely spaced and sparse — octaves and their neighbours only.
+                switch (harmonic) {
+                    case 1:  amplitude = 0.85f; break;
+                    case 2:  amplitude = 0.30f; break;
+                    case 4:  amplitude = 0.50f; break;
+                    case 8:  amplitude = 0.40f; break;
+                    case 9:  amplitude = 0.22f; break;
+                    case 16: amplitude = 0.30f; break;
+                    case 17: amplitude = 0.16f; break;
+                    default: amplitude = 0.0f; break;
+                }
+                break;
+            }
+            case SustainVoicing::Spectrum9: {
+                // Every harmonic at nearly the same level. No rolloff at all is
+                // a thing only a digital instrument does, and it is the
+                // harshest wave here after Nasty. Written as 1/n with a shelf
+                // first, which measured as just another rolloff.
+                amplitude = 0.30f - 0.006f * static_cast<float>(harmonic);
+                break;
+            }
+
             case SustainVoicing::Gong: {
                 // Metallic wash. A loop is periodic, so genuinely inharmonic
                 // partials are impossible; picking a sparse, uneven harmonic
@@ -373,10 +481,11 @@ enum class AttackKind {
     Mallet, Pluck, Chiff, NoiseBurst, TineStrike,
     Marimba, Vibraphone, Xylophone, Kalimba,
     SlapBass, PullBass, Pick, PianoHammer,
-    Anvil, TaikoDrum, LipBuzz, Breath, BowScrape
+    Anvil, TaikoDrum, LipBuzz, Breath, BowScrape,
+    Pizzicato
 };
 
-static constexpr int kAttackKindCount = 18;
+static constexpr int kAttackKindCount = 19;
 
 struct AttackPartial {
     float ratio;    // multiple of the fundamental; non-integer for struck bars
@@ -505,6 +614,17 @@ inline AttackRecipe attackRecipe(AttackKind kind) {
         case AttackKind::Breath:
             return {0.30, {}, 0, 1.5f, 9.0f, 3000.0, 1.9, 0.0f, 0.0f,
                     0.040f, 1400.0, 0.25f, 40.0};
+        // A plucked-and-damped string. Distinct from Pluck, which is mostly
+        // noise, and from Pick, which is a scrape: a pizzicato is *pitched*,
+        // with the body of the instrument ringing briefly behind the finger.
+        // It is what Pizzagogo is built on, and R50 had nothing like it.
+        case AttackKind::Pizzicato:
+            return {0.22, {{1.0f, 1.0f, 14.0f}, {2.0f, 0.55f, 20.0f},
+                           {3.0f, 0.30f, 28.0f}, {4.0f, 0.16f, 38.0f},
+                           {5.9f, 0.10f, 50.0f}}, 5,
+                    0.30f, 150.0f, 2400.0, 2.8, 0.0f, 0.0f,
+                    0.0f, 700.0, 0.0f, 0.0};
+
         // "Slower to arrive than a strike" was in the comment but not in the
         // code — the rise time did not exist yet, so a wide band at full level
         // on the first sample made a detonation. Rosin is a stick-slip process:
@@ -641,7 +761,13 @@ inline void buildFactoryContent(SampleLibrary &library) {
         {108,  99, 127},
     };
 
+    // Instrument indices are stable — a preset stores one, and the sample
+    // browser shows them in this order. So new content is registered *after*
+    // everything that already existed, never woven into it. Appending the nine
+    // Spectrum waves to the sustain list was enough to shift every attack by
+    // nine and repoint all 29 presets at the wrong samples.
     struct SustainSpec { SustainVoicing voicing; const char *name; };
+    static constexpr int kOriginalSustains = 13;
     static const SustainSpec sustains[kSustainVoicingCount] = {
         {SustainVoicing::Choir,       "Choir"},
         {SustainVoicing::Strings,     "Strings"},
@@ -656,9 +782,18 @@ inline void buildFactoryContent(SampleLibrary &library) {
         {SustainVoicing::Gong,        "Gong"},
         {SustainVoicing::Nasty,       "Nasty"},
         {SustainVoicing::FatBlock,    "Fat Block"},
+        {SustainVoicing::Spectrum1,   "Spectrum 1"},
+        {SustainVoicing::Spectrum2,   "Spectrum 2"},
+        {SustainVoicing::Spectrum3,   "Spectrum 3"},
+        {SustainVoicing::Spectrum4,   "Spectrum 4"},
+        {SustainVoicing::Spectrum5,   "Spectrum 5"},
+        {SustainVoicing::Spectrum6,   "Spectrum 6"},
+        {SustainVoicing::Spectrum7,   "Spectrum 7"},
+        {SustainVoicing::Spectrum8,   "Spectrum 8"},
+        {SustainVoicing::Spectrum9,   "Spectrum 9"},
     };
 
-    for (const SustainSpec &spec : sustains) {
+    auto addSustain = [&](const SustainSpec &spec) {
         Multisample instrument;
         instrument.setName(spec.name);
         for (const ZoneSpec &zone : zones) {
@@ -678,9 +813,12 @@ inline void buildFactoryContent(SampleLibrary &library) {
             instrument.regions[instrument.regionCount++] = region;
         }
         library.addInstrument(instrument);
-    }
+    };
+
+    for (int i = 0; i < kOriginalSustains; ++i) addSustain(sustains[i]);
 
     struct AttackSpec { AttackKind kind; const char *name; };
+    static constexpr int kOriginalAttacks = 18;
     static const AttackSpec attacks[kAttackKindCount] = {
         {AttackKind::Mallet,      "Mallet"},
         {AttackKind::Pluck,       "Pluck"},
@@ -700,12 +838,14 @@ inline void buildFactoryContent(SampleLibrary &library) {
         {AttackKind::LipBuzz,     "Lip Buzz"},
         {AttackKind::Breath,      "Breath"},
         {AttackKind::BowScrape,   "Bow Scrape"},
+        // New content goes on the end — see kOriginalSustains above.
+        {AttackKind::Pizzicato,   "Pizzicato"},
     };
 
-    for (const AttackSpec &spec : attacks) {
+    auto addAttack = [&](const AttackSpec &spec) {
         SampleData data = generateAttack(spec.kind, sampleRate);
         const int slot = library.addSample(std::move(data));
-        if (slot < 0) continue;
+        if (slot < 0) return;
 
         Multisample instrument;
         instrument.setName(spec.name);
@@ -715,7 +855,13 @@ inline void buildFactoryContent(SampleLibrary &library) {
         instrument.regions[0] = region;
         instrument.regionCount = 1;
         library.addInstrument(instrument);
-    }
+    };
+
+    // Registration order, and therefore instrument index order: everything that
+    // shipped before, in the order it shipped, then everything new.
+    for (int i = 0; i < kOriginalAttacks; ++i) addAttack(attacks[i]);
+    for (int i = kOriginalSustains; i < kSustainVoicingCount; ++i) addSustain(sustains[i]);
+    for (int i = kOriginalAttacks; i < kAttackKindCount; ++i) addAttack(attacks[i]);
 }
 
 inline SampleLibrary::SampleLibrary() {
