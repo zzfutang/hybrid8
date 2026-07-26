@@ -143,4 +143,8 @@ public final class R50AudioUnit: AUAudioUnit {
     func instrumentName(at index: Int) -> String? {
         kernel.instrumentName(at: index)
     }
+
+    func sampleInfo(at index: Int) -> [String: Any]? {
+        kernel.sampleInfo(at: index)
+    }
 }

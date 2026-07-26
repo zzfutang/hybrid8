@@ -37,9 +37,15 @@ NS_ASSUME_NONNULL_BEGIN
                         rootKey:(NSInteger)rootKey
                        loopMode:(NSInteger)loopMode;
 
-/// Instrument catalog, for the editor's sample browser.
+/// Catalog for the editor's sample browser.
 - (NSInteger)instrumentCount;
 - (nullable NSString *)instrumentNameAtIndex:(NSInteger)index;
+
+/// Everything the browser table shows about one entry: name, zone count, key
+/// span, loop mode, the duration of the zone covering middle C, and the total
+/// audio it occupies. Read off the published library, so it is only ever called
+/// from the UI thread.
+- (nullable NSDictionary<NSString *, id> *)sampleInfoAtIndex:(NSInteger)index;
 
 /// The real-time render block handed to the AUAudioUnit.
 - (AUInternalRenderBlock)internalRenderBlock;

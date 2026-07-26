@@ -16,7 +16,41 @@ struct SampleEntry: Identifiable {
     let index: Int
     let name: String
     let isFactory: Bool
+    let zones: Int
+    let lowKey: Int
+    let highKey: Int
+    let loopMode: Int          // 0 none, 1 forward, 2 ping-pong
+    let seconds: Double        // duration of the zone covering middle C
+    let bytes: Int             // total audio held by every zone
     var id: Int { index }
+
+    var source: String { isFactory ? "FACT" : "USER" }
+
+    var loopLabel: String {
+        switch loopMode {
+        case 1:  return "Loop"
+        case 2:  return "P-Pong"
+        default: return "1-Shot"
+        }
+    }
+
+    var keyRange: String { "\(SampleEntry.noteName(lowKey))–\(SampleEntry.noteName(highKey))" }
+
+    var lengthLabel: String {
+        seconds >= 1.0 ? String(format: "%.2f s", seconds)
+                       : String(format: "%.0f ms", seconds * 1000)
+    }
+
+    var sizeLabel: String {
+        bytes >= 1_048_576 ? String(format: "%.1f MB", Double(bytes) / 1_048_576)
+                           : String(format: "%.0f KB", Double(bytes) / 1024)
+    }
+
+    static func noteName(_ midi: Int) -> String {
+        let names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        let octave = midi / 12 - 1
+        return "\(names[((midi % 12) + 12) % 12])\(octave)"
+    }
 }
 
 private struct SampleManifestEntry: Codable {
@@ -68,9 +102,20 @@ final class R50SampleStore: ObservableObject {
     func refresh() {
         guard let audioUnit else { return }
         entries = (0..<audioUnit.instrumentCount).map { index in
-            SampleEntry(index: index,
-                        name: audioUnit.instrumentName(at: index) ?? "—",
-                        isFactory: index < factoryCount)
+            let info = audioUnit.sampleInfo(at: index)
+            let frames = info?["frames"] as? Int ?? 0
+            let rate = info?["sampleRate"] as? Double ?? 44100
+            return SampleEntry(
+                index: index,
+                name: info?["name"] as? String
+                    ?? audioUnit.instrumentName(at: index) ?? "—",
+                isFactory: index < factoryCount,
+                zones: info?["zones"] as? Int ?? 0,
+                lowKey: info?["lowKey"] as? Int ?? 0,
+                highKey: info?["highKey"] as? Int ?? 127,
+                loopMode: info?["loopMode"] as? Int ?? 0,
+                seconds: rate > 0 ? Double(frames) / rate : 0,
+                bytes: info?["totalBytes"] as? Int ?? 0)
         }
     }
 

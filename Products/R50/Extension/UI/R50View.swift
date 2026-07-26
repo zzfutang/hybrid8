@@ -183,9 +183,9 @@ struct R50View: View {
 
     private var samplePage: some View {
         HStack(alignment: .top, spacing: 10) {
-            R50Panel(title: "Instruments") {
+            R50Panel(title: "Sample Browser") {
                 VStack(alignment: .leading, spacing: 8) {
-                    instrumentGrid
+                    sampleTable
                     HStack(spacing: 8) {
                         actionButton("IMPORT…") { showingImporter = true }
                         actionButton("DELETE") {
@@ -203,7 +203,7 @@ struct R50View: View {
                     }
                 }
             }
-            .frame(width: 620)
+            .frame(width: 800)
 
             R50Panel(title: "Playback") {
                 VStack(alignment: .leading, spacing: 14) {
@@ -220,7 +220,7 @@ struct R50View: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(width: 270)
+            .frame(width: 330)
         }
         .frame(height: 300)
         .fileImporter(isPresented: $showingImporter,
@@ -232,19 +232,41 @@ struct R50View: View {
         }
     }
 
-    private var instrumentGrid: some View {
-        let columns = 4
-        let rows = max(1, Int(ceil(Double(samples.entries.count) / Double(columns))))
-        return VStack(spacing: 1) {
-            ForEach(0..<rows, id: \.self) { row in
-                HStack(spacing: 1) {
-                    ForEach(0..<columns, id: \.self) { column in
-                        let index = row * columns + column
-                        if index < samples.entries.count {
-                            instrumentCell(samples.entries[index])
-                        } else {
-                            Color.clear.frame(maxWidth: .infinity, minHeight: 22)
+    /// A table, not a grid of buttons: what matters when picking a sample is
+    /// its key span, whether it loops and how long it is, none of which fit on
+    /// a button.
+    private var sampleTable: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                tableCell("NAME", width: 190, header: true)
+                tableCell("SRC", width: 55, header: true)
+                tableCell("ZONES", width: 60, header: true)
+                tableCell("KEY RANGE", width: 110, header: true)
+                tableCell("LOOP", width: 70, header: true)
+                tableCell("LENGTH", width: 80, header: true)
+                tableCell("SIZE", width: 70, header: true)
+            }
+            .background(Color(white: 0.17))
+
+            Rectangle().fill(R50Palette.panelEdge).frame(height: 1)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(samples.entries) { entry in
+                        let selected = entry.index == samples.selectedIndex
+                        HStack(spacing: 0) {
+                            tableCell(entry.name, width: 190, selected: selected,
+                                      align: .leading)
+                            tableCell(entry.source, width: 55, selected: selected)
+                            tableCell("\(entry.zones)", width: 60, selected: selected)
+                            tableCell(entry.keyRange, width: 110, selected: selected)
+                            tableCell(entry.loopLabel, width: 70, selected: selected)
+                            tableCell(entry.lengthLabel, width: 80, selected: selected)
+                            tableCell(entry.sizeLabel, width: 70, selected: selected)
                         }
+                        .background(selected ? R50Palette.glow : Color(white: 0.12))
+                        .contentShape(Rectangle())
+                        .onTapGesture { samples.select(entry) }
                     }
                 }
             }
@@ -254,19 +276,21 @@ struct R50View: View {
             .stroke(Color(white: 0.32), lineWidth: 1))
     }
 
-    private func instrumentCell(_ entry: SampleEntry) -> some View {
-        let selected = entry.index == samples.selectedIndex
-        return Text(entry.name)
-            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-            .foregroundColor(selected ? Color.black
-                                      : (entry.isFactory ? R50Palette.legend
-                                                         : R50Palette.glow))
+    private func tableCell(_ text: String, width: CGFloat,
+                           header: Bool = false, selected: Bool = false,
+                           align: Alignment = .center) -> some View {
+        Text(header ? text : text)
+            .font(.system(size: header ? 8 : 9,
+                          weight: header ? .medium : .semibold,
+                          design: .monospaced))
+            .tracking(header ? 0.8 : 0)
+            .foregroundColor(header ? R50Palette.engrave
+                                    : (selected ? Color.black : R50Palette.legend))
             .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .frame(maxWidth: .infinity, minHeight: 22)
-            .background(selected ? R50Palette.glow : Color(white: 0.13))
-            .contentShape(Rectangle())
-            .onTapGesture { samples.select(entry) }
+            .minimumScaleFactor(0.65)
+            .padding(.horizontal, 6)
+            .padding(.vertical, header ? 5 : 4)
+            .frame(width: width, alignment: align)
     }
 
     private func actionButton(_ title: String,

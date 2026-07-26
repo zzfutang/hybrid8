@@ -85,6 +85,45 @@
     return [NSString stringWithUTF8String:instrument->name];
 }
 
+- (NSDictionary<NSString *, id> *)sampleInfoAtIndex:(NSInteger)index {
+    r50::SampleLibrary &library = r50::SampleLibrary::shared();
+    const r50::Multisample *instrument = library.instrument((int)index);
+    if (instrument == nullptr || instrument->regionCount <= 0) return nil;
+
+    int lowKey = 127, highKey = 0, loopMode = 0;
+    size_t totalFrames = 0, representativeFrames = 0;
+    double sampleRate = 44100.0;
+
+    for (int r = 0; r < instrument->regionCount; ++r) {
+        const r50::SampleRegion &region = instrument->regions[r];
+        lowKey  = std::min(lowKey, region.lowKey);
+        highKey = std::max(highKey, region.highKey);
+
+        const r50::SampleData *data = library.sample(region.slot);
+        if (data == nullptr) continue;
+        totalFrames += data->samples.size();
+        sampleRate = data->sourceSampleRate;
+
+        // Report the zone a player is most likely to hear first.
+        const bool coversMiddleC = region.lowKey <= 60 && region.highKey >= 60;
+        if (r == 0 || coversMiddleC) {
+            loopMode = (int)data->loopMode;
+            representativeFrames = data->samples.size();
+        }
+    }
+
+    return @{
+        @"name":       [NSString stringWithUTF8String:instrument->name],
+        @"zones":      @(instrument->regionCount),
+        @"lowKey":     @(lowKey),
+        @"highKey":    @(highKey),
+        @"loopMode":   @(loopMode),
+        @"frames":     @(representativeFrames),
+        @"totalBytes": @(totalFrames * sizeof(float)),
+        @"sampleRate": @(sampleRate),
+    };
+}
+
 - (AUInternalRenderBlock)internalRenderBlock {
     // Capture a raw pointer to the C++ engine so the audio thread never does
     // ARC retain/release or ObjC message sends.
