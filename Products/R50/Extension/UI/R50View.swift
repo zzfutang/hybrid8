@@ -656,6 +656,8 @@ struct R50View: View {
                              model: model)
                     R50Value(title: "Octave", address: addr(R50FieldOctave), model: model)
 
+                    rootKeyEditor
+
                     // Multisamples exist because they do not sound the same
                     // across the keyboard, so a preview fixed at middle C would
                     // hide the very thing the zones are there to fix.
@@ -701,6 +703,7 @@ struct R50View: View {
                 tableCell("NAME", width: 235, header: true)
                 tableCell("ZONES", width: 60, header: true)
                 tableCell("KEY RANGE", width: 120, header: true)
+                tableCell("ROOT", width: 74, header: true)
                 tableCell("LOOP", width: 70, header: true)
                 tableCell("LENGTH", width: 80, header: true)
                 tableCell("SIZE", width: 70, header: true)
@@ -720,6 +723,8 @@ struct R50View: View {
                                       align: .leading, accent: !entry.isFactory)
                             tableCell("\(entry.zones)", width: 60, selected: selected)
                             tableCell(entry.keyRange, width: 120, selected: selected)
+                            tableCell(entry.rootLabel, width: 74, selected: selected,
+                                      accent: entry.retunable)
                             tableCell(entry.loopLabel, width: 70, selected: selected)
                             tableCell(entry.lengthLabel, width: 80, selected: selected)
                             tableCell(entry.sizeLabel, width: 70, selected: selected)
@@ -734,6 +739,43 @@ struct R50View: View {
         .clipShape(RoundedRectangle(cornerRadius: 2))
         .overlay(RoundedRectangle(cornerRadius: 2)
             .stroke(Color(white: 0.32), lineWidth: 1))
+    }
+
+    /// Root key of the selected import. Detection is a guess — it is right far
+    /// more often than a hardcoded middle C, but a one-shot or a noisy sample
+    /// can defeat it, so it has to be correctable by hand.
+    private var rootKeyEditor: some View {
+        let entry = samples.entries.first { $0.index == samples.selectedIndex }
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("ROOT KEY")
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundColor(R50Palette.engrave)
+                Spacer()
+                if let entry, entry.retunable {
+                    actionButton("<") { samples.setRoot(entry, key: entry.rootKey - 1,
+                                                        cents: entry.tuneCents) }
+                    Text(entry.rootLabel)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundColor(R50Palette.legend)
+                        .frame(width: 56)
+                    actionButton(">") { samples.setRoot(entry, key: entry.rootKey + 1,
+                                                        cents: entry.tuneCents) }
+                } else {
+                    Text(entry?.rootLabel ?? "—")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundColor(R50Palette.engrave)
+                }
+            }
+            if let entry, entry.retunable {
+                HStack(spacing: 8) {
+                    actionButton("DETECT") { samples.redetect(entry) }
+                    actionButton("ZERO CENTS") { samples.setRoot(entry, key: entry.rootKey,
+                                                                 cents: 0) }
+                }
+            }
+        }
     }
 
     /// Its own hit area rather than the row's: tapping a row assigns the sample

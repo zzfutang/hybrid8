@@ -136,6 +136,17 @@ public:
                               synth::clampf(p.sampleStart + startOffset, 0.0f, 1.0f));
                 sampleRootKey_   = region->rootKey;
                 sampleTuneCents_ = region->tuneCents;
+
+                // An imported instrument is one region, and its recorded pitch
+                // is a guess until someone corrects it, so the library holds an
+                // editable root for it. Generated content has a root per zone
+                // and one number cannot describe them, so it is left alone.
+                RootTuning tuning;
+                if (instrument->regionCount == 1
+                 && SampleLibrary::shared().rootTuning(p.sampleInstrument, tuning)) {
+                    sampleRootKey_   = tuning.rootKey;
+                    sampleTuneCents_ = tuning.tuneCents;
+                }
             }
         }
 

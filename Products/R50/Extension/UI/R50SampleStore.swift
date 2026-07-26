@@ -20,6 +20,11 @@ struct SampleEntry: Identifiable {
     let lowKey: Int
     let highKey: Int
     let loopMode: Int          // 0 none, 1 forward, 2 ping-pong
+    let rootKey: Int
+    let tuneCents: Float
+    /// Generated multisamples carry a root per zone; one number cannot describe
+    /// them, so only single-region imports can be retuned.
+    let retunable: Bool
     let seconds: Double        // duration of the zone covering middle C
     let bytes: Int             // total audio held by every zone
     var id: Int { index }
@@ -33,6 +38,13 @@ struct SampleEntry: Identifiable {
     }
 
     var keyRange: String { "\(SampleEntry.noteName(lowKey))–\(SampleEntry.noteName(highKey))" }
+
+    var rootLabel: String {
+        guard retunable else { return "per zone" }
+        return abs(tuneCents) < 0.5
+            ? SampleEntry.noteName(rootKey)
+            : String(format: "%@%+.0f", SampleEntry.noteName(rootKey), tuneCents)
+    }
 
     var lengthLabel: String {
         seconds >= 1.0 ? String(format: "%.2f s", seconds)
@@ -54,8 +66,10 @@ struct SampleEntry: Identifiable {
 private struct SampleManifestEntry: Codable {
     let name: String
     let fileName: String
-    let rootKey: Int
+    var rootKey: Int
     let loopMode: Int
+    /// Optional so a library.json written before retuning existed still decodes.
+    var tuneCents: Float?
 }
 
 final class R50SampleStore: ObservableObject {
@@ -97,6 +111,49 @@ final class R50SampleStore: ObservableObject {
         model.objectWillChange.send()
     }
 
+    /// Retune an imported entry. Writes through to the engine, which picks it
+    /// up on the next note, and to the manifest so it survives a relaunch.
+    func setRoot(_ entry: SampleEntry, key: Int, cents: Float) {
+        guard !entry.isFactory else { return }
+        let manifestIndex = entry.index - factoryCount
+        guard manifestIndex >= 0, manifestIndex < manifests.count else { return }
+        let clamped = min(127, max(0, key))
+        manifests[manifestIndex].rootKey = clamped
+        manifests[manifestIndex].tuneCents = cents
+        saveManifest()
+        audioUnit?.setRoot(instrument: entry.index, key: clamped, cents: cents)
+        refresh()
+    }
+
+    /// Re-run detection on an already-imported entry, for when the automatic
+    /// answer was wrong or the file was imported before detection existed.
+    func redetect(_ entry: SampleEntry) {
+        guard !entry.isFactory else { return }
+        let manifestIndex = entry.index - factoryCount
+        guard manifestIndex >= 0, manifestIndex < manifests.count else { return }
+        let manifest = manifests[manifestIndex]
+        let url = samplesDirectory.appendingPathComponent(manifest.fileName)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self, let audio = try? Self.decodeMono(url),
+                  let found = Self.detectPitch(audio.samples,
+                                               sampleRate: audio.sampleRate,
+                                               audioUnit: self.audioUnit),
+                  found.confidence > 0.5 else {
+                DispatchQueue.main.async {
+                    self?.errorMessage = "No clear pitch found in \(manifest.name)."
+                }
+                return
+            }
+            DispatchQueue.main.async {
+                self.setRoot(entry, key: found.rootKey, cents: -found.centsSharp)
+                self.errorMessage = String(
+                    format: "%@ detected at %.1f Hz (%@%+.0f cents).",
+                    manifest.name, found.hertz,
+                    SampleEntry.noteName(found.rootKey), -found.centsSharp)
+            }
+        }
+    }
+
     /// Preview one entry. Deliberately separate from `select`: auditioning is
     /// how you decide whether you want a sample, and it would be no use if
     /// hearing one meant assigning it to the Partial you are editing.
@@ -119,6 +176,9 @@ final class R50SampleStore: ObservableObject {
                 lowKey: info?["lowKey"] as? Int ?? 0,
                 highKey: info?["highKey"] as? Int ?? 127,
                 loopMode: info?["loopMode"] as? Int ?? 0,
+                rootKey: info?["rootKey"] as? Int ?? 60,
+                tuneCents: info?["tuneCents"] as? Float ?? 0,
+                retunable: info?["retunable"] as? Bool ?? false,
                 seconds: rate > 0 ? Double(frames) / rate : 0,
                 bytes: info?["totalBytes"] as? Int ?? 0)
         }
@@ -144,8 +204,23 @@ final class R50SampleStore: ObservableObject {
             try FileManager.default.copyItem(
                 at: sourceURL, to: samplesDirectory.appendingPathComponent(fileName))
 
-            let manifest = SampleManifestEntry(name: name, fileName: fileName,
-                                               rootKey: 60, loopMode: loopMode)
+            // Detected rather than assumed. A hardcoded middle C is wrong for
+            // every sample that was not recorded at middle C, which is most of
+            // them, and it puts the error across the whole keyboard.
+            let detected = Self.detectPitch(decoded.samples,
+                                            sampleRate: decoded.sampleRate,
+                                            audioUnit: audioUnit)
+            let confident = (detected?.confidence ?? 0) > 0.5
+            let manifest = SampleManifestEntry(
+                name: name, fileName: fileName,
+                rootKey: confident ? detected!.rootKey : 60,
+                loopMode: loopMode,
+                // Negated: the detector says how sharp the recording is, and
+                // what gets stored is the correction that cancels it.
+                tuneCents: confident ? -detected!.centsSharp : 0)
+            if !confident {
+                errorMessage = "\(name): no clear pitch found — root key left at C4."
+            }
             manifests.append(manifest)
             saveManifest()
             install(manifest, samples: decoded.samples,
@@ -225,6 +300,10 @@ final class R50SampleStore: ObservableObject {
             let index = audioUnit.installSample(
                 name: manifest.name, samples: samples, sampleRate: sampleRate,
                 rootKey: manifest.rootKey, loopMode: manifest.loopMode)
+            if index >= 0 {
+                audioUnit.setRoot(instrument: index, key: manifest.rootKey,
+                                  cents: manifest.tuneCents ?? 0)
+            }
             DispatchQueue.main.async {
                 self.isImporting = false
                 guard index >= 0 else {
@@ -280,6 +359,32 @@ final class R50SampleStore: ObservableObject {
         }
         guard !mono.isEmpty else { throw ImportError.decodeFailed }
         return (mono, file.processingFormat.sampleRate)
+    }
+
+    // MARK: - Pitch detection
+    //
+    // The algorithm lives in R50PitchDetect.hpp, not here: it is signal
+    // processing, and in C++ the offline test suite can actually exercise it
+    // against synthetic sines, sawtooths and noise.
+
+    struct DetectedPitch {
+        let hertz: Double
+        let rootKey: Int
+        /// How sharp the recording is. Negate it to get a tuning correction.
+        let centsSharp: Float
+        let confidence: Float
+    }
+
+    private static func detectPitch(_ samples: [Float], sampleRate: Double,
+                                    audioUnit: R50AudioUnit?) -> DetectedPitch? {
+        guard let info = audioUnit?.detectPitch(samples: samples,
+                                                sampleRate: sampleRate),
+              let hertz = info["hertz"] as? Double,
+              let rootKey = info["rootKey"] as? Int,
+              let centsSharp = info["centsSharp"] as? Float,
+              let confidence = info["confidence"] as? Float else { return nil }
+        return DetectedPitch(hertz: hertz, rootKey: rootKey,
+                             centsSharp: centsSharp, confidence: confidence)
     }
 
     enum ImportError: LocalizedError {

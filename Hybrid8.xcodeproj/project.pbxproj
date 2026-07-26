@@ -139,6 +139,7 @@
 		8FB5F915331861EE4ED079E0 /* R50Parameters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = R50Parameters.h; sourceTree = "<group>"; };
 		90C36064148CBB1BA047620D /* SynthTimeMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthTimeMapping.swift; sourceTree = "<group>"; };
 		97914D3D466CC0071C9535CD /* PresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetStore.swift; sourceTree = "<group>"; };
+		9E62C37319F8EDDDC7A80985 /* R50PitchDetect.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50PitchDetect.hpp; sourceTree = "<group>"; };
 		A4EE673DC8E4D1CB2783E28A /* PresetDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDocument.swift; sourceTree = "<group>"; };
 		AA3098E2CA53815C28DFBDFF /* SynthTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthTheme.swift; sourceTree = "<group>"; };
 		AA5A665188698ADB50316116 /* R50SamplePlayer.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50SamplePlayer.hpp; sourceTree = "<group>"; };
@@ -279,6 +280,7 @@
 				2C1C0196DB15AA627ECB89AD /* R50Modulation.hpp */,
 				4E1AA536D5BCEFC6B916629C /* R50Noise.hpp */,
 				8D90BFA8D15AB1DC1692CC68 /* R50Partial.hpp */,
+				9E62C37319F8EDDDC7A80985 /* R50PitchDetect.hpp */,
 				19FA9B3BB4AE406828814F9A /* R50Sample.hpp */,
 				8DAF2A33D71D5EE6461A540D /* R50SampleFactory.hpp */,
 				AA5A665188698ADB50316116 /* R50SamplePlayer.hpp */,

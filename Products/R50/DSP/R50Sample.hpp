@@ -26,6 +26,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -94,6 +95,31 @@ struct Multisample {
     }
 };
 
+/// The pitch an instrument is assumed to have been recorded at. Editable after
+/// the instrument is published, which the region's own rootKey is not: the
+/// render thread reads that at every note-on, so writing it from the UI would
+/// be a plain data race. Root and tuning are packed into one word so a note-on
+/// can never pair a new key with a stale detune.
+struct RootTuning {
+    int   rootKey   = 60;
+    float tuneCents = 0.0f;
+};
+
+inline uint32_t packRootTuning(RootTuning tuning) {
+    const int key = std::min(127, std::max(0, tuning.rootKey));
+    int cents = static_cast<int>(std::lround(tuning.tuneCents * 10.0f));
+    cents = std::min(12000, std::max(-12000, cents));
+    return 0x80000000u | (static_cast<uint32_t>(key) << 16)
+         | static_cast<uint32_t>(static_cast<uint16_t>(static_cast<int16_t>(cents)));
+}
+
+inline RootTuning unpackRootTuning(uint32_t word) {
+    RootTuning tuning;
+    tuning.rootKey   = static_cast<int>((word >> 16) & 0x7F);
+    tuning.tuneCents = static_cast<int16_t>(word & 0xFFFF) / 10.0f;
+    return tuning;
+}
+
 /// Process-wide store of assets and instruments, shared by every voice and
 /// every engine instance so a sample is decoded and held once.
 class SampleLibrary {
@@ -146,12 +172,32 @@ public:
         return instrumentCount_.load(std::memory_order_acquire);
     }
 
+    /// Retune an instrument. Safe from the UI thread while audio is running:
+    /// the next note-on picks it up, notes already sounding keep the pitch they
+    /// started at rather than jumping mid-note.
+    void setRootTuning(int instrument, RootTuning tuning) {
+        if (instrument < 0 || instrument >= kMaxInstruments) return;
+        rootTuning_[instrument].store(packRootTuning(tuning),
+                                      std::memory_order_release);
+    }
+
+    /// False when nothing has been set, which is the case for all generated
+    /// content — its zones carry their own roots.
+    bool rootTuning(int instrument, RootTuning &out) const {
+        if (instrument < 0 || instrument >= kMaxInstruments) return false;
+        const uint32_t word = rootTuning_[instrument].load(std::memory_order_acquire);
+        if ((word & 0x80000000u) == 0) return false;
+        out = unpackRootTuning(word);
+        return true;
+    }
+
 private:
     SampleLibrary();   // builds the generated factory content
 
     std::atomic<const SampleData *> slots_[kMaxSampleSlots] = {};
     std::atomic<int> slotCount_{0};
 
+    std::atomic<uint32_t> rootTuning_[kMaxInstruments] = {};
     Multisample      instruments_[kMaxInstruments];
     std::atomic<int> instrumentCount_{0};
 };

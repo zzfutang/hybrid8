@@ -6,6 +6,7 @@
 //
 
 #include "R50Engine.hpp"
+#include "R50PitchDetect.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -2024,6 +2025,175 @@ int main() {
             printf("       closest pair of Spectrum waves: %.2f\n", closest);
             check(closest > 0.5, "no two Spectrum waves are the same wave");
         }
+    }
+
+    // --- Pitch detection ----------------------------------------------------
+    {
+        auto tone = [](double hz, int harmonics, double seconds) {
+            std::vector<float> out(static_cast<int>(seconds * kSR), 0.0f);
+            for (size_t n = 0; n < out.size(); ++n) {
+                double value = 0.0;
+                for (int h = 1; h <= harmonics; ++h) {
+                    value += std::sin(synth::kTwoPi * hz * h * n / kSR) / h;
+                }
+                out[n] = static_cast<float>(value * 0.3);
+            }
+            return out;
+        };
+
+        // Across the range a sample is likely to be recorded in. Five cents is
+        // deliberately tighter than it needs to be: at the top of the range,
+        // rounding the period to a whole sample instead of interpolating it
+        // costs twenty-five, and a looser bound would not notice.
+        double worst = 0.0;
+        for (double hz : {82.41, 130.81, 261.63, 440.0, 1046.5, 1500.0,
+                          1975.5, 2400.0}) {
+            const std::vector<float> sine = tone(hz, 1, 0.5);
+            const r50::DetectedPitch found =
+                r50::detectPitch(sine.data(), static_cast<int>(sine.size()), kSR);
+            const double error = found.valid
+                ? 1200.0 * std::log2(found.hertz / hz) : 9999.0;
+            worst = std::max(worst, std::fabs(error));
+            check(found.valid && std::fabs(error) < 5.0,
+                  "a sine is detected to within five cents");
+        }
+        printf("       worst pitch-detection error: %.2f cents\n", worst);
+
+        {
+            // The octave trap. Plain autocorrelation maximises at every
+            // multiple of the period, so a harmonically rich tone reports an
+            // octave or two low; this is the case YIN exists for.
+            const std::vector<float> rich = tone(220.0, 24, 0.5);
+            const r50::DetectedPitch found =
+                r50::detectPitch(rich.data(), static_cast<int>(rich.size()), kSR);
+            printf("       24-harmonic 220 Hz tone detected at %.1f Hz\n", found.hertz);
+            check(found.valid && std::fabs(1200.0 * std::log2(found.hertz / 220.0)) < 20.0,
+                  "a harmonically rich tone does not detect an octave low");
+        }
+        {
+            // A sample recorded off-pitch: the residual has to be reported
+            // rather than rounded away, or it plays out of tune everywhere.
+            // Deliberately not 50 cents — that is exactly between two
+            // semitones, and both answers are right.
+            const double hz = 261.63 * std::pow(2.0, 0.30 / 12.0);
+            const std::vector<float> sharp = tone(hz, 6, 0.5);
+            const r50::DetectedPitch found =
+                r50::detectPitch(sharp.data(), static_cast<int>(sharp.size()), kSR);
+            check(found.valid && found.rootKey == 60 && found.centsSharp > 20.0
+               && found.centsSharp < 40.0,
+                  "an out-of-tune sample reports how sharp it is");
+        }
+        {
+            synth::FastRandom random(12345);
+            std::vector<float> noise(static_cast<int>(0.5 * kSR));
+            for (float &v : noise) v = random.nextBipolar() * 0.3f;
+            const r50::DetectedPitch found =
+                r50::detectPitch(noise.data(), static_cast<int>(noise.size()), kSR);
+            printf("       noise confidence: %.2f\n", found.confidence);
+            check(!found.valid || found.confidence < 0.5,
+                  "noise is not given a confident root key");
+        }
+        {
+            // The real target: generated content, which is what an import will
+            // look like. The Flute zone covering middle C is built at its own
+            // root, and detection has to find that rather than middle C.
+            const r50::SampleLibrary &library = r50::SampleLibrary::shared();
+            for (int i = 0; i < library.instrumentCount(); ++i) {
+                if (std::string(library.instrument(i)->name) != "Flute") continue;
+                const r50::SampleRegion *region = library.instrument(i)->find(60, 100);
+                const r50::SampleData *data = library.sample(region->slot);
+                const r50::DetectedPitch found = r50::detectPitch(
+                    data->samples.data(), data->length(), data->sourceSampleRate);
+                check(found.valid && found.rootKey == region->rootKey,
+                      "a generated sample detects the key it was generated at");
+            }
+        }
+    }
+
+    // --- Editable root key --------------------------------------------------
+    {
+        {
+            r50::RootTuning tuning;
+            tuning.rootKey = 43;
+            tuning.tuneCents = -37.5f;
+            const r50::RootTuning back =
+                r50::unpackRootTuning(r50::packRootTuning(tuning));
+            check(back.rootKey == 43 && std::fabs(back.tuneCents + 37.5f) < 0.1f,
+                  "root and tuning survive being packed into one word");
+        }
+
+        r50::SampleLibrary &library = r50::SampleLibrary::shared();
+        r50::RootTuning unused;
+        check(!library.rootTuning(0, unused),
+              "generated content has no root override");
+
+        // Install a single-region instrument the way the importer does, then
+        // retune it and confirm the pitch actually moves.
+        r50::SampleData data;
+        data.samples.resize(4410);
+        for (size_t n = 0; n < data.samples.size(); ++n) {
+            data.samples[n] = static_cast<float>(
+                0.5 * std::sin(synth::kTwoPi * 440.0 * n / kSR));
+        }
+        data.sourceSampleRate = kSR;
+        data.rootKey  = 60;
+        data.loopMode = r50::LoopMode::Forward;
+        data.loopEnd  = static_cast<uint32_t>(data.samples.size());
+        const int slot = library.addSample(std::move(data));
+        r50::Multisample imported;
+        imported.setName("Retune Probe");
+        r50::SampleRegion region;
+        region.rootKey = 60;
+        region.slot = slot;
+        imported.regions[0] = region;
+        imported.regionCount = 1;
+        const int index = library.addInstrument(imported);
+        check(slot >= 0 && index >= 0, "the probe instrument installs");
+
+        auto pitchOf = [&](int instrument, int note) {
+            r50::R50Engine engine;
+            engine.setSampleRate(kSR);
+            engine.setParameter(R50ParamSourceType, 1);
+            engine.setParameter(R50ParamSampleInstrument,
+                                static_cast<float>(instrument));
+            engine.setParameter(R50ParamCutoff, 18000);
+            engine.setParameter(R50ParamFilterEnvAmount, 0);
+            engine.setParameter(R50ParamFxReverbMix, 0);
+            engine.setParameter(R50ParamAmpAttack, 0.001f);
+            engine.noteOn(static_cast<uint8_t>(note), 100);
+            const std::vector<float> rendered = renderBuffer(engine, 0.3);
+            return r50::detectPitch(rendered.data(),
+                                    static_cast<int>(rendered.size()), kSR);
+        };
+
+        const r50::DetectedPitch before = pitchOf(index, 60);
+        check(before.valid && std::fabs(before.hertz - 440.0) < 8.0,
+              "the probe plays at its recorded pitch on its root key");
+
+        // Declaring the sample to be A4 rather than C4 must transpose it down
+        // by the three semitones that were previously being applied wrongly.
+        library.setRootTuning(index, {69, 0.0f});
+        const r50::DetectedPitch after = pitchOf(index, 60);
+        const double expected = 440.0 * std::pow(2.0, (60 - 69) / 12.0);
+        check(after.valid && std::fabs(1200.0 * std::log2(after.hertz / expected)) < 25.0,
+              "correcting the root key transposes playback");
+
+        // Positive cents transpose playback up, which is why a detection of
+        // "30 cents sharp" has to be stored as a correction of -30.
+        library.setRootTuning(index, {69, 50.0f});
+        const r50::DetectedPitch detuned = pitchOf(index, 60);
+        check(detuned.valid
+           && 1200.0 * std::log2(detuned.hertz / after.hertz) > 25.0,
+              "fine tune in cents shifts playback up");
+
+        // A generated multisample must ignore an override: its zones each carry
+        // their own root and one number cannot describe them.
+        const r50::DetectedPitch zoneBefore = pitchOf(0, 60);
+        library.setRootTuning(0, {24, 0.0f});
+        const r50::DetectedPitch zoneAfter = pitchOf(0, 60);
+        check(zoneBefore.valid && zoneAfter.valid
+           && std::fabs(1200.0 * std::log2(zoneAfter.hertz / zoneBefore.hertz)) < 15.0,
+              "a multi-zone instrument ignores a root override");
     }
 
     printf(g_failures == 0 ? "\nAll R50 tests passed.\n"

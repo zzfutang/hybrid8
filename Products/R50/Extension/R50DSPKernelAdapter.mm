@@ -5,6 +5,7 @@
 //
 
 #import "R50DSPKernelAdapter.h"
+#import "R50PitchDetect.hpp"
 #import "R50Engine.hpp"
 
 @implementation R50DSPKernelAdapter {
@@ -74,6 +75,30 @@
     return library.addInstrument(instrument);
 }
 
+- (NSDictionary<NSString *, id> *)detectPitchOf:(NSData *)samples
+                                     sampleRate:(double)sampleRate {
+    if (samples.length < sizeof(float)) return nil;
+    const r50::DetectedPitch found =
+        r50::detectPitch((const float *)samples.bytes,
+                         (int)(samples.length / sizeof(float)), sampleRate);
+    if (!found.valid) return nil;
+    return @{
+        @"hertz":      @(found.hertz),
+        @"rootKey":    @(found.rootKey),
+        @"centsSharp": @(found.centsSharp),
+        @"confidence": @(found.confidence),
+    };
+}
+
+- (void)setRootKey:(NSInteger)rootKey
+         tuneCents:(float)tuneCents
+    forInstrument:(NSInteger)index {
+    r50::RootTuning tuning;
+    tuning.rootKey   = (int)rootKey;
+    tuning.tuneCents = tuneCents;
+    r50::SampleLibrary::shared().setRootTuning((int)index, tuning);
+}
+
 - (void)auditionInstrumentAtIndex:(NSInteger)index
                              note:(uint8_t)note
                          velocity:(uint8_t)velocity {
@@ -118,9 +143,23 @@
         }
     }
 
+    // The effective root: the library override when one has been set for a
+    // single-region import, otherwise the region's own.
+    int rootKey = instrument->regions[0].rootKey;
+    float tuneCents = instrument->regions[0].tuneCents;
+    r50::RootTuning tuning;
+    const bool retunable = instrument->regionCount == 1;
+    if (retunable && library.rootTuning((int)index, tuning)) {
+        rootKey   = tuning.rootKey;
+        tuneCents = tuning.tuneCents;
+    }
+
     return @{
         @"name":       [NSString stringWithUTF8String:instrument->name],
         @"zones":      @(instrument->regionCount),
+        @"rootKey":    @(rootKey),
+        @"tuneCents":  @(tuneCents),
+        @"retunable":  @(retunable),
         @"lowKey":     @(lowKey),
         @"highKey":    @(highKey),
         @"loopMode":   @(loopMode),

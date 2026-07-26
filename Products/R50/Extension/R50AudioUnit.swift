@@ -148,6 +148,20 @@ public final class R50AudioUnit: AUAudioUnit {
         kernel.sampleInfo(at: index)
     }
 
+    /// Estimate a buffer's pitch. Nil when the material is not pitched.
+    func detectPitch(samples: [Float], sampleRate: Double) -> [String: Any]? {
+        samples.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return nil }
+            let data = Data(bytes: base, count: buffer.count * MemoryLayout<Float>.size)
+            return kernel.detectPitch(of: data, sampleRate: sampleRate)
+        }
+    }
+
+    /// Retune an imported instrument, effective from the next note on.
+    func setRoot(instrument: Int, key: Int, cents: Float) {
+        kernel.setRootKey(key, tuneCents: cents, forInstrument: instrument)
+    }
+
     /// Preview a browser entry, independent of the patch.
     func audition(instrument: Int, note: Int = 60, velocity: Int = 100) {
         kernel.auditionInstrument(at: instrument,

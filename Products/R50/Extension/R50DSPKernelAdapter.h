@@ -47,6 +47,18 @@ NS_ASSUME_NONNULL_BEGIN
 /// from the UI thread.
 - (nullable NSDictionary<NSString *, id> *)sampleInfoAtIndex:(NSInteger)index;
 
+/// Estimate the pitch of a decoded mono buffer. Returns nil when the material
+/// has no period worth trusting — a noise burst has no root key, and inventing
+/// one for it is worse than declining.
+- (nullable NSDictionary<NSString *, id> *)detectPitchOf:(NSData *)samples
+                                              sampleRate:(double)sampleRate;
+
+/// Retune an imported instrument. Lock-free and safe while audio runs: the
+/// next note-on picks it up, and notes already sounding keep their pitch.
+- (void)setRootKey:(NSInteger)rootKey
+         tuneCents:(float)tuneCents
+    forInstrument:(NSInteger)index;
+
 /// Preview one browser entry. Lock-free: this only posts a request that the
 /// render thread picks up on its next control block, so it is safe to call from
 /// the UI thread while audio is running. The preview bypasses the patch and the
