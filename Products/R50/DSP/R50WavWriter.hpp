@@ -43,8 +43,13 @@ inline void appendTag(std::vector<uint8_t> &out, const char *tag) {
 
 } // namespace detail
 
-/// 24-bit mono PCM. 24-bit rather than float because every editor opens it, and
-/// the generated content sits well inside +/-1 so nothing is lost.
+/// 32-bit float mono, and the format is not a preference. R50 matches its
+/// generated content by RMS with a peak ceiling of 1.30, so 108 of the 129
+/// factory zones legitimately peak above full scale — every integer format
+/// clips them. Written as 24-bit these files came back 3.2% quiet with their
+/// loudest moments flattened, which is not a rounding error but a different
+/// sound. Float also means what you see in an editor is what the synth has,
+/// with no gain compensation hidden in a manifest to remember.
 ///
 /// `loopEnd` is exclusive here, as it is everywhere else in R50; the `smpl`
 /// chunk wants the last *played* frame, so it goes out as loopEnd - 1. Getting
@@ -58,7 +63,7 @@ inline std::vector<uint8_t> encodeWav(const float *samples, int count,
     if (samples == nullptr || count <= 0) return out;
 
     const uint32_t rate = static_cast<uint32_t>(std::lround(sampleRate));
-    const uint32_t dataBytes = static_cast<uint32_t>(count) * 3u;
+    const uint32_t dataBytes = static_cast<uint32_t>(count) * 4u;
     const bool writeLoop = looped && loopEnd > loopStart + 1
                         && loopEnd <= static_cast<uint32_t>(count);
     const uint32_t smplBytes = writeLoop ? 60u : 0u;
@@ -66,34 +71,28 @@ inline std::vector<uint8_t> encodeWav(const float *samples, int count,
     out.reserve(dataBytes + smplBytes + 64);
     detail::appendTag(out, "RIFF");
     // 4 ("WAVE") + fmt (8 + 16) + data (8 + n) + smpl (8 + 60 when present)
-    detail::appendU32(out, 4 + 24 + 8 + dataBytes + (writeLoop ? 8 + smplBytes : 0)
-                           + (dataBytes & 1u));
+    // 4 bytes per sample, so the data chunk is always even and needs no pad.
+    detail::appendU32(out, 4 + 24 + 8 + dataBytes
+                           + (writeLoop ? 8 + smplBytes : 0));
     detail::appendTag(out, "WAVE");
 
     detail::appendTag(out, "fmt ");
     detail::appendU32(out, 16);
-    detail::appendU16(out, 1);                   // PCM
+    detail::appendU16(out, 3);                   // IEEE float
     detail::appendU16(out, 1);                   // mono
     detail::appendU32(out, rate);
-    detail::appendU32(out, rate * 3);            // byte rate
-    detail::appendU16(out, 3);                   // block align
-    detail::appendU16(out, 24);                  // bits per sample
+    detail::appendU32(out, rate * 4);            // byte rate
+    detail::appendU16(out, 4);                   // block align
+    detail::appendU16(out, 32);                  // bits per sample
 
     detail::appendTag(out, "data");
     detail::appendU32(out, dataBytes);
     for (int n = 0; n < count; ++n) {
-        float value = samples[n];
-        if (value > 1.0f) value = 1.0f;
-        if (value < -1.0f) value = -1.0f;
-        // 8388607 rather than 8388608: scaling by the latter makes +1.0 wrap to
-        // the most negative value instead of the most positive.
-        const int32_t quantised =
-            static_cast<int32_t>(std::lround(value * 8388607.0f));
-        out.push_back(static_cast<uint8_t>(quantised & 0xFF));
-        out.push_back(static_cast<uint8_t>((quantised >> 8) & 0xFF));
-        out.push_back(static_cast<uint8_t>((quantised >> 16) & 0xFF));
+        // No clamping: content above full scale is the reason this is float.
+        uint32_t bits;
+        std::memcpy(&bits, &samples[n], sizeof(bits));
+        detail::appendU32(out, bits);
     }
-    if (dataBytes & 1u) out.push_back(0);        // chunks are word aligned
 
     if (writeLoop) {
         detail::appendTag(out, "smpl");

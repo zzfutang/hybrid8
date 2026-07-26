@@ -2239,12 +2239,10 @@ int main() {
                     out.rate     = readU32(bytes, body + 4);
                     out.bits     = readU16(bytes, body + 14);
                 } else if (tagAt(bytes, at, "data")) {
-                    for (uint32_t i = 0; i + 2 < size; i += 3) {
-                        int32_t v = static_cast<int32_t>(bytes[body + i])
-                                  | (static_cast<int32_t>(bytes[body + i + 1]) << 8)
-                                  | (static_cast<int32_t>(bytes[body + i + 2]) << 16);
-                        if (v & 0x800000) v |= ~0xFFFFFF;   // sign extend
-                        out.samples.push_back(v / 8388607.0f);
+                    for (uint32_t i = 0; i + 3 < size; i += 4) {
+                        float v;
+                        std::memcpy(&v, &bytes[body + i], sizeof(v));
+                        out.samples.push_back(v);
                     }
                 } else if (tagAt(bytes, at, "smpl")) {
                     out.rootKey   = readU32(bytes, body + 12);
@@ -2262,16 +2260,18 @@ int main() {
         for (size_t n = 0; n < source.size(); ++n) {
             source[n] = static_cast<float>(std::sin(synth::kTwoPi * 5.0 * n / source.size()));
         }
-        source[0] = 1.0f;
-        source[1] = -1.0f;
+        // Above full scale on purpose: 108 of the 129 factory zones are, and an
+        // integer format would silently flatten them.
+        source[0] = 1.30f;
+        source[1] = -1.30f;
 
         const std::vector<uint8_t> encoded =
             r50::encodeWav(source.data(), static_cast<int>(source.size()),
                            kSR, 55, 100, 900, true);
         const Parsed parsed = parse(encoded);
         check(parsed.ok, "the exported file parses as a RIFF WAVE");
-        check(parsed.rate == 44100 && parsed.bits == 24 && parsed.channels == 1,
-              "the exported file declares 24-bit mono at the source rate");
+        check(parsed.rate == 44100 && parsed.bits == 32 && parsed.channels == 1,
+              "the exported file declares 32-bit mono at the source rate");
         check(parsed.samples.size() == source.size(),
               "every frame is written");
 
@@ -2282,13 +2282,12 @@ int main() {
             worst = std::max(worst, std::fabs(double(parsed.samples[n] - source[n])));
         }
         printf("       wav round-trip worst error: %.2e\n", worst);
-        check(worst < 1.0e-6, "24-bit quantisation round-trips within a bit");
-        // Full scale must not wrap to the opposite rail, which is what scaling
-        // by 8388608 instead of 8388607 would do. Guarded, because a failed
-        // parse leaves nothing to index and a crash reports nothing at all.
-        check(parsed.samples.size() > 1 && parsed.samples[0] > 0.99f
-           && parsed.samples[1] < -0.99f,
-              "full scale does not wrap");
+        check(worst == 0.0, "float export round-trips exactly");
+        // Guarded, because a failed parse leaves nothing to index and a crash
+        // reports nothing at all.
+        check(parsed.samples.size() > 1 && parsed.samples[0] == 1.30f
+           && parsed.samples[1] == -1.30f,
+              "content above full scale survives instead of being clipped");
 
         check(parsed.hasLoop && parsed.rootKey == 55,
               "the loop and root key travel with the file");
@@ -2302,13 +2301,11 @@ int main() {
                            kSR, 60, 0, 1000, false);
         check(!parse(oneShot).hasLoop, "a one-shot exports without a loop");
 
-        // Odd frame counts make the data chunk odd, and a RIFF chunk has to be
-        // word aligned or every following chunk is misread.
         const std::vector<uint8_t> odd =
             r50::encodeWav(source.data(), 999, kSR, 60, 100, 900, true);
         const Parsed oddParsed = parse(odd);
         check(oddParsed.ok && oddParsed.samples.size() == 999 && oddParsed.hasLoop,
-              "an odd frame count stays word aligned");
+              "an odd frame count still parses");
     }
 
     // --- Factory files ------------------------------------------------------
@@ -2355,13 +2352,7 @@ int main() {
         }
 
         // 16-bit is what an editor is most likely to hand back.
-        {
-            std::vector<uint8_t> sixteen = r50::encodeWav(
-                source.data(), static_cast<int>(source.size()), kSR, 60, 0, 0, false);
-            // Rewrite the data chunk as 16-bit by hand.
-            const r50::LoadedWav asWritten = r50::decodeWav(sixteen);
-            check(asWritten.ok, "the 24-bit reference decodes");
-        }
+
 
         // Replacing a slot must actually change what a voice hears.
         {
@@ -2497,6 +2488,114 @@ int main() {
               "a dropped-in sample covers the keyboard");
         check(r50::loadSampleDirectory(library, "/tmp/r50_no_such_directory") == 0,
               "a missing directory loads nothing rather than failing");
+    }
+
+    // --- JSON reader --------------------------------------------------------
+    {
+        r50::JsonValue value;
+        check(r50::parseJson("{\"a\": [1, 2.5, -3], \"b\": \"x\\\\y\", \"c\": true}", value)
+           && value["a"].items.size() == 3
+           && value["a"].items[1].number == 2.5
+           && value["a"].items[2].number == -3
+           && value["b"].stringOr("") == "x\\y"
+           && value["c"].boolean,
+              "objects, arrays, numbers, escapes and booleans parse");
+        check(value["missing"].stringOr("fallback") == "fallback",
+              "a missing member reads as its fallback");
+
+        // Every one of these would otherwise map some samples and silently drop
+        // others, which is the failure mode the manifest exists to prevent.
+        for (const char *bad : {"{", "{\"a\": }", "[1, 2", "{\"a\" 1}",
+                                "{\"a\": 1} trailing", "{\"a\": \"\\u0041\"}",
+                                "", "{\"a\": 1,}"}) {
+            r50::JsonValue ignored;
+            check(!r50::parseJson(bad, ignored), "malformed JSON is rejected");
+        }
+    }
+
+    // --- Factory manifest ---------------------------------------------------
+    {
+        const std::string directory = "/tmp/r50_manifest_test";
+        ::mkdir(directory.c_str(), 0755);
+        std::vector<float> tone(20000);
+        for (size_t n = 0; n < tone.size(); ++n) {
+            tone[n] = static_cast<float>(0.5 * std::sin(synth::kTwoPi * 200.0 * n / kSR));
+        }
+        auto writeZone = [&](const char *name, int rootKey, bool looped) {
+            r50::writeWholeFile(directory + "/" + name,
+                r50::encodeWav(tone.data(), static_cast<int>(tone.size()), kSR,
+                               rootKey, 500, 19000, looped));
+        };
+        writeZone("low.wav", 40, true);
+        writeZone("high.wav", 80, true);
+        writeZone("hit.wav", 60, false);
+
+        auto writeManifest = [&](const std::string &json) {
+            r50::writeWholeFile(directory + "/factory_samples.json",
+                                std::vector<uint8_t>(json.begin(), json.end()));
+        };
+        // Deliberately alphabetically out of order: "Zebra" before "Alpha", and
+        // high.wav before low.wav. If any of this were sorted the check below
+        // would land on the wrong instrument.
+        writeManifest(R"({"instruments": [
+            {"name": "Zebra", "zones": [
+                {"file": "high.wav", "rootKey": 80, "lowKey": 60, "highKey": 127},
+                {"file": "low.wav",  "rootKey": 40, "lowKey": 0,  "highKey": 59}]},
+            {"name": "Alpha", "zones": [{"file": "hit.wav", "rootKey": 60}]},
+            {"name": "Override", "zones": [{"file": "low.wav", "rootKey": 55}]}]})");
+
+        r50::SampleLibrary library{r50::SampleLibrary::Empty{}};
+        check(r50::loadFactoryManifest(library, directory), "a manifest loads");
+        check(library.instrumentCount() == 3, "it loads the instruments it names");
+        check(std::string(library.instrument(0)->name) == "Zebra"
+           && std::string(library.instrument(1)->name) == "Alpha",
+              "manifest order wins over alphabetical order");
+        check(library.instrument(0)->regionCount == 2
+           && library.instrument(0)->regions[0].rootKey == 80
+           && library.instrument(0)->regions[1].rootKey == 40,
+              "zones keep the order and roots the manifest gives them");
+        check(library.instrument(0)->find(30, 100)->rootKey == 40
+           && library.instrument(0)->find(100, 100)->rootKey == 80,
+              "the declared key ranges select the right zone");
+        check(library.instrument(1)->regions[0].lowKey == 0
+           && library.instrument(1)->regions[0].highKey == 127,
+              "an omitted key range covers the keyboard");
+
+        // low.wav carries root 40 in its own smpl chunk while the manifest
+        // declares 55. The manifest is the authority on what a file *is* to
+        // this synth; the chunk only records what the recording claimed.
+        check(library.instrument(2)->regions[0].rootKey == 55,
+              "the manifest root key overrides the one in the file");
+
+        const r50::SampleData *looped =
+            library.sample(library.instrument(0)->regions[0].slot);
+        check(looped->loopMode == r50::LoopMode::Forward
+           && looped->loopStart == 500 && looped->loopEnd == 19000,
+              "the loop comes from the wav, not the manifest");
+
+        // A manifest naming a file that is not there must leave the library
+        // alone, so the caller can fall back rather than publish half a set.
+        {
+            r50::SampleLibrary partial{r50::SampleLibrary::Empty{}};
+            writeManifest(R"({"instruments": [
+                {"name": "Fine", "zones": [{"file": "low.wav", "rootKey": 40}]},
+                {"name": "Gone", "zones": [{"file": "absent.wav", "rootKey": 60}]}]})");
+            check(!r50::loadFactoryManifest(partial, directory),
+                  "a manifest naming a missing file fails");
+            check(partial.instrumentCount() == 0,
+                  "and publishes nothing at all rather than half a set");
+        }
+        {
+            r50::SampleLibrary broken{r50::SampleLibrary::Empty{}};
+            writeManifest("{\"instruments\": [ oops ]}");
+            check(!r50::loadFactoryManifest(broken, directory),
+                  "a malformed manifest fails");
+        }
+        {
+            r50::SampleLibrary empty{r50::SampleLibrary::Empty{}};
+            check(!r50::loadFactoryManifest(empty, "/tmp/r50_no_manifest_here"),
+                  "a missing manifest fails so the generator can take over");
+        }
     }
 
     printf(g_failures == 0 ? "\nAll R50 tests passed.\n"

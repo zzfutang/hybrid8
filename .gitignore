@@ -20,6 +20,7 @@ xcuserdata/
 # ...except R50's sample folder, which is source: those files are built into
 # the plugin and are meant to be edited and reviewed like any other asset.
 !Products/R50/Samples/*.wav
+!Products/R50/factory_samples/*.wav
 
 # Editor backup files
 *~

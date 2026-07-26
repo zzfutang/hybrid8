@@ -136,6 +136,8 @@ targets:
       # Resources and adding a WAV needs no project change.
       - path: Products/R50/Samples
         type: folder
+      - path: Products/R50/factory_samples
+        type: folder
     settings:
       base:
         PRODUCT_NAME: R50Extension

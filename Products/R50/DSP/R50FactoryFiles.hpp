@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 #include <vector>
 
+#include "R50Json.hpp"
 #include "R50PitchDetect.hpp"
 #include "R50Sample.hpp"
 #include "R50WavWriter.hpp"
@@ -176,60 +177,6 @@ inline std::string factoryFileName(int instrument, const char *name, int zone) {
     return std::string(prefix) + safe + suffix;
 }
 
-/// Writes anything missing, then loads everything present back over the top.
-/// Returns how many zones were replaced by a file, which is the interesting
-/// number: zero on a first run, and non-zero once anything has been edited.
-inline int syncFactoryDirectory(SampleLibrary &library, const std::string &directory) {
-    ::mkdir(directory.c_str(), 0755);
-
-    int replaced = 0;
-    for (int index = 0; index < library.instrumentCount(); ++index) {
-        const Multisample *instrument = library.instrument(index);
-        if (instrument == nullptr) continue;
-
-        for (int zone = 0; zone < instrument->regionCount; ++zone) {
-            const SampleRegion &region = instrument->regions[zone];
-            const SampleData *current = library.sample(region.slot);
-            if (current == nullptr) continue;
-
-            const std::string path = directory + "/"
-                + factoryFileName(index, instrument->name, zone);
-
-            std::vector<uint8_t> bytes;
-            if (!readWholeFile(path, bytes)) {
-                writeWholeFile(path, encodeWav(
-                    current->samples.data(), current->length(),
-                    current->sourceSampleRate, region.rootKey,
-                    current->loopStart, current->loopEnd,
-                    current->loopMode != LoopMode::None));
-                continue;
-            }
-
-            const LoadedWav loaded = decodeWav(bytes);
-            if (!loaded.ok) continue;   // keep the generated audio
-
-            SampleData replacement;
-            replacement.samples          = loaded.samples;
-            replacement.sourceSampleRate = loaded.sampleRate;
-            replacement.rootKey          = loaded.rootKey;
-            if (loaded.hasLoop && loaded.loopEnd > loaded.loopStart + 1
-             && loaded.loopEnd <= static_cast<uint32_t>(replacement.length())) {
-                replacement.loopStart = loaded.loopStart;
-                replacement.loopEnd   = loaded.loopEnd;
-                replacement.loopMode  = LoopMode::Forward;
-            } else {
-                replacement.loopStart = 0;
-                replacement.loopEnd   = static_cast<uint32_t>(replacement.length());
-                replacement.loopMode  = LoopMode::None;
-            }
-            if (library.replaceSample(region.slot, std::move(replacement))) {
-                ++replaced;
-            }
-        }
-    }
-    return replaced;
-}
-
 /// Turn every WAV in a directory into an instrument. This is the drop-in path:
 /// no manifest, no import step, no registration — the directory *is* the list.
 ///
@@ -302,6 +249,97 @@ inline int loadSampleDirectory(SampleLibrary &library, const std::string &direct
         if (library.addInstrument(instrument) >= 0) ++loaded;
     }
     return loaded;
+}
+
+/// Load the factory instruments named by a manifest.
+///
+/// The manifest exists so that identity is never inferred from a filename.
+/// Instrument order is the order of the array, and which file becomes which
+/// instrument is stated rather than sorted into place — renaming a file cannot
+/// silently repoint a preset, and two files whose names happen to sort
+/// differently on another machine cannot swap.
+///
+/// All or nothing: a manifest that names a file we cannot read leaves the
+/// library untouched so the caller can fall back to generating, rather than
+/// publishing a half-built factory set that would be much harder to diagnose.
+///
+///   { "instruments": [ { "name": "Choir",
+///                        "zones": [ {"file": "...", "rootKey": 36,
+///                                    "lowKey": 0, "highKey": 44} ] } ] }
+///
+/// Loop points, root fine-tuning and sample rate are not repeated here: they
+/// live in the WAV, which is the single source of truth for what the audio is.
+inline bool loadFactoryManifest(SampleLibrary &library, const std::string &directory) {
+    std::vector<uint8_t> raw;
+    if (!readWholeFile(directory + "/factory_samples.json", raw)) return false;
+
+    JsonValue root;
+    if (!parseJson(std::string(raw.begin(), raw.end()), root)) return false;
+    const JsonValue &instruments = root["instruments"];
+    if (!instruments.isArray() || instruments.items.empty()) return false;
+
+    // Decode everything before publishing anything.
+    struct PendingZone { SampleData data; int rootKey, lowKey, highKey; };
+    struct Pending { std::string name; std::vector<PendingZone> zones; };
+    std::vector<Pending> pending;
+
+    for (const JsonValue &entry : instruments.items) {
+        if (!entry.isObject()) return false;
+        const JsonValue &zones = entry["zones"];
+        if (!zones.isArray() || zones.items.empty()) return false;
+        if (zones.items.size() > static_cast<size_t>(kMaxRegions)) return false;
+
+        Pending instrument;
+        instrument.name = entry["name"].stringOr("");
+        if (instrument.name.empty()) return false;
+
+        for (const JsonValue &zone : zones.items) {
+            const std::string file = zone["file"].stringOr("");
+            if (file.empty()) return false;
+
+            std::vector<uint8_t> bytes;
+            if (!readWholeFile(directory + "/" + file, bytes)) return false;
+            const LoadedWav wav = decodeWav(bytes);
+            if (!wav.ok) return false;
+
+            PendingZone out;
+            out.rootKey = zone["rootKey"].intOr(wav.rootKey);
+            out.lowKey  = zone["lowKey"].intOr(0);
+            out.highKey = zone["highKey"].intOr(127);
+            out.data.samples          = wav.samples;
+            out.data.sourceSampleRate = wav.sampleRate;
+            out.data.rootKey          = out.rootKey;
+            if (wav.hasLoop && wav.loopEnd > wav.loopStart + 1
+             && wav.loopEnd <= static_cast<uint32_t>(out.data.length())) {
+                out.data.loopStart = wav.loopStart;
+                out.data.loopEnd   = wav.loopEnd;
+                out.data.loopMode  = LoopMode::Forward;
+            } else {
+                out.data.loopStart = 0;
+                out.data.loopEnd   = static_cast<uint32_t>(out.data.length());
+                out.data.loopMode  = LoopMode::None;
+            }
+            instrument.zones.push_back(std::move(out));
+        }
+        pending.push_back(std::move(instrument));
+    }
+
+    for (Pending &instrument : pending) {
+        Multisample published;
+        published.setName(instrument.name.c_str());
+        for (PendingZone &zone : instrument.zones) {
+            const int slot = library.addSample(std::move(zone.data));
+            if (slot < 0) return false;
+            SampleRegion region;
+            region.lowKey  = zone.lowKey;
+            region.highKey = zone.highKey;
+            region.rootKey = zone.rootKey;
+            region.slot    = slot;
+            published.regions[published.regionCount++] = region;
+        }
+        if (library.addInstrument(published) < 0) return false;
+    }
+    return true;
 }
 
 } // namespace r50

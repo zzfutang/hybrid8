@@ -12,23 +12,20 @@
 #include <mutex>
 #import "R50Engine.hpp"
 
-/// Application Support/R50/Factory. Resolved here rather than in C++ because
-/// the sandbox container is a Foundation question, and done once per process.
-static std::string R50FactoryDirectory(void) {
-    NSArray<NSURL *> *urls = [NSFileManager.defaultManager
-        URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask];
-    if (urls.count == 0) return std::string();
-    NSURL *directory = [[urls.firstObject URLByAppendingPathComponent:@"R50"]
-                        URLByAppendingPathComponent:@"Factory"];
-    [NSFileManager.defaultManager createDirectoryAtURL:directory
-                           withIntermediateDirectories:YES
-                                            attributes:nil error:nil];
-    return std::string(directory.path.UTF8String ?: "");
-}
-
 @implementation R50DSPKernelAdapter {
     r50::R50Engine _engine;
     double _sampleRate;
+}
+
+/// Point the library at the shipped factory WAVs before anything can touch it.
+/// +load runs at image load, well before the first audio unit is created, which
+/// is the only window: the engine builds the library in its constructor.
++ (void)load {
+    NSURL *directory = [[NSBundle bundleForClass:R50DSPKernelAdapter.class]
+                        URLForResource:@"factory_samples" withExtension:nil];
+    if (directory != nil) {
+        r50::factoryContentDirectory() = directory.path.UTF8String ?: "";
+    }
 }
 
 - (instancetype)init {
@@ -43,9 +40,6 @@ static std::string R50FactoryDirectory(void) {
         static std::once_flag once;
         std::call_once(once, []{
             r50::SampleLibrary &library = r50::SampleLibrary::shared();
-
-            const std::string factory = R50FactoryDirectory();
-            if (!factory.empty()) r50::syncFactoryDirectory(library, factory);
 
             // Repository samples, built into the bundle. Deliberately not the
             // container's Samples folder as well: that holds imports, keyed by
@@ -116,8 +110,12 @@ static std::string R50FactoryDirectory(void) {
 }
 
 - (NSString *)factoryDirectory {
-    const std::string directory = R50FactoryDirectory();
-    return [NSString stringWithUTF8String:directory.c_str()];
+    // The shipped files, inside the bundle. Read-only — the editable copies are
+    // Products/R50/factory_samples in the repository, which is what gets built
+    // into here.
+    NSURL *directory = [[NSBundle bundleForClass:R50DSPKernelAdapter.class]
+                        URLForResource:@"factory_samples" withExtension:nil];
+    return directory.path ?: @"";
 }
 
 - (NSDictionary<NSString *, id> *)zoneOfInstrument:(NSInteger)index

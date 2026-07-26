@@ -211,8 +211,16 @@ public:
         return true;
     }
 
+    /// `shared()` is the instance the synth uses. These are public so a test
+    /// can hold an isolated library: what a load does to an *empty* library is
+    /// not observable against one that already has content in it.
+    SampleLibrary();
+
+    /// Constructed with nothing in it — no files loaded, no content generated.
+    struct Empty {};
+    explicit SampleLibrary(Empty) {}
+
 private:
-    SampleLibrary();   // builds the generated factory content
 
     std::atomic<const SampleData *> slots_[kMaxSampleSlots] = {};
     std::atomic<int> slotCount_{0};

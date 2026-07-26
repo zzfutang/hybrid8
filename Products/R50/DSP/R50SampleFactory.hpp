@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "Filter.hpp"
+#include "R50FactoryFiles.hpp"
 #include "R50Levels.hpp"
 #include "R50Sample.hpp"
 #include "Utils.hpp"
@@ -864,7 +865,24 @@ inline void buildFactoryContent(SampleLibrary &library) {
     for (int i = kOriginalAttacks; i < kAttackKindCount; ++i) addAttack(attacks[i]);
 }
 
+/// Where the shipped factory WAVs live. Set before the library is first
+/// touched — see the adapter's +load, which runs long before any audio unit
+/// exists. Empty in the offline tests, which is what makes them exercise the
+/// generator rather than the files.
+inline std::string &factoryContentDirectory() {
+    static std::string directory;
+    return directory;
+}
+
 inline SampleLibrary::SampleLibrary() {
+    // Files first, generator second. The generator is still the origin of the
+    // content and the fallback when the files are missing or unreadable, but
+    // once they exist they are what ships and what can be edited — and
+    // generating a set only to throw it away costs 280 ms of every launch.
+    if (!factoryContentDirectory().empty()
+     && loadFactoryManifest(*this, factoryContentDirectory())) {
+        return;
+    }
     buildFactoryContent(*this);
 }
 

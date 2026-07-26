@@ -18,6 +18,7 @@
 		2A1BCEA56988EF92C3E12C6F /* R50Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC907F34AF0F106EAB6BD154 /* R50Theme.swift */; };
 		2C8E269FB1288172C592C3BF /* KnobShapes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33F329CBCC076644995FD3A6 /* KnobShapes.swift */; };
 		40E305DBE7FE4C5436CFD61E /* R50FactoryPresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 858F1E9DA80548BB0FC91928 /* R50FactoryPresets.swift */; };
+		43FBC657F39D95336B7D9936 /* factory_samples in Resources */ = {isa = PBXBuildFile; fileRef = 1A29DF6BB2B6903AAAF4CF46 /* factory_samples */; };
 		45CCA61426EF5F476F70D725 /* PresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97914D3D466CC0071C9535CD /* PresetStore.swift */; };
 		47F141DCE65FEF40141E5DC2 /* PerformanceKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D27DAF314B0D8B1899F4BC3 /* PerformanceKeyboardView.swift */; };
 		6875C8DE26DA8E611737B311 /* AudioUnitHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3032319806890090FD341B50 /* AudioUnitHost.swift */; };
@@ -106,6 +107,7 @@
 		112FD104BE725349BC5B06E2 /* R50SampleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50SampleStore.swift; sourceTree = "<group>"; };
 		120104614B6CF8293F99DD17 /* Hybrid8Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Hybrid8Extension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		19FA9B3BB4AE406828814F9A /* R50Sample.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Sample.hpp; sourceTree = "<group>"; };
+		1A29DF6BB2B6903AAAF4CF46 /* factory_samples */ = {isa = PBXFileReference; lastKnownFileType = folder; name = factory_samples; path = Products/R50/factory_samples; sourceTree = SOURCE_ROOT; };
 		23D32892482F96EDA9B11D12 /* SynthParameters.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SynthParameters.h; sourceTree = "<group>"; };
 		25CBC5D8B70379456237CDEA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		28045EECD214931C4F493FF4 /* SynthHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthHelp.swift; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 		EEE51E42B7E45C92A7F722E2 /* ModMatrix.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ModMatrix.h; sourceTree = "<group>"; };
 		F4430C160A054E3F2F0FFAFE /* AudioUnitViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioUnitViewController.swift; sourceTree = "<group>"; };
 		F516362934563D869871E8AC /* SynthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthView.swift; sourceTree = "<group>"; };
+		FB0ED6821F4DB6BC56D640EC /* R50Json.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Json.hpp; sourceTree = "<group>"; };
 		FD73B8C5A84B7A56E972224E /* R50AudioUnit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50AudioUnit.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -239,6 +242,7 @@
 				9A4CB970AD05718C18D4D63E /* App */,
 				9DB5BC8D930E5764A991C44B /* DSP */,
 				D3476A314BB9BA063E33890F /* Extension */,
+				1A29DF6BB2B6903AAAF4CF46 /* factory_samples */,
 				AC7BBBEE25EBADC5B1680F6A /* Samples */,
 			);
 			path = R50;
@@ -282,6 +286,7 @@
 				B1F99D67BD35FB874E88A075 /* R50Engine.hpp */,
 				035FA057E8E955E7FAC3B81D /* R50Envelope.hpp */,
 				615FA755B8D518F3B8705686 /* R50FactoryFiles.hpp */,
+				FB0ED6821F4DB6BC56D640EC /* R50Json.hpp */,
 				5FF121422DF67029FFE09351 /* R50Levels.hpp */,
 				2C1C0196DB15AA627ECB89AD /* R50Modulation.hpp */,
 				4E1AA536D5BCEFC6B916629C /* R50Noise.hpp */,
@@ -535,6 +540,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CDE2EC993B1F94D33AA916DD /* Samples in Resources */,
+				43FBC657F39D95336B7D9936 /* factory_samples in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

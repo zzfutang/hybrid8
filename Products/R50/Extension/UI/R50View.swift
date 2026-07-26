@@ -784,7 +784,7 @@ struct R50View: View {
                 Spacer()
                 actionButton("REVEAL") { samples.revealFactoryDirectory() }
             }
-            Text("Edit a WAV here and relaunch to hear it. Delete one to get the generated version back.")
+            Text("The shipped factory WAVs. Edit them in Products/R50/factory_samples and rebuild; factory_samples.json maps each file to its instrument.")
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .foregroundColor(R50Palette.engrave)
                 .lineLimit(3)
