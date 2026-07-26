@@ -9,14 +9,15 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum R50Page: String, CaseIterable {
-    case synth = "Synth"
+    case partial = "Partial"
+    case tone    = "Tone"
     case samples = "Samples"
 }
 
 struct R50View: View {
     @ObservedObject var model: R50ParameterModel
     @ObservedObject var samples: R50SampleStore
-    @State private var page: R50Page = .synth
+    @State private var page: R50Page = .partial
     @State private var showingImporter = false
     /// Which Partial the Synth page panels are editing.
     @State private var partial = 0
@@ -43,7 +44,8 @@ struct R50View: View {
         VStack(spacing: 12) {
             header
             switch page {
-            case .synth:   synthPage
+            case .partial: partialPage
+            case .tone:    tonePage
             case .samples: samplePage
             }
             footer
@@ -56,18 +58,17 @@ struct R50View: View {
 
     // MARK: - Pages
 
-    private var synthPage: some View {
+    private var partialPage: some View {
         VStack(spacing: 8) {
             partialStrip
             HStack(alignment: .top, spacing: 10) {
-                oscillator.frame(width: 190)
-                noise.frame(width: 205)
-                filter.frame(width: 270)
-                ampEnvelope.frame(width: 165)
-                filterEnvelope.frame(width: 165)
-                tone.frame(width: 145)
+                oscillator.frame(width: 200)
+                noise.frame(width: 215)
+                filter.frame(width: 285)
+                ampEnvelope.frame(width: 175)
+                filterEnvelope.frame(width: 175)
             }
-            .frame(height: 268)
+            .frame(height: 292)
         }
     }
 
@@ -100,37 +101,83 @@ struct R50View: View {
 
             R50Selector(title: "", address: addr(R50FieldEnabled),
                         options: R50Parameters.onOffNames, model: model)
-                .frame(width: 90)
+                .frame(width: 96)
 
-            HStack(spacing: 4) {
-                R50Knob(title: "Level", address: addr(R50FieldLevel), model: model)
-                R50Knob(title: "Pan", address: addr(R50FieldPan), model: model)
-                R50Knob(title: "Semi", address: addr(R50FieldSemitone), model: model)
-                R50Knob(title: "Fine", address: addr(R50FieldFine), model: model)
-            }
+            Text("EDITING PARTIAL \(partial + 1) — MIX AND STRUCTURE ON THE TONE PAGE")
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .tracking(1.0)
+                .foregroundColor(R50Palette.glowDim)
             Spacer()
         }
     }
 
-    private var tone: some View {
-        R50Panel(title: "Tone") {
-            VStack(alignment: .leading, spacing: 12) {
-                R50WaveGrid(title: "Structure", address: R50ParamToneStructure,
-                            options: R50Parameters.toneStructureNames,
-                            columns: 2, model: model)
-                HStack(spacing: 4) {
-                    R50Knob(title: "Ring", address: R50ParamToneRingLevel,
-                            model: model)
-                    R50Knob(title: "Blend", address: R50ParamToneBlendTime,
-                            model: model)
-                }
-                HStack(spacing: 4) {
-                    R50Knob(title: "XF Low", address: R50ParamToneCrossfadeLow,
-                            model: model)
-                    R50Knob(title: "XF High", address: R50ParamToneCrossfadeHigh,
-                            model: model)
+    /// How the two Partials relate: the structure that combines them and the
+    /// mix that balances them. Moving these off the Partial page is what let
+    /// that page stop overflowing its fascia.
+    private var tonePage: some View {
+        HStack(alignment: .top, spacing: 10) {
+            R50Panel(title: "Structure") {
+                VStack(alignment: .leading, spacing: 14) {
+                    R50WaveGrid(title: "Tone Structure",
+                                address: R50ParamToneStructure,
+                                options: R50Parameters.toneStructureNames,
+                                columns: 3, model: model)
+                    Text(structureHelp)
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundColor(R50Palette.engrave)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .frame(width: 300)
+
+            R50Panel(title: "Structure Controls") {
+                HStack(spacing: 4) {
+                    R50Knob(title: "Ring", address: R50ParamToneRingLevel, model: model)
+                    R50Knob(title: "Blend", address: R50ParamToneBlendTime, model: model)
+                    R50Knob(title: "XF Low", address: R50ParamToneCrossfadeLow, model: model)
+                    R50Knob(title: "XF High", address: R50ParamToneCrossfadeHigh, model: model)
+                }
+            }
+            .frame(width: 290)
+
+            R50Panel(title: "Partial Mix") {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(0..<2, id: \.self) { index in
+                        HStack(spacing: 4) {
+                            Text("P\(index + 1)")
+                                .font(.system(size: 10, weight: .bold,
+                                              design: .monospaced))
+                                .foregroundColor(R50Palette.legend)
+                                .frame(width: 24)
+                            R50Knob(title: "Level",
+                                    address: r50PartialParam(Int32(index), R50FieldLevel),
+                                    model: model)
+                            R50Knob(title: "Pan",
+                                    address: r50PartialParam(Int32(index), R50FieldPan),
+                                    model: model)
+                            R50Knob(title: "Semi",
+                                    address: r50PartialParam(Int32(index), R50FieldSemitone),
+                                    model: model)
+                            R50Knob(title: "Fine",
+                                    address: r50PartialParam(Int32(index), R50FieldFine),
+                                    model: model)
+                        }
+                    }
+                }
+            }
+            .frame(width: 330)
+        }
+        .frame(height: 292)
+    }
+
+    private var structureHelp: String {
+        switch Int(model.value(R50ParamToneStructure).rounded()) {
+        case 1:  return "Ring: the product of both Partials. Level is each dry amount, Ring the product — it needs gain well past 1."
+        case 2:  return "Atk/Sus: Partial 1 hands over to Partial 2 across Blend seconds."
+        case 3:  return "Vel XF: soft notes favour Partial 1, hard notes Partial 2."
+        case 4:  return "Key XF: fades from Partial 1 to Partial 2 between XF Low and XF High."
+        default: return "Mix: both Partials sum, balanced by their Levels."
         }
     }
 

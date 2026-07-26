@@ -342,7 +342,7 @@ private:
             structure < 0 ? 0
                           : (structure >= kToneStructureCount
                                  ? kToneStructureCount - 1 : structure));
-        params_.ringLevel = synth::clampf(get(R50ParamToneRingLevel), 0.0f, 1.0f);
+        params_.ringLevel = synth::clampf(get(R50ParamToneRingLevel), 0.0f, 8.0f);
         params_.blendTime = std::max(0.001f, get(R50ParamToneBlendTime));
         params_.crossfadeLow =
             static_cast<int>(std::lround(get(R50ParamToneCrossfadeLow)));

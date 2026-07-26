@@ -182,8 +182,13 @@ enum R50Parameters {
                 param(R50ParamToneStructure, "toneStructure", "Structure",
                       min: 0, max: AUValue(toneStructureNames.count - 1),
                       value: 0, unit: .indexed, strings: toneStructureNames),
+                // Ring modulation multiplies two signals that are each well
+                // below unity once envelopes and filters have acted, so the
+                // product is roughly the product of their amplitudes — an
+                // order of magnitude down. The control needs gain well past
+                // 1 to make ring the character of a patch rather than a hint.
                 param(R50ParamToneRingLevel, "toneRingLevel", "Ring Level",
-                      min: 0, max: 1, value: 1),
+                      min: 0, max: 8, value: 1),
                 param(R50ParamToneBlendTime, "toneBlendTime", "Blend Time",
                       min: 0.001, max: 4, value: 0.25,
                       unit: .seconds, log: true),
