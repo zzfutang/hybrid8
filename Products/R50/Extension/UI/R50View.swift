@@ -25,6 +25,7 @@ struct R50View: View {
     @ObservedObject var samples: R50SampleStore
     @State private var page: R50Page = .partial
     @State private var showingImporter = false
+    @State private var showingPresets = false
     /// Which Partial the Partial and Envelopes pages are editing.
     @State private var partial = 0
 
@@ -117,18 +118,65 @@ struct R50View: View {
             .stroke(Color(white: 0.32), lineWidth: 1))
     }
 
+    /// Steppers for walking neighbours, and the name itself opens the full list
+    /// — stepping through twenty-one patches to reach one is not a way to
+    /// choose a sound.
     private var presetBrowser: some View {
         HStack(spacing: 8) {
             stepButton("◀") { step(-1) }
-            Text(R50FactoryPresets.all[safe: model.presetIndex]?.name ?? "Init")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundColor(R50Palette.glow)
-                .frame(width: 170, height: 24)
+
+            Button { showingPresets.toggle() } label: {
+                HStack(spacing: 4) {
+                    Text(R50FactoryPresets.all[safe: model.presetIndex]?.name ?? "Init")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundColor(R50Palette.glow)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Spacer(minLength: 2)
+                    Text("▾")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(R50Palette.engrave)
+                }
+                .padding(.horizontal, 8)
+                .frame(width: 190, height: 24)
                 .background(R50Palette.track)
                 .overlay(RoundedRectangle(cornerRadius: 2)
                     .stroke(Color(white: 0.30), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showingPresets, arrowEdge: .bottom) {
+                presetList
+            }
+
             stepButton("▶") { step(1) }
         }
+    }
+
+    private var presetList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(Array(R50FactoryPresets.all.enumerated()), id: \.offset) {
+                    index, preset in
+                    let selected = index == model.presetIndex
+                    Text(preset.name)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(selected ? Color.black : R50Palette.legend)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(selected ? R50Palette.glow : Color.clear)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            model.applyPreset(index)
+                            showingPresets = false
+                        }
+                }
+            }
+            .padding(4)
+        }
+        .frame(width: 230,
+               height: min(CGFloat(R50FactoryPresets.all.count) * 26 + 12, 420))
+        .background(Color(white: 0.13))
     }
 
     private func stepButton(_ glyph: String, action: @escaping () -> Void) -> some View {
