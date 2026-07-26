@@ -18,7 +18,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Reset all voices / filters (called on transport stop or bypass).
 - (void)reset;
 
-/// Thread-safe parameter set/get (address == R50Param value).
+/// Lock-free parameter set/get from any thread (address == R50Param value).
+/// Writes land in an atomic store; the engine derives its live DSP state from
+/// that store on the render thread only.
 - (void)setParameter:(AUParameterAddress)address value:(AUValue)value;
 - (AUValue)valueForParameter:(AUParameterAddress)address;
 
