@@ -199,6 +199,12 @@ struct R50View: View {
                                 .font(.system(size: 8, weight: .medium,
                                               design: .monospaced))
                                 .foregroundColor(R50Palette.glow)
+                        } else {
+                            Text("+ MARKS AN IMPORTED SAMPLE — ONLY THOSE CAN BE DELETED")
+                                .font(.system(size: 8, weight: .medium,
+                                              design: .monospaced))
+                                .tracking(0.8)
+                                .foregroundColor(R50Palette.glowDim)
                         }
                     }
                 }
@@ -238,10 +244,9 @@ struct R50View: View {
     private var sampleTable: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                tableCell("NAME", width: 190, header: true)
-                tableCell("SRC", width: 55, header: true)
+                tableCell("NAME", width: 235, header: true)
                 tableCell("ZONES", width: 60, header: true)
-                tableCell("KEY RANGE", width: 110, header: true)
+                tableCell("KEY RANGE", width: 120, header: true)
                 tableCell("LOOP", width: 70, header: true)
                 tableCell("LENGTH", width: 80, header: true)
                 tableCell("SIZE", width: 70, header: true)
@@ -255,11 +260,17 @@ struct R50View: View {
                     ForEach(samples.entries) { entry in
                         let selected = entry.index == samples.selectedIndex
                         HStack(spacing: 0) {
-                            tableCell(entry.name, width: 190, selected: selected,
-                                      align: .leading)
-                            tableCell(entry.source, width: 55, selected: selected)
+                            // Imported samples are marked on the row itself
+                            // rather than given a column: the distinction only
+                            // matters for the handful you have added, and only
+                            // because Delete applies to those and not to the
+                            // generated ones.
+                            tableCell(entry.isFactory ? entry.name : "+ " + entry.name,
+                                      width: 235, selected: selected,
+                                      align: .leading,
+                                      accent: !entry.isFactory)
                             tableCell("\(entry.zones)", width: 60, selected: selected)
-                            tableCell(entry.keyRange, width: 110, selected: selected)
+                            tableCell(entry.keyRange, width: 120, selected: selected)
                             tableCell(entry.loopLabel, width: 70, selected: selected)
                             tableCell(entry.lengthLabel, width: 80, selected: selected)
                             tableCell(entry.sizeLabel, width: 70, selected: selected)
@@ -278,14 +289,17 @@ struct R50View: View {
 
     private func tableCell(_ text: String, width: CGFloat,
                            header: Bool = false, selected: Bool = false,
-                           align: Alignment = .center) -> some View {
-        Text(header ? text : text)
+                           align: Alignment = .center,
+                           accent: Bool = false) -> some View {
+        Text(text)
             .font(.system(size: header ? 8 : 9,
                           weight: header ? .medium : .semibold,
                           design: .monospaced))
             .tracking(header ? 0.8 : 0)
             .foregroundColor(header ? R50Palette.engrave
-                                    : (selected ? Color.black : R50Palette.legend))
+                                    : (selected ? Color.black
+                                                : (accent ? R50Palette.accent
+                                                          : R50Palette.legend)))
             .lineLimit(1)
             .minimumScaleFactor(0.65)
             .padding(.horizontal, 6)

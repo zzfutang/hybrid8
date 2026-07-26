@@ -24,8 +24,6 @@ struct SampleEntry: Identifiable {
     let bytes: Int             // total audio held by every zone
     var id: Int { index }
 
-    var source: String { isFactory ? "FACT" : "USER" }
-
     var loopLabel: String {
         switch loopMode {
         case 1:  return "Loop"
