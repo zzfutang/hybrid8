@@ -130,16 +130,39 @@ enum class SustainVoicing {
 
 static constexpr int kSustainVoicingCount = 13;
 
-/// A vowel is a source spectrum shaped by tract resonances, and the resonances
-/// never fall to nothing — without the floor the fundamental disappears and the
-/// result reads as a thin whistle an octave up. Learned the hard way on the
-/// Vocal Ah wave table.
-inline float formantAmplitude(double hz, int harmonic, float floorLevel,
+/// Magnitude of one two-pole resonance. The shape matters more than it looks:
+/// a resonance is *flat* below its centre frequency and only falls away above
+/// it, whereas a Gaussian — which is what this used to be — dies on both sides.
+///
+/// That asymmetry is the whole difference between a voice and a string. With
+/// Gaussian formants everything below F1 collapsed to an arbitrary floor, so
+/// the spectrum was carried by the 1/harmonic source tilt with a few shallow
+/// bumps on top: which is a string. A real tract passes the fundamental at
+/// full level, puts sharp peaks at the formants and leaves deep valleys
+/// between them. It also means the floor that kept the Vocal Ah fundamental
+/// alive is no longer needed — the model produces it.
+inline double resonanceMagnitude(double hz, double centre, double q) {
+    const double ratio = hz / centre;
+    const double real  = 1.0 - ratio * ratio;
+    const double imag  = ratio / q;
+    return 1.0 / std::sqrt(real * real + imag * imag);
+}
+
+/// Source-filter vowel: a glottal source tilted at -6 dB/oct (that is the
+/// -12 dB/oct of the glottal pulse plus the +6 dB/oct of lip radiation) shaped
+/// by tract resonances given as {centre Hz, Q, weight}.
+///
+/// The resonances are summed, not cascaded. Cascading four of them rolls off at
+/// -24 dB/oct above the top formant, -30 with the source tilt, which measured
+/// as nothing at all above the tenth harmonic and sounded as muffled as that
+/// implies. A parallel bank keeps each peak but leaves the top falling at the
+/// -12 dB/oct of a single resonance, which is what a real vowel does.
+inline float formantAmplitude(double hz, int harmonic,
                               const double formants[][3], int count) {
-    double shaped = floorLevel;
+    double shaped = 0.0;
     for (int i = 0; i < count; ++i) {
-        const double x = (hz - formants[i][0]) / formants[i][1];
-        shaped += formants[i][2] * std::exp(-x * x);
+        shaped += formants[i][2]
+                * resonanceMagnitude(hz, formants[i][0], formants[i][1]);
     }
     return static_cast<float>(shaped / harmonic);
 }
@@ -165,18 +188,15 @@ inline SampleData generateSustain(SustainVoicing voicing, double frequency,
         float amplitude = 0.0f;
         switch (voicing) {
             case SustainVoicing::Choir: {
-                // Formant-shaped, over a source floor so the fundamental
-                // survives — the same trap the Vocal Ah wave fell into.
+                // An open "aah": F1 and F2 wide apart, plus the singer's
+                // formant near 2.9 kHz that is the signature of a trained
+                // choral voice and the thing that stops it reading as strings.
                 const double hz = bin * sampleRate / length;
-                double shaped = 0.16;
-                const double formants[3][3] = {{620, 120, 1.0},
-                                               {1080, 170, 0.66},
-                                               {2500, 300, 0.2}};
-                for (const auto &formant : formants) {
-                    const double x = (hz - formant[0]) / formant[1];
-                    shaped += formant[2] * std::exp(-x * x);
-                }
-                amplitude = static_cast<float>(shaped / harmonic);
+                static const double formants[4][3] = {{700,  9.0, 1.00},
+                                                      {1150, 11.0, 0.50},
+                                                      {2600, 14.0, 0.16},
+                                                      {2900, 16.0, 0.22}};
+                amplitude = formantAmplitude(hz, harmonic, formants, 4) * 0.22f;
                 break;
             }
             case SustainVoicing::Strings:
@@ -196,22 +216,25 @@ inline SampleData generateSustain(SustainVoicing voicing, double frequency,
                 // A closed vowel: both formants low and close together, which
                 // is what separates "ooh" from the open "aah" of Choir.
                 const double hz = bin * sampleRate / length;
-                static const double formants[2][3] = {{320, 90, 1.0},
-                                                      {800, 130, 0.5}};
-                amplitude = formantAmplitude(hz, harmonic, 0.12f, formants, 2);
+                static const double formants[4][3] = {{330, 10.0, 1.00},
+                                                      {760, 12.0, 0.28},
+                                                      {2400, 14.0, 0.07},
+                                                      {2850, 16.0, 0.10}};
+                amplitude = formantAmplitude(hz, harmonic, formants, 4) * 0.22f;
                 break;
             }
 
             case SustainVoicing::Flute: {
-                // Almost a sine: a strong fundamental, a weak octave, and very
-                // little else. The airiness comes from a scatter of quiet high
-                // harmonics rather than from any single partial.
+                // A triangle: odd harmonics only, falling as 1/n^2. That is the
+                // shape a stopped pipe actually produces, and it is hollow in a
+                // way a near-sine is not — a sine has no character to hear.
+                // The trace of even harmonics and the quiet top are what keep
+                // it from sounding like a synthesised triangle.
                 const double hz = bin * sampleRate / length;
-                if (harmonic == 1)      amplitude = 1.0f;
-                else if (harmonic == 2) amplitude = 0.13f;
-                else if (harmonic == 3) amplitude = 0.06f;
-                else amplitude = (hz < 9000.0)
-                    ? 0.02f / std::sqrt(static_cast<float>(harmonic)) : 0.0f;
+                const float n = static_cast<float>(harmonic);
+                if ((harmonic % 2) == 1) amplitude = 1.0f / (n * n);
+                else                     amplitude = 0.05f / (n * n);
+                if (hz > 9000.0) amplitude *= 0.25f;
                 break;
             }
 
@@ -220,9 +243,9 @@ inline SampleData generateSustain(SustainVoicing voicing, double frequency,
                 // 1200 Hz formant, which is what makes it read as brass rather
                 // than as a bright saw.
                 const double hz = bin * sampleRate / length;
-                static const double formants[2][3] = {{1200, 700, 1.0},
-                                                      {2400, 900, 0.45}};
-                amplitude = formantAmplitude(hz, harmonic, 0.10f, formants, 2)
+                static const double formants[2][3] = {{1200, 2.2, 1.00},
+                                                      {2400, 3.0, 0.45}};
+                amplitude = formantAmplitude(hz, harmonic, formants, 2)
                           * (harmonic < 3 ? 0.55f : 1.0f);
                 break;
             }
@@ -371,6 +394,15 @@ struct AttackRecipe {
     double noiseQ;
     float  pitchDropOctaves; // drums fall in pitch as the head relaxes
     float  pitchDropRate;
+
+    // A struck transient starts at full amplitude on its first sample, which is
+    // correct for a mallet and wrong for anything blown or bowed: air and rosin
+    // arrive, they do not hit. Without a rise time the breath sample read as a
+    // hi-hat and the bow scrape as an explosion — both were percussion.
+    float  riseSeconds;      // onset ramp for the whole transient; 0 = a strike
+    double noiseHighpass;    // Hz; removes the low rumble a wide band lets through
+    float  noiseGrain;       // 0..1 depth of the stick-slip flutter
+    double noiseGrainRate;   // Hz, how fast that flutter stirs
 };
 
 inline AttackRecipe attackRecipe(AttackKind kind) {
@@ -378,57 +410,67 @@ inline AttackRecipe attackRecipe(AttackKind kind) {
         // --- the originals, unchanged in character ---------------------------
         case AttackKind::Mallet:
             return {0.12, {{2.0f, 0.7f, 38.0f}, {5.4f, 0.3f, 38.0f}}, 2,
-                    0.25f, 260.0f, 0.0, 1.0, 0.0f, 0.0f};
+                    0.25f, 260.0f, 0.0, 1.0, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
         case AttackKind::Pluck:
             return {0.09, {{1.0f, 0.35f, 45.0f}}, 1,
-                    1.6f, 45.0f, 1400.0, 2.0, 0.0f, 0.0f};
+                    1.6f, 45.0f, 1400.0, 2.0, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
         case AttackKind::Chiff:
-            return {0.07, {}, 0, 2.0f, 55.0f, 2600.0, 2.0, 0.0f, 0.0f};
+            return {0.07, {}, 0, 2.0f, 55.0f, 2600.0, 2.0, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
         case AttackKind::NoiseBurst:
-            return {0.05, {}, 0, 1.0f, 90.0f, 0.0, 1.0, 0.0f, 0.0f};
+            return {0.05, {}, 0, 1.0f, 90.0f, 0.0, 1.0, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
         case AttackKind::TineStrike:
             return {0.11, {{4.0f, 0.6f, 40.0f}, {9.2f, 0.4f, 40.0f}}, 2,
-                    0.15f, 300.0f, 0.0, 1.0, 0.0f, 0.0f};
+                    0.15f, 300.0f, 0.0, 1.0, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
 
         // --- struck bars ------------------------------------------------------
         // Wooden bars: strong fundamental, upper modes dying much faster.
         case AttackKind::Marimba:
             return {0.30, {{1.0f, 1.0f, 11.0f}, {3.9f, 0.45f, 26.0f},
                            {9.2f, 0.18f, 45.0f}}, 3,
-                    0.20f, 320.0f, 2200.0, 1.4, 0.0f, 0.0f};
+                    0.20f, 320.0f, 2200.0, 1.4, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
         // Metal rings far longer than wood, and keeps its upper modes.
         case AttackKind::Vibraphone:
             return {0.45, {{1.0f, 1.0f, 5.0f}, {4.0f, 0.55f, 8.0f},
                            {10.8f, 0.25f, 12.0f}}, 3,
-                    0.10f, 400.0f, 3000.0, 1.6, 0.0f, 0.0f};
+                    0.10f, 400.0f, 3000.0, 1.6, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
         // Xylophone bars are tuned to the third, not the fourth, and are short.
         case AttackKind::Xylophone:
             return {0.16, {{1.0f, 1.0f, 26.0f}, {3.0f, 0.6f, 34.0f},
                            {6.0f, 0.3f, 48.0f}}, 3,
-                    0.30f, 380.0f, 3200.0, 1.3, 0.0f, 0.0f};
+                    0.30f, 380.0f, 3200.0, 1.3, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
         // A plucked metal tine: inharmonic and buzzy at the very start.
         case AttackKind::Kalimba:
             return {0.28, {{1.0f, 1.0f, 9.0f}, {5.4f, 0.35f, 22.0f},
                            {13.1f, 0.12f, 40.0f}}, 3,
-                    0.22f, 300.0f, 1800.0, 1.5, 0.0f, 0.0f};
+                    0.22f, 300.0f, 1800.0, 1.5, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
 
         // --- bass and string attacks -----------------------------------------
-        // Slap is a bright click sitting on a low thump — the click is most of
-        // the identity, which is why its noise band is high and very short.
+        // Slap is a bright click sitting on a low thump. It was two thirds
+        // noise, which is a snare; the click is a *transient*, not a texture,
+        // so the noise is now a third of the level, gone in 20 ms, and narrow
+        // enough to read as string-against-fret rather than as hiss.
         case AttackKind::SlapBass:
-            return {0.14, {{1.0f, 0.8f, 22.0f}, {2.0f, 0.35f, 34.0f}}, 2,
-                    1.5f, 120.0f, 2600.0, 1.2, 0.0f, 0.0f};
+            return {0.09, {{1.0f, 1.0f, 26.0f}, {2.0f, 0.45f, 38.0f},
+                           {3.0f, 0.2f, 52.0f}}, 3,
+                    1.0f, 260.0f, 2800.0, 2.6, 0.0f, 0.0f, 0.0f, 900.0, 0.0f, 0.0};
         case AttackKind::PullBass:
             return {0.16, {{1.0f, 0.9f, 16.0f}, {3.0f, 0.3f, 40.0f}}, 2,
-                    0.9f, 90.0f, 900.0, 1.8, 0.0f, 0.0f};
-        // A pick is almost entirely a short scrape of high noise.
+                    0.9f, 90.0f, 900.0, 1.8, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
+        // Scratch is not noise level, it is noise *structure*. At Q 1.1 the
+        // band was three octaves wide, which is white noise with a tilt — and
+        // that is exactly what it sounded like. A narrow high band gives it a
+        // pitch to scrape at, the fast grain flutter gives the plectrum teeth
+        // catching the winding, and the two inharmonic partials are the click
+        // of the pick letting go.
         case AttackKind::Pick:
-            return {0.06, {{1.0f, 0.25f, 60.0f}}, 1,
-                    2.0f, 130.0f, 3400.0, 1.1, 0.0f, 0.0f};
+            return {0.05, {{1.0f, 0.06f, 130.0f}, {7.3f, 0.26f, 90.0f},
+                           {13.7f, 0.16f, 120.0f}}, 3,
+                    1.1f, 150.0f, 3900.0, 5.0, 0.0f, 0.0f,
+                    0.0f, 1400.0, 0.85f, 2600.0};
         // Felt on string: a soft low thud with very little top.
         case AttackKind::PianoHammer:
             return {0.10, {{1.0f, 0.7f, 30.0f}, {2.0f, 0.3f, 45.0f}}, 2,
-                    0.6f, 150.0f, 500.0, 1.4, 0.0f, 0.0f};
+                    0.6f, 150.0f, 500.0, 1.4, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
 
         // --- struck metal and membranes ---------------------------------------
         // Dense and wholly inharmonic: no ratio here is a whole number.
@@ -436,30 +478,44 @@ inline AttackRecipe attackRecipe(AttackKind kind) {
             return {0.40, {{1.0f, 0.7f, 7.0f}, {2.7f, 0.8f, 9.0f},
                            {4.3f, 0.6f, 11.0f}, {6.1f, 0.45f, 14.0f},
                            {8.9f, 0.3f, 18.0f}}, 5,
-                    0.25f, 200.0f, 5000.0, 1.2, 0.0f, 0.0f};
+                    0.25f, 200.0f, 5000.0, 1.2, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
         // A struck head falls in pitch as its tension relaxes; without that
         // drop a drum reads as a tuned tom.
         case AttackKind::TaikoDrum:
             return {0.35, {{1.0f, 1.0f, 9.0f}, {1.6f, 0.4f, 14.0f},
                            {2.3f, 0.2f, 20.0f}}, 3,
-                    0.7f, 45.0f, 260.0, 1.1, 0.55f, 26.0f};
+                    0.7f, 45.0f, 260.0, 1.1, 0.55f, 26.0f, 0.0f, 0.0, 0.0f, 0.0};
 
         // --- wind and bowed ---------------------------------------------------
-        // Brass lips buzz: harmonics plus a noisy edge.
+        // Lips buzzing are a *pitched* sound — a rich, almost sawtooth rasp —
+        // and the noise is only the air escaping around them. At 0.8 the noise
+        // was louder than the buzz it was supposed to edge, so the pitch went
+        // with it. Six harmonics carry it now and the noise is a seasoning.
         case AttackKind::LipBuzz:
-            return {0.13, {{1.0f, 0.6f, 18.0f}, {2.0f, 0.4f, 22.0f},
-                           {3.0f, 0.25f, 28.0f}}, 3,
-                    0.8f, 60.0f, 1600.0, 1.6, 0.0f, 0.0f};
-        // Pure air, no pitch at all — the flute-steam and clarinet-breathe
-        // family, and the one R50 was most obviously missing.
+            return {0.15, {{1.0f, 0.9f, 12.0f}, {2.0f, 0.7f, 14.0f},
+                           {3.0f, 0.5f, 17.0f}, {4.0f, 0.34f, 20.0f},
+                           {5.0f, 0.22f, 24.0f}, {6.0f, 0.14f, 30.0f}}, 6,
+                    0.16f, 55.0f, 2200.0, 2.4, 0.0f, 0.0f,
+                    0.006f, 700.0, 0.0f, 0.0};
+        // Pure air, no pitch at all. Two things made this a hi-hat: it started
+        // at full amplitude on sample zero, which is a strike, and at Q 1.1 the
+        // band passed everything from 400 Hz up, which is the low thump a hat
+        // has and breath does not. A 40 ms rise, a high-pass at 1.4 kHz and a
+        // narrower band leave air arriving instead of a cymbal being hit.
         case AttackKind::Breath:
-            return {0.22, {}, 0, 1.8f, 18.0f, 1900.0, 1.1, 0.0f, 0.0f};
-        // A bow catching the string: noisy, slower to arrive than a strike.
+            return {0.30, {}, 0, 1.5f, 9.0f, 3000.0, 1.9, 0.0f, 0.0f,
+                    0.040f, 1400.0, 0.25f, 40.0};
+        // "Slower to arrive than a strike" was in the comment but not in the
+        // code — the rise time did not exist yet, so a wide band at full level
+        // on the first sample made a detonation. Rosin is a stick-slip process:
+        // it arrives over 70 ms, sits in a narrow mid band, and stirs
+        // irregularly. The high-pass is what takes the boom out.
         case AttackKind::BowScrape:
-            return {0.26, {{1.0f, 0.3f, 12.0f}}, 1,
-                    1.4f, 14.0f, 1200.0, 2.2, 0.0f, 0.0f};
+            return {0.34, {{2.0f, 0.10f, 9.0f}, {3.0f, 0.07f, 13.0f}}, 2,
+                    0.7f, 7.0f, 1700.0, 3.2, 0.0f, 0.0f,
+                    0.070f, 900.0, 0.7f, 90.0};
     }
-    return {0.08, {}, 0, 1.0f, 50.0f, 0.0, 1.0, 0.0f, 0.0f};
+    return {0.08, {}, 0, 1.0f, 50.0f, 0.0, 1.0, 0.0f, 0.0f, 0.0f, 0.0, 0.0f, 0.0};
 }
 
 /// A short one-shot transient, built in the time domain from its recipe.
@@ -470,11 +526,27 @@ inline SampleData generateAttack(AttackKind kind, double sampleRate) {
     synth::FastRandom random(0xA1B2C3D4ULL + static_cast<uint64_t>(kind) * 7919ULL);
 
     std::vector<float> buffer(length, 0.0f);
-    synth::SVFStage band;
+    synth::SVFStage band, highpass;
     band.setSampleRate(sampleRate);
+    highpass.setSampleRate(sampleRate);
     if (recipe.noiseCentre > 0.0) {
         band.setCoefficients(recipe.noiseCentre, recipe.noiseQ, 0.0f, 0.0f);
     }
+    if (recipe.noiseHighpass > 0.0) {
+        highpass.setCoefficients(recipe.noiseHighpass, 0.707, 0.0f, 0.0f);
+    }
+
+    // Stick-slip flutter: a smoothed random walk, not a periodic wobble. Rosin
+    // grabbing and releasing is irregular, and anything periodic here reads as
+    // a tremolo effect laid over the sample instead of as the sample's texture.
+    double grainPhase = 0.0, grainTarget = 1.0, grainValue = 1.0;
+    const double grainStep = recipe.noiseGrainRate > 0.0
+        ? recipe.noiseGrainRate / sampleRate : 0.0;
+    // Smoothing has to track the grain rate. A fixed coefficient smoothed over
+    // ~6 ms, which is slower than the 0.4 ms a pick's flutter asks for, so the
+    // value never reached its target and the flutter did nothing at all — the
+    // pick stayed the featureless band of noise it was reported as.
+    const double grainSmooth = std::min(1.0, grainStep * 3.0);
 
     // Partial phases are accumulated rather than evaluated from t, so a pitch
     // drop can bend them.
@@ -499,10 +571,32 @@ inline SampleData generateAttack(AttackKind kind, double sampleRate) {
 
         if (recipe.noiseAmp > 0.0f) {
             const float noise = random.nextBipolar();
-            const float shaped = recipe.noiseCentre > 0.0
+            float shaped = recipe.noiseCentre > 0.0
                 ? band.process(noise).bp : noise;
+            if (recipe.noiseHighpass > 0.0) shaped = highpass.process(shaped).hp;
+
+            if (grainStep > 0.0) {
+                grainPhase += grainStep;
+                if (grainPhase >= 1.0) {
+                    grainPhase -= std::floor(grainPhase);
+                    grainTarget = 1.0 - recipe.noiseGrain
+                                * (0.5 + 0.5 * random.nextUnipolar());
+                }
+                grainValue += (grainTarget - grainValue) * grainSmooth;
+                shaped *= static_cast<float>(grainValue);
+            }
+
             value += shaped * recipe.noiseAmp
                    * std::exp(-recipe.noiseDecay * static_cast<float>(t));
+        }
+
+        // The onset ramp is applied to everything, not just the noise. Bow
+        // Scrape kept its bang with a 70 ms noise rise because its two pitched
+        // partials still arrived at full level on sample zero — and the ear
+        // takes the earliest edge as the attack.
+        if (recipe.riseSeconds > 0.0f) {
+            value *= 1.0f - std::exp(-3.0f * static_cast<float>(t)
+                                           / recipe.riseSeconds);
         }
         buffer[n] = value;
     }

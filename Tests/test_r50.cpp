@@ -1775,6 +1775,149 @@ int main() {
         }
     }
 
+    // --- Generated content has the character it is named for ----------------
+    // Every one of these encodes a specific complaint about how a sample
+    // sounded. They are here because the whole suite stayed green through the
+    // rewrite that fixed them, which means nothing was guarding any of it.
+    {
+        struct Zone { const std::vector<float> *samples; double f0, sr; };
+        auto zoneFor = [](const char *name) -> Zone {
+            const r50::SampleLibrary &lib = r50::SampleLibrary::shared();
+            for (int i = 0; i < lib.instrumentCount(); ++i) {
+                if (std::string(lib.instrument(i)->name) != name) continue;
+                const r50::SampleRegion *region = lib.instrument(i)->find(60, 100);
+                const r50::SampleData *d = lib.sample(region->slot);
+                // Each zone is generated at its own root key, so probing at
+                // concert C would land between harmonics and measure nothing.
+                return {&d->samples,
+                        440.0 * std::pow(2.0, (region->rootKey - 69) / 12.0),
+                        d->sourceSampleRate};
+            }
+            return {nullptr, 0.0, 0.0};
+        };
+        auto magnitude = [](const Zone &z, double hz, int count) {
+            double re = 0.0, im = 0.0;
+            for (int n = 0; n < count; ++n) {
+                const double w = 0.5 - 0.5 * std::cos(synth::kTwoPi * n / (count - 1));
+                const double phase = synth::kTwoPi * hz * n / z.sr;
+                re += (*z.samples)[n] * w * std::cos(phase);
+                im -= (*z.samples)[n] * w * std::sin(phase);
+            }
+            return std::sqrt(re * re + im * im) / count;
+        };
+        // Ratio of the strongest to the weakest of the first 14 harmonics: a
+        // formant bank carves deep valleys, a source rolloff does not.
+        auto formantDepth = [&](const char *name) {
+            const Zone z = zoneFor(name);
+            if (z.samples == nullptr) return 0.0;
+            const int count = std::min<int>(16384, static_cast<int>(z.samples->size()));
+            double hi = 0.0, lo = 1e9;
+            for (int h = 1; h <= 14; ++h) {
+                const double m = magnitude(z, z.f0 * h, count);
+                hi = std::max(hi, m);
+                lo = std::min(lo, m);
+            }
+            return 20.0 * std::log10(hi / std::max(lo, 1e-12));
+        };
+
+        check(formantDepth("Choir") > formantDepth("Strings") + 15.0,
+              "a vowel is peakier than a string");
+        check(formantDepth("Voice Ooh") > formantDepth("Strings") + 8.0,
+              "the closed vowel is peaky too");
+        {
+            // The Vocal Ah lesson, finally guarded: Gaussian formants killed
+            // everything below F1 and the fundamental went with it.
+            const Zone z = zoneFor("Choir");
+            const int count = std::min<int>(16384, static_cast<int>(z.samples->size()));
+            double hi = 0.0;
+            for (int h = 1; h <= 14; ++h) hi = std::max(hi, magnitude(z, z.f0 * h, count));
+            check(magnitude(z, z.f0, count) > 0.2 * hi,
+                  "the vowel fundamental survives its own formants");
+        }
+        {
+            const Zone z = zoneFor("Flute");
+            const int count = std::min<int>(16384, static_cast<int>(z.samples->size()));
+            double odd = 0.0, even = 0.0;
+            for (int h = 1; h <= 12; ++h) {
+                (h % 2 ? odd : even) += magnitude(z, z.f0 * h, count);
+            }
+            check(odd > 50.0 * even, "the flute is odd-harmonic, like a triangle");
+        }
+
+        // Attacks. Band energy and onset are measured on the raw one-shot.
+        auto bandShare = [&](const char *name, double from, double to) {
+            const Zone z = zoneFor(name);
+            const int count = std::min<int>(4096, static_cast<int>(z.samples->size()));
+            double inBand = 0.0, total = 0.0;
+            for (double hz = 60.0; hz < 14000.0; hz *= 1.12) {
+                const double m = magnitude(z, hz, count);
+                total += m;
+                if (hz >= from && hz < to) inBand += m;
+            }
+            return inBand / std::max(total, 1e-12);
+        };
+        auto riseSeconds = [&](const char *name) {
+            const Zone z = zoneFor(name);
+            float peak = 0.0f;
+            for (float v : *z.samples) peak = std::max(peak, std::fabs(v));
+            for (size_t n = 0; n < z.samples->size(); ++n) {
+                if (std::fabs((*z.samples)[n]) >= 0.9f * peak) return n / z.sr;
+            }
+            return z.samples->size() / z.sr;
+        };
+        // On-harmonic against off-harmonic energy: a pitched sound peaks on the
+        // grid, noise is indifferent to it.
+        auto pitchedness = [&](const char *name) {
+            const Zone z = zoneFor(name);
+            const int count = std::min<int>(4096, static_cast<int>(z.samples->size()));
+            double on = 0.0, off = 0.0;
+            for (int h = 1; h <= 10; ++h) {
+                on  += magnitude(z, z.f0 * h, count);
+                off += magnitude(z, z.f0 * (h + 0.5), count);
+            }
+            return on / std::max(off, 1e-12);
+        };
+        // Wobble in the short-time level. A scrape is irregular; a filtered
+        // noise burst is smooth.
+        auto roughness = [&](const char *name) {
+            const Zone z = zoneFor(name);
+            const int window = static_cast<int>(0.001 * z.sr);
+            std::vector<double> levels;
+            const int limit = static_cast<int>(0.6 * z.samples->size());
+            for (int n = 0; n + window < limit; n += window) {
+                double sum = 0.0;
+                for (int k = 0; k < window; ++k) {
+                    sum += (*z.samples)[n + k] * (*z.samples)[n + k];
+                }
+                levels.push_back(std::sqrt(sum / window));
+            }
+            if (levels.empty()) return 0.0;
+            double mean = 0.0, variance = 0.0;
+            for (double v : levels) mean += v;
+            mean /= levels.size();
+            for (double v : levels) variance += (v - mean) * (v - mean);
+            return std::sqrt(variance / levels.size()) / std::max(mean, 1e-12);
+        };
+
+        check(riseSeconds("Breath") > 0.005,
+              "breath arrives rather than being struck");
+        check(riseSeconds("Bow Scrape") > 0.010,
+              "a bow arrives rather than detonating");
+        check(riseSeconds("Mallet") < 0.002,
+              "a struck sample is still struck");
+        check(bandShare("Breath", 0.0, 500.0) < 0.05,
+              "breath has no low end to make it a hi-hat");
+        check(bandShare("Bow Scrape", 0.0, 500.0) < 0.10,
+              "the bow scrape has no boom");
+        check(bandShare("Pick", 2000.0, 20000.0) > 0.5, "a pick is bright");
+        check(roughness("Pick") > 1.5 * roughness("Breath"),
+              "the pick scratches rather than hissing");
+        check(pitchedness("Lip Buzz") > 50.0, "lips buzz at a pitch");
+        check(pitchedness("Slap Bass") > 100.0, "slap is a note, not a snare");
+        check(zoneFor("Slap Bass").samples->size() < 0.12 * kSR,
+              "slap is short");
+    }
+
     printf(g_failures == 0 ? "\nAll R50 tests passed.\n"
                            : "\n%d R50 test(s) FAILED.\n", g_failures);
     return g_failures == 0 ? 0 : 1;
