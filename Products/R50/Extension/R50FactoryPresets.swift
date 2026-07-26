@@ -471,6 +471,104 @@ enum R50FactoryPresets {
             p2(R50FieldAmpRelease): 1.0,
         ]),
 
+        R50FactoryPreset(name: "◆ Breath Flute", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.13,
+            addr(R50ParamFxReverbMix): 0.30,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.breath),
+            p1(R50FieldCutoff): 7000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.35,
+            p1(R50FieldAmpSustain): 0,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.flute),
+            p2(R50FieldCutoff): 5200,
+            p2(R50FieldKeyTrack): 0.5,
+            p2(R50FieldAmpAttack): 0.05,
+            p2(R50FieldAmpSustain): 0.9,
+            p2(R50FieldAmpRelease): 0.25,
+        ]),
+
+        R50FactoryPreset(name: "◆ Brass Section", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.08,
+            addr(R50ParamFxReverbMix): 0.24,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.lipBuzz),
+            p1(R50FieldCutoff): 6000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.3,
+            p1(R50FieldAmpSustain): 0,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.trumpet),
+            p2(R50FieldCutoff): 4800,
+            p2(R50FieldKeyTrack): 0.5,
+            p2(R50FieldFilterEnvAmount): 0.3,
+            p2(R50FieldAmpAttack): 0.04,
+            p2(R50FieldAmpSustain): 0.9,
+            p2(R50FieldAmpRelease): 0.2,
+            p2(R50FieldFilterDecay): 0.3,
+            p2(R50FieldFilterSustain): 0.6,
+        ]),
+
+        R50FactoryPreset(name: "◆ Gong Bath", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.20,
+            addr(R50ParamFxReverbMix): 0.55,
+            addr(R50ParamFxReverbSize): 0.9,
+            addr(R50ParamFxReverbDecay): 8.0,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.anvil),
+            p1(R50FieldCutoff): 9000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.8,
+            p1(R50FieldAmpSustain): 0,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.gong),
+            p2(R50FieldLevel): 0.7,
+            p2(R50FieldCutoff): 4000,
+            p2(R50FieldKeyTrack): 0.7,
+            p2(R50FieldAmpAttack): 0.15,
+            p2(R50FieldAmpDecay): 4.0,
+            p2(R50FieldAmpSustain): 0.3,
+            p2(R50FieldAmpRelease): 2.5,
+        ]),
+
+        R50FactoryPreset(name: "◆ Nylon Pluck", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.04,
+            addr(R50ParamFxReverbMix): 0.22,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.pick),
+            p1(R50FieldCutoff): 11000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.15,
+            p1(R50FieldAmpSustain): 0,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.nylonGuitar),
+            p2(R50FieldCutoff): 4200,
+            p2(R50FieldKeyTrack): 0.6,
+            p2(R50FieldFilterEnvAmount): 0.35,
+            p2(R50FieldAmpDecay): 1.6,
+            p2(R50FieldAmpSustain): 0.15,
+            p2(R50FieldAmpRelease): 0.5,
+            p2(R50FieldFilterDecay): 0.8,
+            p2(R50FieldFilterSustain): 0.15,
+        ]),
+
         R50FactoryPreset(name: "Glass Bell", values: [
             addr(R50ParamFxDelayMix): 0.22,
             addr(R50ParamFxReverbMix): 0.34,
@@ -504,11 +602,14 @@ enum R50FactoryPresets {
     /// them in R50SampleFactory.hpp.
     private enum Instrument {
         static let choir = 0, strings = 1, warmPad = 2, glassPad = 3
-        static let mallet = 4, pluck = 5, chiff = 6, noiseBurst = 7, tineStrike = 8
-        static let marimba = 9, vibraphone = 10, xylophone = 11, kalimba = 12
-        static let slapBass = 13, pullBass = 14, pick = 15, pianoHammer = 16
-        static let anvil = 17, taikoDrum = 18, lipBuzz = 19, breath = 20
-        static let bowScrape = 21
+        static let voiceOoh = 4, flute = 5, trumpet = 6, organ = 7
+        static let nylonGuitar = 8, piano = 9, gong = 10, nasty = 11, fatBlock = 12
+        // Attacks follow the thirteen sustains, in buildFactoryContent order.
+        static let mallet = 13, pluck = 14, chiff = 15, noiseBurst = 16
+        static let tineStrike = 17, marimba = 18, vibraphone = 19, xylophone = 20
+        static let kalimba = 21, slapBass = 22, pullBass = 23, pick = 24
+        static let pianoHammer = 25, anvil = 26, taikoDrum = 27, lipBuzz = 28
+        static let breath = 29, bowScrape = 30
     }
 
     private enum Structure {

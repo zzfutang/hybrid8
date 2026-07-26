@@ -729,7 +729,7 @@ int main() {
             }
         }
         check(allGood, "generated assets are finite, audible and seamless");
-        check(loopedCount >= 28, "sustains are generated for every key zone");
+        check(loopedCount >= 65, "sustains are generated for every key zone");
 
         // A zone that fails to generate leaves a hole in the map, and a note
         // landing in it is silent rather than wrong — easy to miss by ear at

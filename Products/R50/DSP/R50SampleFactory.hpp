@@ -123,7 +123,26 @@ inline float generatedPhase(int bin, int seed) {
 
 // ---- Sustains -------------------------------------------------------------
 
-enum class SustainVoicing { Choir, Strings, WarmPad, GlassPad };
+enum class SustainVoicing {
+    Choir, Strings, WarmPad, GlassPad,
+    VoiceOoh, Flute, Trumpet, Organ, NylonGuitar, Piano, Gong, Nasty, FatBlock
+};
+
+static constexpr int kSustainVoicingCount = 13;
+
+/// A vowel is a source spectrum shaped by tract resonances, and the resonances
+/// never fall to nothing — without the floor the fundamental disappears and the
+/// result reads as a thin whistle an octave up. Learned the hard way on the
+/// Vocal Ah wave table.
+inline float formantAmplitude(double hz, int harmonic, float floorLevel,
+                              const double formants[][3], int count) {
+    double shaped = floorLevel;
+    for (int i = 0; i < count; ++i) {
+        const double x = (hz - formants[i][0]) / formants[i][1];
+        shaped += formants[i][2] * std::exp(-x * x);
+    }
+    return static_cast<float>(shaped / harmonic);
+}
 
 /// A looped sustain at the given pitch. Each harmonic is split into detuned
 /// copies one or two bins apart, which is what produces the slow beating.
@@ -172,11 +191,122 @@ inline SampleData generateSustain(SustainVoicing voicing, double frequency,
                     ? (1.0f / std::sqrt(static_cast<float>(harmonic))) * 0.35f
                     : 0.0f;
                 break;
+
+            case SustainVoicing::VoiceOoh: {
+                // A closed vowel: both formants low and close together, which
+                // is what separates "ooh" from the open "aah" of Choir.
+                const double hz = bin * sampleRate / length;
+                static const double formants[2][3] = {{320, 90, 1.0},
+                                                      {800, 130, 0.5}};
+                amplitude = formantAmplitude(hz, harmonic, 0.12f, formants, 2);
+                break;
+            }
+
+            case SustainVoicing::Flute: {
+                // Almost a sine: a strong fundamental, a weak octave, and very
+                // little else. The airiness comes from a scatter of quiet high
+                // harmonics rather than from any single partial.
+                const double hz = bin * sampleRate / length;
+                if (harmonic == 1)      amplitude = 1.0f;
+                else if (harmonic == 2) amplitude = 0.13f;
+                else if (harmonic == 3) amplitude = 0.06f;
+                else amplitude = (hz < 9000.0)
+                    ? 0.02f / std::sqrt(static_cast<float>(harmonic)) : 0.0f;
+                break;
+            }
+
+            case SustainVoicing::Trumpet: {
+                // Brass energy peaks well above the fundamental, around the
+                // 1200 Hz formant, which is what makes it read as brass rather
+                // than as a bright saw.
+                const double hz = bin * sampleRate / length;
+                static const double formants[2][3] = {{1200, 700, 1.0},
+                                                      {2400, 900, 0.45}};
+                amplitude = formantAmplitude(hz, harmonic, 0.10f, formants, 2)
+                          * (harmonic < 3 ? 0.55f : 1.0f);
+                break;
+            }
+
+            case SustainVoicing::Organ: {
+                // Drawbars: octaves and fifths only, all held at full level.
+                // A sustained organ has no rolloff to speak of.
+                switch (harmonic) {
+                    case 1:  amplitude = 1.00f; break;
+                    case 2:  amplitude = 0.80f; break;
+                    case 3:  amplitude = 0.45f; break;
+                    case 4:  amplitude = 0.60f; break;
+                    case 6:  amplitude = 0.30f; break;
+                    case 8:  amplitude = 0.40f; break;
+                    case 12: amplitude = 0.15f; break;
+                    case 16: amplitude = 0.20f; break;
+                    default: amplitude = 0.0f; break;
+                }
+                break;
+            }
+
+            case SustainVoicing::NylonGuitar:
+                // A plucked string's body: strong low harmonics falling away
+                // quickly, with the even ones slightly weaker.
+                amplitude = (1.0f / harmonic) * std::exp(-harmonic / 9.0f)
+                          * ((harmonic % 2) ? 1.0f : 0.7f);
+                break;
+
+            case SustainVoicing::Piano:
+                // A dip through the middle harmonics is what stops a piano
+                // sounding like a saw — it is the reason for the notch here.
+                amplitude = (1.0f / harmonic)
+                          * (1.0f - 0.55f * std::exp(-((harmonic - 6.0f)
+                                                     * (harmonic - 6.0f)) / 12.0f))
+                          * std::exp(-harmonic / 16.0f);
+                break;
+
+            case SustainVoicing::Gong: {
+                // Metallic wash. A loop is periodic, so genuinely inharmonic
+                // partials are impossible; picking a sparse, uneven harmonic
+                // subset gets most of the way there.
+                static const int metallic[] = {1, 3, 7, 11, 13, 17, 19, 23};
+                amplitude = 0.0f;
+                for (int m : metallic) {
+                    if (harmonic == m) {
+                        amplitude = 0.55f / std::sqrt(static_cast<float>(harmonic));
+                        break;
+                    }
+                }
+                break;
+            }
+
+            case SustainVoicing::Nasty:
+                // Deliberately harsh: a rising tilt into the upper harmonics,
+                // which is the digital-buzz corner of the D-50 palette.
+                amplitude = (harmonic <= 24)
+                    ? 0.12f + 0.5f * std::exp(-((harmonic - 14.0f)
+                                              * (harmonic - 14.0f)) / 40.0f)
+                    : 0.0f;
+                amplitude /= std::sqrt(static_cast<float>(harmonic));
+                break;
+
+            case SustainVoicing::FatBlock:
+                // Odd harmonics only, rolled off gently: a thick hollow square
+                // rather than the thin one a pure 1/k square gives.
+                amplitude = (harmonic % 2)
+                    ? (1.0f / harmonic) * std::exp(-harmonic / 26.0f) * 1.3f
+                    : 0.0f;
+                break;
         }
-        if (amplitude <= 0.0f) continue;
+        // Skip partials nobody can hear. The rolloffs above trail off into
+        // amplitudes three orders of magnitude below the fundamental, and
+        // synthesising them costs as much per sample as an audible one.
+        if (amplitude <= 0.004f) continue;
 
         // Detuned copies, offset by whole bins so periodicity is preserved.
-        const int spread = 2;
+        // The beating they create is the character of a string or choir
+        // ensemble; a flute or an organ pipe wants far less of it, and each
+        // extra copy is another full pass over the loop to synthesise.
+        const bool ensemble = voicing == SustainVoicing::Choir
+                           || voicing == SustainVoicing::Strings
+                           || voicing == SustainVoicing::WarmPad
+                           || voicing == SustainVoicing::GlassPad;
+        const int spread = ensemble ? 2 : 1;
         partials.push_back({bin, amplitude, generatedPhase(bin, seed)});
         for (int offset = 1; offset <= spread; ++offset) {
             const float sideAmplitude = amplitude * (offset == 1 ? 0.7f : 0.4f);
@@ -400,26 +530,38 @@ inline void buildFactoryContent(SampleLibrary &library) {
     const double sampleRate = 44100.0;
 
     struct ZoneSpec { int rootKey, lowKey, highKey; };
-    // One zone per octave. Transposition inside a zone is at most a few
-    // semitones, so the loop keeps very nearly its generated duration — with
-    // three zones the top one stretched from root 72 to key 127 and turned a
-    // 0.5 s loop into a 21 ms, 48 Hz buzz.
-    static const ZoneSpec zones[7] = {
-        { 36,   0,  41},
-        { 48,  42,  53},
-        { 60,  54,  65},
-        { 72,  66,  77},
-        { 84,  78,  89},
-        { 96,  90, 101},
-        {108, 102, 127},
+    // A zone every octave and a half. Transposition inside a zone stays under
+    // nine semitones, so a loop keeps most of its generated duration — with the
+    // original three zones the top one stretched from root 72 to key 127 and
+    // turned a 0.5 s loop into a 21 ms, 48 Hz buzz.
+    //
+    // Five zones rather than seven: every asset is generated at startup, and
+    // thirteen sustains across seven zones cost 400 ms and 13 MB. Worst-case
+    // loop repetition is unchanged at 3.2 Hz, because it is set by the top
+    // zone reaching key 127 either way.
+    static const ZoneSpec zones[5] = {
+        { 36,   0,  44},
+        { 54,  45,  62},
+        { 72,  63,  80},
+        { 90,  81,  98},
+        {108,  99, 127},
     };
 
     struct SustainSpec { SustainVoicing voicing; const char *name; };
-    static const SustainSpec sustains[4] = {
-        {SustainVoicing::Choir,    "Choir"},
-        {SustainVoicing::Strings,  "Strings"},
-        {SustainVoicing::WarmPad,  "Warm Pad"},
-        {SustainVoicing::GlassPad, "Glass Pad"},
+    static const SustainSpec sustains[kSustainVoicingCount] = {
+        {SustainVoicing::Choir,       "Choir"},
+        {SustainVoicing::Strings,     "Strings"},
+        {SustainVoicing::WarmPad,     "Warm Pad"},
+        {SustainVoicing::GlassPad,    "Glass Pad"},
+        {SustainVoicing::VoiceOoh,    "Voice Ooh"},
+        {SustainVoicing::Flute,       "Flute"},
+        {SustainVoicing::Trumpet,     "Trumpet"},
+        {SustainVoicing::Organ,       "Organ"},
+        {SustainVoicing::NylonGuitar, "Nylon Guitar"},
+        {SustainVoicing::Piano,       "Piano"},
+        {SustainVoicing::Gong,        "Gong"},
+        {SustainVoicing::Nasty,       "Nasty"},
+        {SustainVoicing::FatBlock,    "Fat Block"},
     };
 
     for (const SustainSpec &spec : sustains) {
