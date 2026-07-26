@@ -132,6 +132,10 @@ targets:
           - "*.entitlements"
       - path: Products/R50/DSP
       - path: Shared/PerformanceKeyboard/MusicalTypingStateMachine.swift
+      # A folder reference, so the whole directory is copied into the bundle's
+      # Resources and adding a WAV needs no project change.
+      - path: Products/R50/Samples
+        type: folder
     settings:
       base:
         PRODUCT_NAME: R50Extension

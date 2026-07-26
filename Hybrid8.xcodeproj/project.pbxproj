@@ -45,6 +45,7 @@
 		C042951BAA0025B7C2160D94 /* SynthAudioUnit.swift in Sources */ = {isa = PBXBuildFile; fileRef = B03850F9ED8AC10D7B9481FA /* SynthAudioUnit.swift */; };
 		C3C2917FCEACF97697615F27 /* R50View.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD9BD8CBC130F448D3ADF1F9 /* R50View.swift */; };
 		C72F5D3039604622BED6A6D5 /* SynthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F516362934563D869871E8AC /* SynthView.swift */; };
+		CDE2EC993B1F94D33AA916DD /* Samples in Resources */ = {isa = PBXBuildFile; fileRef = AC7BBBEE25EBADC5B1680F6A /* Samples */; };
 		E390439AC633AF0DC2673CAC /* MusicalTypingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E121C11D557B938C66F5F0E /* MusicalTypingController.swift */; };
 		E5FB2B9FE0FA79A414081107 /* PerformanceKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D27DAF314B0D8B1899F4BC3 /* PerformanceKeyboardView.swift */; };
 		E8D6963CF636921BF9F37976 /* R50ParametersTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772DF3A82502AEDD6C9C552E /* R50ParametersTree.swift */; };
@@ -144,6 +145,7 @@
 		A4EE673DC8E4D1CB2783E28A /* PresetDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDocument.swift; sourceTree = "<group>"; };
 		AA3098E2CA53815C28DFBDFF /* SynthTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthTheme.swift; sourceTree = "<group>"; };
 		AA5A665188698ADB50316116 /* R50SamplePlayer.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50SamplePlayer.hpp; sourceTree = "<group>"; };
+		AC7BBBEE25EBADC5B1680F6A /* Samples */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Samples; path = Products/R50/Samples; sourceTree = SOURCE_ROOT; };
 		ADFAAC8942C83291B677DAB8 /* R50ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50ContentView.swift; sourceTree = "<group>"; };
 		B03850F9ED8AC10D7B9481FA /* SynthAudioUnit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthAudioUnit.swift; sourceTree = "<group>"; };
 		B1F99D67BD35FB874E88A075 /* R50Engine.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Engine.hpp; sourceTree = "<group>"; };
@@ -237,6 +239,7 @@
 				9A4CB970AD05718C18D4D63E /* App */,
 				9DB5BC8D930E5764A991C44B /* DSP */,
 				D3476A314BB9BA063E33890F /* Extension */,
+				AC7BBBEE25EBADC5B1680F6A /* Samples */,
 			);
 			path = R50;
 			sourceTree = "<group>";
@@ -418,6 +421,7 @@
 			buildConfigurationList = E8351D40B6532AA76024526C /* Build configuration list for PBXNativeTarget "R50Extension" */;
 			buildPhases = (
 				E19A737BAF5158F8E7A106F0 /* Sources */,
+				C6852888A21EC0287B31F44A /* Resources */,
 			);
 			buildRules = (
 			);
@@ -523,6 +527,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				218ABB44EC907908984516A1 /* FactoryPresets.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C6852888A21EC0287B31F44A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CDE2EC993B1F94D33AA916DD /* Samples in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

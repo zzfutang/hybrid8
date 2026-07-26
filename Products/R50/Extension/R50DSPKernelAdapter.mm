@@ -42,9 +42,21 @@ static std::string R50FactoryDirectory(void) {
         // singleton, so a second instance would only redo the same work.
         static std::once_flag once;
         std::call_once(once, []{
-            const std::string directory = R50FactoryDirectory();
-            if (directory.empty()) return;
-            r50::syncFactoryDirectory(r50::SampleLibrary::shared(), directory);
+            r50::SampleLibrary &library = r50::SampleLibrary::shared();
+
+            const std::string factory = R50FactoryDirectory();
+            if (!factory.empty()) r50::syncFactoryDirectory(library, factory);
+
+            // Repository samples, built into the bundle. Deliberately not the
+            // container's Samples folder as well: that holds imports, keyed by
+            // library.json under UUID filenames, and scanning it too would load
+            // every imported sample a second time under its UUID.
+            NSURL *bundled = [[NSBundle bundleForClass:R50DSPKernelAdapter.class]
+                              URLForResource:@"Samples" withExtension:nil];
+            if (bundled != nil) {
+                r50::loadSampleDirectory(library, bundled.path.UTF8String);
+            }
+
         });
     }
     return self;

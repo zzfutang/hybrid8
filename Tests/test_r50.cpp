@@ -2423,6 +2423,82 @@ int main() {
         }
     }
 
+    // --- Drop-in sample directory -------------------------------------------
+    {
+        const std::string directory = "/tmp/r50_dropin_test";
+        ::mkdir(directory.c_str(), 0755);
+        for (const char *stale : {"/b_loop.wav", "/a_oneshot.wav", "/c_detect.wav",
+                                  "/notes.txt", "/broken.wav"}) {
+            std::remove((directory + stale).c_str());
+        }
+
+        auto sine = [](double hz, int count) {
+            std::vector<float> out(count);
+            for (int n = 0; n < count; ++n) {
+                out[n] = static_cast<float>(0.6 * std::sin(synth::kTwoPi * hz * n / kSR));
+            }
+            return out;
+        };
+
+        // A long file with a smpl loop, a short one without, and one whose
+        // pitch has to be detected because it carries no chunk.
+        const std::vector<float> longTone = sine(220.0, 44100);
+        const std::vector<float> shortTone = sine(440.0, 4410);
+        r50::writeWholeFile(directory + "/b_loop.wav",
+            r50::encodeWav(longTone.data(), static_cast<int>(longTone.size()),
+                           kSR, 45, 1000, 40000, true));
+        r50::writeWholeFile(directory + "/a_oneshot.wav",
+            r50::encodeWav(shortTone.data(), static_cast<int>(shortTone.size()),
+                           kSR, 60, 0, 0, false));
+        r50::writeWholeFile(directory + "/c_detect.wav",
+            r50::encodeWav(longTone.data(), static_cast<int>(longTone.size()),
+                           kSR, 60, 0, 0, false));
+        // Deliberately a *valid* WAV under a non-audio extension. A two-byte
+        // file would be rejected by the decoder regardless, which would prove
+        // nothing about the extension filter.
+        r50::writeWholeFile(directory + "/notes.txt",
+            r50::encodeWav(shortTone.data(), static_cast<int>(shortTone.size()),
+                           kSR, 60, 0, 0, false));
+        r50::writeWholeFile(directory + "/broken.wav", {'n', 'o', 'p', 'e'});
+
+        r50::SampleLibrary &library = r50::SampleLibrary::shared();
+        const int before = library.instrumentCount();
+        const int loaded = r50::loadSampleDirectory(library, directory);
+        check(loaded == 3, "every readable wav in the directory becomes an instrument");
+        check(library.instrumentCount() == before + 3,
+              "a non-audio file and a corrupt one are both skipped");
+
+        // Filename order, not filesystem order: a preset stores an index, and
+        // the same directory has to produce the same indices everywhere.
+        check(std::string(library.instrument(before)->name) == "a_oneshot"
+           && std::string(library.instrument(before + 1)->name) == "b_loop"
+           && std::string(library.instrument(before + 2)->name) == "c_detect",
+              "the directory loads in filename order");
+
+        const r50::SampleData *oneShot =
+            library.sample(library.instrument(before)->regions[0].slot);
+        check(oneShot->loopMode == r50::LoopMode::None,
+              "a short file with no loop chunk is a one-shot");
+
+        const r50::SampleData *looped =
+            library.sample(library.instrument(before + 1)->regions[0].slot);
+        check(looped->loopMode == r50::LoopMode::Forward
+           && looped->loopStart == 1000 && looped->loopEnd == 40000,
+              "a smpl loop is honoured exactly");
+        check(library.instrument(before + 1)->regions[0].rootKey == 45,
+              "a smpl root key is honoured");
+
+        // No chunk to trust, so the root has to come from the audio itself.
+        check(library.instrument(before + 2)->regions[0].rootKey == 57,
+              "a file without a smpl chunk has its pitch detected");
+
+        check(library.instrument(before)->regions[0].lowKey == 0
+           && library.instrument(before)->regions[0].highKey == 127,
+              "a dropped-in sample covers the keyboard");
+        check(r50::loadSampleDirectory(library, "/tmp/r50_no_such_directory") == 0,
+              "a missing directory loads nothing rather than failing");
+    }
+
     printf(g_failures == 0 ? "\nAll R50 tests passed.\n"
                            : "\n%d R50 test(s) FAILED.\n", g_failures);
     return g_failures == 0 ? 0 : 1;

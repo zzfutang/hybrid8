@@ -20,9 +20,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <algorithm>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <vector>
 
+#include "R50PitchDetect.hpp"
 #include "R50Sample.hpp"
 #include "R50WavWriter.hpp"
 
@@ -225,6 +228,80 @@ inline int syncFactoryDirectory(SampleLibrary &library, const std::string &direc
         }
     }
     return replaced;
+}
+
+/// Turn every WAV in a directory into an instrument. This is the drop-in path:
+/// no manifest, no import step, no registration — the directory *is* the list.
+///
+/// Loaded in filename order, and that ordering is load-bearing. A preset stores
+/// an instrument index, so a stable order is the only thing that keeps presets
+/// pointing at the sample they were built on; scanning in whatever order the
+/// filesystem hands back would reshuffle them between machines.
+///
+/// Root key and loop come from the file's `smpl` chunk when it has one, since
+/// that is what an editor writes and it is more trustworthy than any guess.
+/// Without one the pitch is detected, and the duration decides the loop the
+/// same way the importer does.
+inline int loadSampleDirectory(SampleLibrary &library, const std::string &directory) {
+    DIR *handle = ::opendir(directory.c_str());
+    if (handle == nullptr) return 0;
+
+    std::vector<std::string> names;
+    while (dirent *entry = ::readdir(handle)) {
+        const std::string name = entry->d_name;
+        if (name.size() < 5 || name[0] == '.') continue;
+        const std::string extension = name.substr(name.size() - 4);
+        if (extension != ".wav" && extension != ".WAV"
+         && extension != ".aif" && extension != ".AIF") {
+            continue;
+        }
+        names.push_back(name);
+    }
+    ::closedir(handle);
+    std::sort(names.begin(), names.end());
+
+    int loaded = 0;
+    for (const std::string &name : names) {
+        std::vector<uint8_t> bytes;
+        if (!readWholeFile(directory + "/" + name, bytes)) continue;
+        const LoadedWav wav = decodeWav(bytes);
+        if (!wav.ok) continue;
+
+        SampleData data;
+        data.samples          = wav.samples;
+        data.sourceSampleRate = wav.sampleRate;
+
+        if (wav.hasLoop && wav.loopEnd > wav.loopStart + 1
+         && wav.loopEnd <= static_cast<uint32_t>(data.length())) {
+            data.rootKey   = wav.rootKey;
+            data.loopStart = wav.loopStart;
+            data.loopEnd   = wav.loopEnd;
+            data.loopMode  = LoopMode::Forward;
+        } else {
+            const DetectedPitch found = detectPitch(
+                data.samples.data(), data.length(), data.sourceSampleRate);
+            data.rootKey = (found.valid && found.confidence > 0.5f)
+                ? found.rootKey : 60;
+            const double seconds = data.length() / data.sourceSampleRate;
+            data.loopStart = 0;
+            data.loopEnd   = static_cast<uint32_t>(data.length());
+            data.loopMode  = seconds < 0.5 ? LoopMode::None : LoopMode::Forward;
+        }
+
+        const int rootKey = data.rootKey;
+        const int slot = library.addSample(std::move(data));
+        if (slot < 0) break;      // library full; stop rather than skip silently
+
+        Multisample instrument;
+        instrument.setName(name.substr(0, name.size() - 4).c_str());
+        SampleRegion region;
+        region.rootKey = rootKey;
+        region.slot    = slot;
+        instrument.regions[0] = region;
+        instrument.regionCount = 1;
+        if (library.addInstrument(instrument) >= 0) ++loaded;
+    }
+    return loaded;
 }
 
 } // namespace r50
