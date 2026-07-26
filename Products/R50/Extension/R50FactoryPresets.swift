@@ -369,6 +369,108 @@ enum R50FactoryPresets {
             p2(R50FieldAmpRelease): 0.5,
         ]),
 
+        // ---- Transient-led patches -----------------------------------------
+        // The point of an attack library: the same sustain reads as a
+        // different instrument depending on what strikes it.
+
+        R50FactoryPreset(name: "◆ Marimba Pad", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.09,
+            addr(R50ParamFxReverbMix): 0.28,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.marimba),
+            p1(R50FieldCutoff): 9000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.5,
+            p1(R50FieldAmpSustain): 0,
+            p1(R50FieldAmpRelease): 0.3,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.warmPad),
+            p2(R50FieldLevel): 0.6,
+            p2(R50FieldCutoff): 3200,
+            p2(R50FieldAmpAttack): 0.05,
+            p2(R50FieldAmpSustain): 0.8,
+            p2(R50FieldAmpRelease): 0.7,
+        ]),
+
+        R50FactoryPreset(name: "◆ Vibes & Air", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.mix),
+            addr(R50ParamFxReverbMix): 0.40,
+            addr(R50ParamFxReverbDecay): 3.5,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.vibraphone),
+            p1(R50FieldCutoff): 8000,
+            p1(R50FieldKeyTrack): 0.6,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 1.2,
+            p1(R50FieldAmpSustain): 0,
+            p1(R50FieldAmpRelease): 0.6,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.breath),
+            p2(R50FieldLevel): 0.3,
+            p2(R50FieldCutoff): 6000,
+            p2(R50FieldAmpAttack): 0.02,
+            p2(R50FieldAmpDecay): 0.6,
+            p2(R50FieldAmpSustain): 0,
+            p2(R50FieldAmpRelease): 0.4,
+        ]),
+
+        R50FactoryPreset(name: "◆ Slap Stack", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.05,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.slapBass),
+            p1(R50FieldCutoff): 10000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.25,
+            p1(R50FieldAmpSustain): 0,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldOscWave): 0,
+            p2(R50FieldOctave): -1,
+            p2(R50FieldCutoff): 700,
+            p2(R50FieldResonance): 0.35,
+            p2(R50FieldKeyTrack): 0.4,
+            p2(R50FieldFilterEnvAmount): 0.5,
+            p2(R50FieldAmpDecay): 0.5,
+            p2(R50FieldAmpSustain): 0.4,
+            p2(R50FieldAmpRelease): 0.15,
+            p2(R50FieldFilterDecay): 0.25,
+            p2(R50FieldFilterSustain): 0.1,
+        ]),
+
+        R50FactoryPreset(name: "◆ Taiko Choir", values: [
+            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
+            addr(R50ParamToneBlendTime): 0.14,
+            addr(R50ParamFxReverbMix): 0.45,
+            addr(R50ParamFxReverbSize): 0.8,
+            addr(R50ParamFxReverbDecay): 5.0,
+
+            p1(R50FieldSourceType): 1,
+            p1(R50FieldSampleInstrument): AUValue(Instrument.taikoDrum),
+            p1(R50FieldCutoff): 4000,
+            p1(R50FieldFilterEnvAmount): 0,
+            p1(R50FieldAmpDecay): 0.6,
+            p1(R50FieldAmpSustain): 0,
+            p1(R50FieldAmpRelease): 0.3,
+
+            p2(R50FieldEnabled): 1,
+            p2(R50FieldSourceType): 1,
+            p2(R50FieldSampleInstrument): AUValue(Instrument.choir),
+            p2(R50FieldLevel): 0.7,
+            p2(R50FieldCutoff): 3600,
+            p2(R50FieldAmpAttack): 0.1,
+            p2(R50FieldAmpSustain): 0.85,
+            p2(R50FieldAmpRelease): 1.0,
+        ]),
+
         R50FactoryPreset(name: "Glass Bell", values: [
             addr(R50ParamFxDelayMix): 0.22,
             addr(R50ParamFxReverbMix): 0.34,
@@ -403,6 +505,10 @@ enum R50FactoryPresets {
     private enum Instrument {
         static let choir = 0, strings = 1, warmPad = 2, glassPad = 3
         static let mallet = 4, pluck = 5, chiff = 6, noiseBurst = 7, tineStrike = 8
+        static let marimba = 9, vibraphone = 10, xylophone = 11, kalimba = 12
+        static let slapBass = 13, pullBass = 14, pick = 15, pianoHammer = 16
+        static let anvil = 17, taikoDrum = 18, lipBuzz = 19, breath = 20
+        static let bowScrape = 21
     }
 
     private enum Structure {

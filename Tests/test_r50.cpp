@@ -751,6 +751,34 @@ int main() {
         }
         check(fullyMapped, "every instrument covers all 128 keys");
 
+        // Attack transients are one-shots: they must decay to near nothing by
+        // their end, or they are sustains that happen to stop. Their whole job
+        // is to be the first few tens of milliseconds of a sound.
+        bool decays = true;
+        int oneShots = 0;
+        for (int i = 0; i < library.instrumentCount(); ++i) {
+            const r50::Multisample *instrument = library.instrument(i);
+            const r50::SampleData *data = library.sample(instrument->regions[0].slot);
+            if (data == nullptr || data->loopMode != r50::LoopMode::None) continue;
+            ++oneShots;
+
+            const int count = static_cast<int>(data->samples.size());
+            const int window = std::max(1, count / 10);
+            double head = 0.0, tail = 0.0;
+            for (int n = 0; n < window; ++n) head += std::fabs(data->samples[n]);
+            for (int n = count - window; n < count; ++n) tail += std::fabs(data->samples[n]);
+
+            const double seconds = count / data->sourceSampleRate;
+            if (tail > head * 0.25 || seconds < 0.02 || seconds > 1.0) {
+                printf("       %s: tail/head %.3f, %.0f ms\n",
+                       instrument->name, tail / (head + 1e-12), seconds * 1000);
+                decays = false;
+            }
+        }
+        printf("       one-shot transients: %d\n", oneShots);
+        check(decays, "every transient decays and is a sensible length");
+        check(oneShots >= 18, "the transient set covers the attack families");
+
         // The loop repeats at (loop duration / transposition), and that rate
         // is what the ear hears as flutter. Keep it low across every zone.
         double fastestRepeat = 0.0;

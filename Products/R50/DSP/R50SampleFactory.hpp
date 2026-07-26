@@ -203,24 +203,138 @@ inline SampleData generateSustain(SustainVoicing voicing, double frequency,
 }
 
 // ---- Attacks --------------------------------------------------------------
+//
+// Attack transients are what make LA synthesis work: the ear identifies an
+// instrument almost entirely from its first few tens of milliseconds, and a
+// sampled attack over a synthesised body is the whole D-50 idea. The families
+// here follow what a real D-50 bank actually leans on — struck bars, bass
+// attacks, plucks, and breath dominate its wave usage.
+//
+// Each attack is a set of decaying partials plus an optional filtered noise
+// component. Struck bars are the reason this is data rather than a switch: a
+// marimba's bar modes sit near 1 : 4 : 10, a xylophone's near 1 : 3 : 6, and a
+// metal bar rings far longer than a wooden one. Those ratios are the
+// difference between "a mallet" and "a marimba".
 
-enum class AttackKind { Mallet, Pluck, Chiff, NoiseBurst, TineStrike };
+enum class AttackKind {
+    Mallet, Pluck, Chiff, NoiseBurst, TineStrike,
+    Marimba, Vibraphone, Xylophone, Kalimba,
+    SlapBass, PullBass, Pick, PianoHammer,
+    Anvil, TaikoDrum, LipBuzz, Breath, BowScrape
+};
 
-/// A short one-shot transient. These are not loop-critical, so they are built
-/// directly in the time domain with explicit decay envelopes.
+static constexpr int kAttackKindCount = 18;
+
+struct AttackPartial {
+    float ratio;    // multiple of the fundamental; non-integer for struck bars
+    float amp;
+    float decay;    // per second
+};
+
+struct AttackRecipe {
+    double seconds;
+    AttackPartial partials[6];
+    int    partialCount;
+    float  noiseAmp;
+    float  noiseDecay;
+    double noiseCentre;      // 0 = unfiltered
+    double noiseQ;
+    float  pitchDropOctaves; // drums fall in pitch as the head relaxes
+    float  pitchDropRate;
+};
+
+inline AttackRecipe attackRecipe(AttackKind kind) {
+    switch (kind) {
+        // --- the originals, unchanged in character ---------------------------
+        case AttackKind::Mallet:
+            return {0.12, {{2.0f, 0.7f, 38.0f}, {5.4f, 0.3f, 38.0f}}, 2,
+                    0.25f, 260.0f, 0.0, 1.0, 0.0f, 0.0f};
+        case AttackKind::Pluck:
+            return {0.09, {{1.0f, 0.35f, 45.0f}}, 1,
+                    1.6f, 45.0f, 1400.0, 2.0, 0.0f, 0.0f};
+        case AttackKind::Chiff:
+            return {0.07, {}, 0, 2.0f, 55.0f, 2600.0, 2.0, 0.0f, 0.0f};
+        case AttackKind::NoiseBurst:
+            return {0.05, {}, 0, 1.0f, 90.0f, 0.0, 1.0, 0.0f, 0.0f};
+        case AttackKind::TineStrike:
+            return {0.11, {{4.0f, 0.6f, 40.0f}, {9.2f, 0.4f, 40.0f}}, 2,
+                    0.15f, 300.0f, 0.0, 1.0, 0.0f, 0.0f};
+
+        // --- struck bars ------------------------------------------------------
+        // Wooden bars: strong fundamental, upper modes dying much faster.
+        case AttackKind::Marimba:
+            return {0.30, {{1.0f, 1.0f, 11.0f}, {3.9f, 0.45f, 26.0f},
+                           {9.2f, 0.18f, 45.0f}}, 3,
+                    0.20f, 320.0f, 2200.0, 1.4, 0.0f, 0.0f};
+        // Metal rings far longer than wood, and keeps its upper modes.
+        case AttackKind::Vibraphone:
+            return {0.45, {{1.0f, 1.0f, 5.0f}, {4.0f, 0.55f, 8.0f},
+                           {10.8f, 0.25f, 12.0f}}, 3,
+                    0.10f, 400.0f, 3000.0, 1.6, 0.0f, 0.0f};
+        // Xylophone bars are tuned to the third, not the fourth, and are short.
+        case AttackKind::Xylophone:
+            return {0.16, {{1.0f, 1.0f, 26.0f}, {3.0f, 0.6f, 34.0f},
+                           {6.0f, 0.3f, 48.0f}}, 3,
+                    0.30f, 380.0f, 3200.0, 1.3, 0.0f, 0.0f};
+        // A plucked metal tine: inharmonic and buzzy at the very start.
+        case AttackKind::Kalimba:
+            return {0.28, {{1.0f, 1.0f, 9.0f}, {5.4f, 0.35f, 22.0f},
+                           {13.1f, 0.12f, 40.0f}}, 3,
+                    0.22f, 300.0f, 1800.0, 1.5, 0.0f, 0.0f};
+
+        // --- bass and string attacks -----------------------------------------
+        // Slap is a bright click sitting on a low thump — the click is most of
+        // the identity, which is why its noise band is high and very short.
+        case AttackKind::SlapBass:
+            return {0.14, {{1.0f, 0.8f, 22.0f}, {2.0f, 0.35f, 34.0f}}, 2,
+                    1.5f, 120.0f, 2600.0, 1.2, 0.0f, 0.0f};
+        case AttackKind::PullBass:
+            return {0.16, {{1.0f, 0.9f, 16.0f}, {3.0f, 0.3f, 40.0f}}, 2,
+                    0.9f, 90.0f, 900.0, 1.8, 0.0f, 0.0f};
+        // A pick is almost entirely a short scrape of high noise.
+        case AttackKind::Pick:
+            return {0.06, {{1.0f, 0.25f, 60.0f}}, 1,
+                    2.0f, 130.0f, 3400.0, 1.1, 0.0f, 0.0f};
+        // Felt on string: a soft low thud with very little top.
+        case AttackKind::PianoHammer:
+            return {0.10, {{1.0f, 0.7f, 30.0f}, {2.0f, 0.3f, 45.0f}}, 2,
+                    0.6f, 150.0f, 500.0, 1.4, 0.0f, 0.0f};
+
+        // --- struck metal and membranes ---------------------------------------
+        // Dense and wholly inharmonic: no ratio here is a whole number.
+        case AttackKind::Anvil:
+            return {0.40, {{1.0f, 0.7f, 7.0f}, {2.7f, 0.8f, 9.0f},
+                           {4.3f, 0.6f, 11.0f}, {6.1f, 0.45f, 14.0f},
+                           {8.9f, 0.3f, 18.0f}}, 5,
+                    0.25f, 200.0f, 5000.0, 1.2, 0.0f, 0.0f};
+        // A struck head falls in pitch as its tension relaxes; without that
+        // drop a drum reads as a tuned tom.
+        case AttackKind::TaikoDrum:
+            return {0.35, {{1.0f, 1.0f, 9.0f}, {1.6f, 0.4f, 14.0f},
+                           {2.3f, 0.2f, 20.0f}}, 3,
+                    0.7f, 45.0f, 260.0, 1.1, 0.55f, 26.0f};
+
+        // --- wind and bowed ---------------------------------------------------
+        // Brass lips buzz: harmonics plus a noisy edge.
+        case AttackKind::LipBuzz:
+            return {0.13, {{1.0f, 0.6f, 18.0f}, {2.0f, 0.4f, 22.0f},
+                           {3.0f, 0.25f, 28.0f}}, 3,
+                    0.8f, 60.0f, 1600.0, 1.6, 0.0f, 0.0f};
+        // Pure air, no pitch at all — the flute-steam and clarinet-breathe
+        // family, and the one R50 was most obviously missing.
+        case AttackKind::Breath:
+            return {0.22, {}, 0, 1.8f, 18.0f, 1900.0, 1.1, 0.0f, 0.0f};
+        // A bow catching the string: noisy, slower to arrive than a strike.
+        case AttackKind::BowScrape:
+            return {0.26, {{1.0f, 0.3f, 12.0f}}, 1,
+                    1.4f, 14.0f, 1200.0, 2.2, 0.0f, 0.0f};
+    }
+    return {0.08, {}, 0, 1.0f, 50.0f, 0.0, 1.0, 0.0f, 0.0f};
+}
+
+/// A short one-shot transient, built in the time domain from its recipe.
 inline SampleData generateAttack(AttackKind kind, double sampleRate) {
-    struct Recipe { double seconds; double decay; };
-    const Recipe recipe = [kind] {
-        switch (kind) {
-            case AttackKind::Mallet:     return Recipe{0.12, 38.0};
-            case AttackKind::Pluck:      return Recipe{0.09, 45.0};
-            case AttackKind::Chiff:      return Recipe{0.07, 55.0};
-            case AttackKind::NoiseBurst: return Recipe{0.05, 90.0};
-            case AttackKind::TineStrike: return Recipe{0.11, 40.0};
-        }
-        return Recipe{0.08, 50.0};
-    }();
-
+    const AttackRecipe recipe = attackRecipe(kind);
     const int length = static_cast<int>(recipe.seconds * sampleRate);
     const double fundamental = 261.6255;   // built at C4, transposed on playback
     synth::FastRandom random(0xA1B2C3D4ULL + static_cast<uint64_t>(kind) * 7919ULL);
@@ -228,44 +342,46 @@ inline SampleData generateAttack(AttackKind kind, double sampleRate) {
     std::vector<float> buffer(length, 0.0f);
     synth::SVFStage band;
     band.setSampleRate(sampleRate);
-    band.setCoefficients(kind == AttackKind::Chiff ? 2600.0 : 1400.0, 2.0, 0.0f, 0.0f);
+    if (recipe.noiseCentre > 0.0) {
+        band.setCoefficients(recipe.noiseCentre, recipe.noiseQ, 0.0f, 0.0f);
+    }
+
+    // Partial phases are accumulated rather than evaluated from t, so a pitch
+    // drop can bend them.
+    double phase[6] = {0, 0, 0, 0, 0, 0};
 
     for (int n = 0; n < length; ++n) {
         const double t = n / sampleRate;
-        const float envelope = static_cast<float>(std::exp(-recipe.decay * t));
-        const float noise = random.nextBipolar();
-        float value = 0.0f;
+        const float bend = recipe.pitchDropOctaves > 0.0f
+            ? std::pow(2.0f, recipe.pitchDropOctaves
+                             * std::exp(-recipe.pitchDropRate * static_cast<float>(t)))
+            : 1.0f;
 
-        switch (kind) {
-            case AttackKind::Mallet:
-                value = static_cast<float>(
-                            std::sin(synth::kTwoPi * fundamental * 2.0 * t) * 0.7
-                          + std::sin(synth::kTwoPi * fundamental * 5.4 * t) * 0.3)
-                      + noise * 0.25f * static_cast<float>(std::exp(-260.0 * t));
-                break;
-            case AttackKind::Pluck:
-                value = band.process(noise).bp * 1.6f
-                      + static_cast<float>(
-                            std::sin(synth::kTwoPi * fundamental * t)) * 0.35f;
-                break;
-            case AttackKind::Chiff:
-                value = band.process(noise).bp * 2.0f;
-                break;
-            case AttackKind::NoiseBurst:
-                value = noise;
-                break;
-            case AttackKind::TineStrike:
-                value = static_cast<float>(
-                            std::sin(synth::kTwoPi * fundamental * 4.0 * t) * 0.6
-                          + std::sin(synth::kTwoPi * fundamental * 9.2 * t) * 0.4)
-                      + noise * 0.15f * static_cast<float>(std::exp(-300.0 * t));
-                break;
+        float value = 0.0f;
+        for (int i = 0; i < recipe.partialCount; ++i) {
+            const AttackPartial &partial = recipe.partials[i];
+            value += partial.amp
+                   * static_cast<float>(std::sin(synth::kTwoPi * phase[i]))
+                   * std::exp(-partial.decay * static_cast<float>(t));
+            phase[i] += fundamental * partial.ratio * bend / sampleRate;
+            if (phase[i] >= 1.0) phase[i] -= std::floor(phase[i]);
         }
-        buffer[n] = value * envelope;
+
+        if (recipe.noiseAmp > 0.0f) {
+            const float noise = random.nextBipolar();
+            const float shaped = recipe.noiseCentre > 0.0
+                ? band.process(noise).bp : noise;
+            value += shaped * recipe.noiseAmp
+                   * std::exp(-recipe.noiseDecay * static_cast<float>(t));
+        }
+        buffer[n] = value;
     }
 
     SampleData data;
     data.samples = std::move(buffer);
+    // Transients keep peak normalisation: RMS is meaningless for something that
+    // decays to nothing, and what matters is that the strike sits at a
+    // consistent height against the sustain it is layered onto.
     normalise(data.samples, 0.9f);
     data.sourceSampleRate = sampleRate;
     data.rootKey  = 60;
@@ -329,12 +445,25 @@ inline void buildFactoryContent(SampleLibrary &library) {
     }
 
     struct AttackSpec { AttackKind kind; const char *name; };
-    static const AttackSpec attacks[5] = {
-        {AttackKind::Mallet,     "Mallet"},
-        {AttackKind::Pluck,      "Pluck"},
-        {AttackKind::Chiff,      "Chiff"},
-        {AttackKind::NoiseBurst, "Noise Burst"},
-        {AttackKind::TineStrike, "Tine Strike"},
+    static const AttackSpec attacks[kAttackKindCount] = {
+        {AttackKind::Mallet,      "Mallet"},
+        {AttackKind::Pluck,       "Pluck"},
+        {AttackKind::Chiff,       "Chiff"},
+        {AttackKind::NoiseBurst,  "Noise Burst"},
+        {AttackKind::TineStrike,  "Tine Strike"},
+        {AttackKind::Marimba,     "Marimba"},
+        {AttackKind::Vibraphone,  "Vibraphone"},
+        {AttackKind::Xylophone,   "Xylophone"},
+        {AttackKind::Kalimba,     "Kalimba"},
+        {AttackKind::SlapBass,    "Slap Bass"},
+        {AttackKind::PullBass,    "Pull Bass"},
+        {AttackKind::Pick,        "Pick"},
+        {AttackKind::PianoHammer, "Piano Hammer"},
+        {AttackKind::Anvil,       "Anvil"},
+        {AttackKind::TaikoDrum,   "Taiko Drum"},
+        {AttackKind::LipBuzz,     "Lip Buzz"},
+        {AttackKind::Breath,      "Breath"},
+        {AttackKind::BowScrape,   "Bow Scrape"},
     };
 
     for (const AttackSpec &spec : attacks) {
