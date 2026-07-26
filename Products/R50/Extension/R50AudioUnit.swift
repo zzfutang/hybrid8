@@ -147,4 +147,11 @@ public final class R50AudioUnit: AUAudioUnit {
     func sampleInfo(at index: Int) -> [String: Any]? {
         kernel.sampleInfo(at: index)
     }
+
+    /// Preview a browser entry, independent of the patch.
+    func audition(instrument: Int, note: Int = 60, velocity: Int = 100) {
+        kernel.auditionInstrument(at: instrument,
+                                  note: UInt8(clamping: note),
+                                  velocity: UInt8(clamping: velocity))
+    }
 }

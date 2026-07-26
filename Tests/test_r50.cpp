@@ -1545,6 +1545,31 @@ int main() {
               "concurrent parameter writes stay finite while rendering");
     }
 
+    // --- Concurrent auditions ----------------------------------------------
+    {
+        // The browser posts previews from the UI thread. Same contract as the
+        // parameter store: one atomic word crosses, everything derived from it
+        // stays on the render thread. Also a smoke test on its own — TSan is
+        // what makes it mean something.
+        r50::R50Engine engine;
+        engine.setSampleRate(kSR);
+        engine.noteOn(60, 100);
+        const int instruments = r50::SampleLibrary::shared().instrumentCount();
+
+        std::atomic<bool> stop{false};
+        std::thread browser([&engine, &stop, instruments] {
+            for (int i = 0; !stop.load(std::memory_order_relaxed); ++i) {
+                engine.requestAudition(i % instruments, 36 + (i % 60), 100);
+            }
+        });
+
+        const float peak = render(engine, 1.0);
+        stop.store(true);
+        browser.join();
+        check(std::isfinite(peak) && peak <= 1.05f,
+              "auditions posted from another thread stay finite while rendering");
+    }
+
     // --- Filter stability --------------------------------------------------
     {
         for (float slope : {0.0f, 1.0f}) {
@@ -1682,6 +1707,71 @@ int main() {
             partial.noteOn(60, 1.0f, p);
             const double stopped = secondsUntilInactive(partial, p, 4.0);
             check(stopped >= 4.0, "a held wave Partial is untouched by the one-shot rule");
+        }
+    }
+
+    // --- Sample browser audition -------------------------------------------
+    {
+        const r50::SampleLibrary &lib = r50::SampleLibrary::shared();
+        int looped = -1;
+        for (int i = 0; i < lib.instrumentCount() && looped < 0; ++i) {
+            const r50::SampleData *d = lib.sample(lib.instrument(i)->regions[0].slot);
+            if (d != nullptr && d->loopMode == r50::LoopMode::Forward) looped = i;
+        }
+
+        {
+            r50::R50Engine engine;
+            engine.setSampleRate(kSR);
+            engine.requestAudition(looped, 60, 100);
+            check(render(engine, 0.3) > 0.02f, "audition sounds with no note playing");
+        }
+        {
+            // The preview has to survive a patch that would silence it, or it
+            // is telling you about the patch instead of the sample.
+            r50::R50Engine engine;
+            engine.setSampleRate(kSR);
+            engine.setParameter(R50ParamCutoff, 30.0f);
+            engine.setParameter(R50ParamP1Level, 0.0f);
+            engine.setParameter(R50ParamAmpAttack, 10.0f);
+            engine.setParameter(R50ParamFxReverbMix, 1.0f);
+            engine.requestAudition(looped, 60, 100);
+            check(render(engine, 0.3) > 0.02f, "audition ignores the patch");
+        }
+        {
+            // A looped sustain would otherwise drone until the user thought to
+            // stop it, and the browser has no stop button.
+            r50::R50Engine engine;
+            engine.setSampleRate(kSR);
+            engine.requestAudition(looped, 60, 100);
+            render(engine, 2.5);
+            check(render(engine, 0.5) < 0.001f, "audition releases itself");
+        }
+        {
+            r50::R50Engine engine;
+            engine.setSampleRate(kSR);
+            engine.requestAudition(looped, 60, 100);
+            render(engine, 2.5);
+            engine.requestAudition(looped, 60, 100);
+            check(render(engine, 0.3) > 0.02f,
+                  "the same audition twice retriggers");
+        }
+        {
+            // Auditioning must not spend a voice: all eight notes still have to
+            // be there afterwards.
+            r50::R50Engine reference, engine;
+            reference.setSampleRate(kSR);
+            engine.setSampleRate(kSR);
+            for (int i = 0; i < 8; ++i) { reference.noteOn(48 + i, 100); engine.noteOn(48 + i, 100); }
+            engine.requestAudition(looped, 60, 100);
+            render(engine, 3.0);
+            render(reference, 3.0);
+            const std::vector<float> withAudition = renderBuffer(engine, 0.3);
+            const std::vector<float> without = renderBuffer(reference, 0.3);
+            bool identical = withAudition.size() == without.size();
+            for (size_t i = 0; identical && i < without.size(); ++i) {
+                identical = withAudition[i] == without[i];
+            }
+            check(identical, "a finished audition leaves the eight voices untouched");
         }
     }
 

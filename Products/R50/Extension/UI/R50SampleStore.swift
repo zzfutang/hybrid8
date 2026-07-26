@@ -97,6 +97,13 @@ final class R50SampleStore: ObservableObject {
         model.objectWillChange.send()
     }
 
+    /// Preview one entry. Deliberately separate from `select`: auditioning is
+    /// how you decide whether you want a sample, and it would be no use if
+    /// hearing one meant assigning it to the Partial you are editing.
+    func audition(_ entry: SampleEntry, note: Int) {
+        audioUnit?.audition(instrument: entry.index, note: note)
+    }
+
     func refresh() {
         guard let audioUnit else { return }
         entries = (0..<audioUnit.instrumentCount).map { index in

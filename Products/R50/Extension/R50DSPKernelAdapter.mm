@@ -74,6 +74,12 @@
     return library.addInstrument(instrument);
 }
 
+- (void)auditionInstrumentAtIndex:(NSInteger)index
+                             note:(uint8_t)note
+                         velocity:(uint8_t)velocity {
+    _engine.requestAudition(static_cast<int>(index), note, velocity);
+}
+
 - (NSInteger)instrumentCount {
     return r50::SampleLibrary::shared().instrumentCount();
 }

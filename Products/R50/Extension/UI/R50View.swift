@@ -29,6 +29,7 @@ struct R50View: View {
     @State private var showingPresets = false
     /// Which Partial the Partial and Envelopes pages are editing.
     @State private var partial = 0
+    @State private var auditionKey = 60
 
     private func addr(_ field: R50PartialField) -> R50Param {
         r50PartialParam(Int32(partial), field)
@@ -654,6 +655,23 @@ struct R50View: View {
                     R50Value(title: "Sample Start", address: addr(R50FieldSampleStart),
                              model: model)
                     R50Value(title: "Octave", address: addr(R50FieldOctave), model: model)
+
+                    // Multisamples exist because they do not sound the same
+                    // across the keyboard, so a preview fixed at middle C would
+                    // hide the very thing the zones are there to fix.
+                    HStack(spacing: 6) {
+                        Text("AUDITION KEY")
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .tracking(0.8)
+                            .foregroundColor(R50Palette.engrave)
+                        Spacer()
+                        actionButton("<") { auditionKey = max(12, auditionKey - 12) }
+                        Text(SampleEntry.noteName(auditionKey))
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundColor(R50Palette.legend)
+                            .frame(width: 34)
+                        actionButton(">") { auditionKey = min(120, auditionKey + 12) }
+                    }
                     Text(statusText)
                         .font(.system(size: 8, weight: .medium, design: .monospaced))
                         .foregroundColor(R50Palette.engrave)
@@ -679,6 +697,7 @@ struct R50View: View {
     private var sampleTable: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
+                tableCell("", width: 34, header: true)
                 tableCell("NAME", width: 235, header: true)
                 tableCell("ZONES", width: 60, header: true)
                 tableCell("KEY RANGE", width: 120, header: true)
@@ -695,6 +714,7 @@ struct R50View: View {
                     ForEach(samples.entries) { entry in
                         let selected = entry.index == samples.selectedIndex
                         HStack(spacing: 0) {
+                            playCell(entry, selected: selected)
                             tableCell(entry.isFactory ? entry.name : "+ " + entry.name,
                                       width: 235, selected: selected,
                                       align: .leading, accent: !entry.isFactory)
@@ -714,6 +734,17 @@ struct R50View: View {
         .clipShape(RoundedRectangle(cornerRadius: 2))
         .overlay(RoundedRectangle(cornerRadius: 2)
             .stroke(Color(white: 0.32), lineWidth: 1))
+    }
+
+    /// Its own hit area rather than the row's: tapping a row assigns the sample
+    /// to the Partial, and you have to be able to hear one without doing that.
+    private func playCell(_ entry: SampleEntry, selected: Bool) -> some View {
+        Text("\u{25B6}")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundColor(selected ? Color.black : R50Palette.glow)
+            .frame(width: 34, height: 17)
+            .contentShape(Rectangle())
+            .onTapGesture { samples.audition(entry, note: auditionKey) }
     }
 
     private func tableCell(_ text: String, width: CGFloat,

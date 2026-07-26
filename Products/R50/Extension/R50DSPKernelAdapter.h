@@ -47,6 +47,14 @@ NS_ASSUME_NONNULL_BEGIN
 /// from the UI thread.
 - (nullable NSDictionary<NSString *, id> *)sampleInfoAtIndex:(NSInteger)index;
 
+/// Preview one browser entry. Lock-free: this only posts a request that the
+/// render thread picks up on its next control block, so it is safe to call from
+/// the UI thread while audio is running. The preview bypasses the patch and the
+/// voice pool — see R50Engine::requestAudition.
+- (void)auditionInstrumentAtIndex:(NSInteger)index
+                             note:(uint8_t)note
+                         velocity:(uint8_t)velocity;
+
 /// The real-time render block handed to the AUAudioUnit.
 - (AUInternalRenderBlock)internalRenderBlock;
 

@@ -41,6 +41,7 @@ public:
     void setSampleRate(double sr) {
         sampleRate_ = sr;
         for (auto &voice : voices_) voice.setSampleRate(sr);
+        auditionVoice_.setSampleRate(sr);
         effects_.setup(sr);
         gainSmoother_.setSampleRate(sr);
         gainSmoother_.setTimeConstant(20.0);
@@ -135,11 +136,33 @@ public:
 
     void allSoundOff() {
         for (auto &voice : voices_) voice.reset();
+        auditionVoice_.reset();
+        auditionHold_ = 0;
         effects_.reset();
         std::memset(keyDown_, 0, sizeof(keyDown_));
     }
 
     void setTempo(double) {}   // R50 has no tempo-synced sources (yet).
+
+    /// Preview one instrument from the sample browser, called from the UI
+    /// thread. It deliberately does not go through the patch: the browser is
+    /// for judging the raw content, and a preview filtered by whatever the
+    /// current patch happens to do would tell you about the patch instead. It
+    /// also stays out of the voice pool, so auditioning never steals a note
+    /// that is playing.
+    ///
+    /// The request is one atomic word rather than a lock: the render thread
+    /// picks it up on the next control block and nothing here can block it. The
+    /// sequence number in the top bits is what makes two identical requests
+    /// distinguishable, so auditioning the same sample twice retriggers.
+    void requestAudition(int instrument, uint8_t note, uint8_t velocity) {
+        const uint64_t sequence = auditionSequence_.fetch_add(1, std::memory_order_relaxed) + 1;
+        const uint64_t packed = (sequence << 32)
+                              | (static_cast<uint64_t>(instrument & 0xFFFF) << 16)
+                              | (static_cast<uint64_t>(note) << 8)
+                              | static_cast<uint64_t>(velocity);
+        auditionRequest_.store(packed, std::memory_order_release);
+    }
 
     float outputMeter() const { return meter_.load(std::memory_order_relaxed); }
 
@@ -183,11 +206,16 @@ public:
                 sharedLfoPhase_[i] -= std::floor(sharedLfoPhase_[i]);
             }
 
+            serviceAudition();
+
             for (auto &voice : voices_) {
                 if (voice.isActive()) {
                     voice.updateBlock(params_, bendSemitones,
                                       modWheel_, aftertouch_);
                 }
+            }
+            if (auditionVoice_.isActive()) {
+                auditionVoice_.updateBlock(auditionParams_, 0.0, 0.0f, 0.0f);
             }
 
             for (int i = 0; i < block; ++i) {
@@ -210,9 +238,22 @@ public:
                 // level does not change how hard the compressor works or how
                 // loud the reverb tail sits against the dry signal.
                 const StereoSample wet = effects_.process(sumL, sumR);
+
+                // The preview joins after the effects and before the master
+                // trim: it is not part of the patch, so the patch's reverb and
+                // compressor have no business acting on it, but the output
+                // level control still has to.
+                float auditionL = 0.0f, auditionR = 0.0f;
+                if (auditionVoice_.isActive()) {
+                    auditionVoice_.process(auditionL, auditionR);
+                    if (auditionHold_ > 0 && --auditionHold_ == 0) {
+                        auditionVoice_.noteOff();
+                    }
+                }
+
                 const float gain = gainSmoother_.next();
-                sumL = synth::softClip(wet.l * gain);
-                sumR = synth::softClip(wet.r * gain);
+                sumL = synth::softClip((wet.l + auditionL * kAuditionLevel) * gain);
+                sumR = synth::softClip((wet.r + auditionR * kAuditionLevel) * gain);
 
                 outL[offset + i] = sumL;
                 outR[offset + i] = sumR;
@@ -519,6 +560,44 @@ private:
         return nullptr;
     }
 
+    /// Pick up a pending browser preview, if one arrived since the last block.
+    void serviceAudition() {
+        const uint64_t packed = auditionRequest_.load(std::memory_order_acquire);
+        if (packed == auditionSeen_) return;
+        auditionSeen_ = packed;
+
+        const int     instrument = static_cast<int>((packed >> 16) & 0xFFFF);
+        const uint8_t note       = static_cast<uint8_t>((packed >> 8) & 0xFF);
+        const uint8_t velocity   = static_cast<uint8_t>(packed & 0xFF);
+
+        // A deliberately plain patch: one Partial, the sample straight through
+        // an open filter, no shaping of any kind. What you hear is the asset.
+        auditionParams_ = VoiceParams{};
+        auditionParams_.structure = ToneStructure::Mix;
+        PartialParams &p = auditionParams_.partial[0];
+        p = PartialParams{};
+        p.sourceType        = SourceType::Sample;
+        p.sampleInstrument  = instrument;
+        p.cutoffHz          = 20000.0f;
+        p.resonance         = 0.0f;
+        p.keyTrack          = 0.0f;
+        p.filterEnvAmount   = 0.0f;
+        p.ampAttack         = 0.002f;
+        p.ampDecay          = 0.01f;
+        p.ampSustain        = 1.0f;
+        p.ampRelease        = 0.35f;
+        auditionParams_.partial[1].enabled = false;
+
+        // Held for a fixed time rather than by the mouse: a looped sustain
+        // would otherwise drone until the user thought to stop it, and a
+        // one-shot ends on its own well inside the window.
+        auditionHold_ = static_cast<int>(kAuditionSeconds * sampleRate_);
+        auditionVoice_.reset();
+        auditionVoice_.setSampleRate(sampleRate_);
+        auditionVoice_.noteOn(note, velocity / 127.0f, auditionParams_,
+                              0.0f, 0.0f, 0.0f);
+    }
+
     /// Prefer a free voice; otherwise steal the quietest releasing one, and
     /// failing that the quietest held one.
     Voice *allocateVoice() {
@@ -548,6 +627,18 @@ private:
     bool   sustain_    = false;
     /// Physical key state, independent of the CC64 gate hold.
     bool   keyDown_[128] = {false};
+
+    // Sample-browser preview. The request word is the only thing crossing
+    // threads; everything derived from it lives on the render thread, exactly
+    // as the parameter store does.
+    static constexpr double kAuditionSeconds = 1.5;
+    static constexpr float  kAuditionLevel   = 0.55f;   // matches the voice sum
+    std::atomic<uint64_t> auditionRequest_{0};
+    std::atomic<uint64_t> auditionSequence_{0};
+    uint64_t    auditionSeen_ = 0;
+    Voice       auditionVoice_;
+    VoiceParams auditionParams_;
+    int         auditionHold_ = 0;
 
     GlobalEffects          effects_;
     float                  compressorAmount_ = 0.0f;
