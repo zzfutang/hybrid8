@@ -405,6 +405,113 @@ int main() {
         check(allGood, "every wave has real energy at its fundamental");
     }
 
+    // --- Noise source -------------------------------------------------------
+    {
+        // Average magnitude over a band of probes: a single DFT bin of noise is
+        // far too variable to assert on.
+        auto bandMagnitude = [](const std::vector<float> &buffer, double centre,
+                                int from) {
+            double sum = 0.0;
+            int count = 0;
+            for (int i = -10; i <= 10; ++i) {
+                sum += magAt(buffer, centre * (1.0 + i * 0.02), kSR, from);
+                ++count;
+            }
+            return sum / count;
+        };
+
+        // Slope over four octaves, 200 Hz -> 3200 Hz. White is flat, pink
+        // -3 dB/oct (0.25x), brown -6 (0.06x), blue +3 (4x), violet +6 (16x).
+        auto slope = [&](int spectrum) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(R50ParamNoiseMix, 1.0f);       // noise only
+            engine.setParameter(R50ParamNoiseSpectrum, static_cast<float>(spectrum));
+            engine.noteOn(60, 100);
+            const std::vector<float> buffer = renderBuffer(engine, 0.6);
+            const int from = static_cast<int>(buffer.size()) - kAnalysisLength;
+            return bandMagnitude(buffer, 3200.0, from)
+                 / (bandMagnitude(buffer, 200.0, from) + 1e-12);
+        };
+
+        const double white  = slope(0);
+        const double pink   = slope(1);
+        const double brown  = slope(2);
+        const double blue   = slope(3);
+        const double violet = slope(4);
+        printf("       noise 3200/200 Hz ratio: white=%.3f pink=%.3f brown=%.3f "
+               "blue=%.3f violet=%.3f\n", white, pink, brown, blue, violet);
+
+        check(white > 0.55 && white < 1.8,  "white noise is spectrally flat");
+        check(pink  > 0.12 && pink  < 0.50, "pink noise falls ~3 dB/octave");
+        check(brown < 0.20,                 "brown noise falls ~6 dB/octave");
+        check(blue  > 2.0,                  "blue noise rises ~3 dB/octave");
+        check(violet > 6.0,                 "violet noise rises ~6 dB/octave");
+        check(brown < pink && pink < white && white < blue && blue < violet,
+              "noise colours are ordered by spectral tilt");
+    }
+    {
+        // Band-passed noise tracking the note must put its energy near the
+        // note, not at a fixed frequency.
+        auto peakNear = [](double centre, int note) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(R50ParamNoiseMix, 1.0f);
+            engine.setParameter(R50ParamNoiseSpectrum, 5.0f);   // Band
+            engine.setParameter(R50ParamNoiseTone, 0.25f);
+            engine.setParameter(R50ParamNoisePitchTrack, 1.0f);
+            engine.noteOn(static_cast<uint8_t>(note), 100);
+            const std::vector<float> buffer = renderBuffer(engine, 0.6);
+            const int from = static_cast<int>(buffer.size()) - kAnalysisLength;
+            return magAt(buffer, centre, kSR, from);
+        };
+        // Tone 0.25 -> centre = f0 * 2.0.
+        const double lowNote  = peakNear(midiToHz(48) * 2.0, 48);
+        const double highNote = peakNear(midiToHz(48) * 2.0, 72);
+        check(lowNote > highNote * 3.0,
+              "band-passed noise follows the note when tracking is on");
+    }
+    {
+        // Mix is a crossfade: 0 is the oscillator alone, 1 the noise alone.
+        r50::R50Engine engine;
+        setupSpectralTone(engine, 0);
+        engine.setParameter(R50ParamNoiseSpectrum, 0.0f);
+        engine.noteOn(48, 100);
+        const double f0 = midiToHz(48);
+
+        engine.setParameter(R50ParamNoiseMix, 0.0f);
+        std::vector<float> oscOnly = renderBuffer(engine, 0.4);
+        const int fromA = static_cast<int>(oscOnly.size()) - kAnalysisLength;
+        const double tonalDry = magAt(oscOnly, f0, kSR, fromA);
+
+        engine.setParameter(R50ParamNoiseMix, 1.0f);
+        std::vector<float> noiseOnly = renderBuffer(engine, 0.4);
+        const int fromB = static_cast<int>(noiseOnly.size()) - kAnalysisLength;
+        const double tonalWet = magAt(noiseOnly, f0, kSR, fromB);
+
+        check(tonalDry > tonalWet * 10.0,
+              "noise mix crossfades the oscillator away");
+    }
+    {
+        // Voices must not share a noise stream, or an 8-note chord would sound
+        // like one noise source 8 times louder rather than eight sources.
+        r50::R50Engine engine;
+        setupSpectralTone(engine, 0);
+        engine.setParameter(R50ParamNoiseMix, 1.0f);
+        engine.noteOn(60, 100);
+        const float onePeak = render(engine, 0.2);
+
+        r50::R50Engine chord;
+        setupSpectralTone(chord, 0);
+        chord.setParameter(R50ParamNoiseMix, 1.0f);
+        for (int note = 60; note < 68; ++note) chord.noteOn(note, 100);
+        const float eightPeak = render(chord, 0.2);
+
+        // Correlated voices would sum to ~8x; decorrelated ones to ~sqrt(8).
+        check(eightPeak < onePeak * 6.0f,
+              "voices use decorrelated noise streams");
+    }
+
     // --- Determinism --------------------------------------------------------
     {
         auto renderOnce = [] {

@@ -25,7 +25,12 @@ public:
     R50Engine() {
         setDefaults();
         snapshotParams();
-        for (auto &voice : voices_) voice.setSampleRate(sampleRate_);
+        for (int i = 0; i < kNumVoices; ++i) {
+            voices_[i].setSampleRate(sampleRate_);
+            // Distinct, fixed per-voice noise seeds: voices decorrelate from
+            // one another, but a render stays bit-repeatable across instances.
+            voices_[i].setSeed(0x9E3779B97F4A7C15ULL * (i + 1) + 0x165667B1ULL);
+        }
     }
 
     void setSampleRate(double sr) {
@@ -191,6 +196,11 @@ private:
         set(R50ParamFilterRelease,   0.30f);
         set(R50ParamMasterGain,      0.8f);
         set(R50ParamPitchBendRange,  2.0f);
+        set(R50ParamNoiseMix,        0.0f);
+        set(R50ParamNoiseSpectrum,   0.0f);   // white
+        set(R50ParamNoiseTone,       0.5f);
+        set(R50ParamNoiseRate,       4000.0f);
+        set(R50ParamNoisePitchTrack, 0.0f);
     }
 
     /// Derive the denormalised block the voices read from the atomic store.
@@ -221,6 +231,16 @@ private:
         params_.filterDecay   = std::max(0.0005f, get(R50ParamFilterDecay));
         params_.filterSustain = synth::clampf(get(R50ParamFilterSustain), 0.0f, 1.0f);
         params_.filterRelease = std::max(0.0005f, get(R50ParamFilterRelease));
+
+        params_.noiseMix = synth::clampf(get(R50ParamNoiseMix), 0.0f, 1.0f);
+        const int spectrum = static_cast<int>(get(R50ParamNoiseSpectrum) + 0.5f);
+        params_.noiseSpectrum = static_cast<NoiseSpectrum>(
+            spectrum < 0 ? 0
+                         : (spectrum >= kNoiseSpectrumCount
+                                ? kNoiseSpectrumCount - 1 : spectrum));
+        params_.noiseTone       = synth::clampf(get(R50ParamNoiseTone), 0.0f, 1.0f);
+        params_.noiseRateHz     = get(R50ParamNoiseRate);
+        params_.noisePitchTrack = get(R50ParamNoisePitchTrack) >= 0.5f;
 
         gainSmoother_.setTarget(synth::clampf(get(R50ParamMasterGain), 0.0f, 1.0f));
     }

@@ -106,6 +106,47 @@ enum R50FactoryPresets {
             addr(R50ParamAmpRelease): 0.7,
         ]),
 
+        R50FactoryPreset(name: "Breathy Flute", values: [
+            addr(R50ParamOscWave): 7,        // clarinet
+            addr(R50ParamNoiseMix): 0.35,
+            addr(R50ParamNoiseSpectrum): 5,  // band-passed
+            addr(R50ParamNoiseTone): 0.3,
+            addr(R50ParamNoisePitchTrack): 1,
+            addr(R50ParamCutoff): 4800,
+            addr(R50ParamKeyTrack): 0.6,
+            addr(R50ParamAmpAttack): 0.09,
+            addr(R50ParamAmpSustain): 0.85,
+            addr(R50ParamAmpRelease): 0.2,
+        ]),
+
+        R50FactoryPreset(name: "Wind Bed", values: [
+            addr(R50ParamNoiseMix): 1.0,     // noise only
+            addr(R50ParamNoiseSpectrum): 1,  // pink
+            addr(R50ParamCutoff): 900,
+            addr(R50ParamResonance): 0.35,
+            addr(R50ParamKeyTrack): 1.0,
+            addr(R50ParamFilterEnvAmount): 0.3,
+            addr(R50ParamAmpAttack): 1.2,
+            addr(R50ParamAmpSustain): 1.0,
+            addr(R50ParamAmpRelease): 1.8,
+            addr(R50ParamFilterAttack): 1.5,
+            addr(R50ParamFilterSustain): 0.7,
+        ]),
+
+        R50FactoryPreset(name: "Digital Grit", values: [
+            addr(R50ParamOscWave): 3,        // 10% pulse
+            addr(R50ParamNoiseMix): 0.45,
+            addr(R50ParamNoiseSpectrum): 6,  // sample & hold
+            addr(R50ParamNoiseTone): 0.35,
+            addr(R50ParamNoisePitchTrack): 1,
+            addr(R50ParamCutoff): 3000,
+            addr(R50ParamResonance): 0.3,
+            addr(R50ParamDrive): 0.25,
+            addr(R50ParamAmpDecay): 0.4,
+            addr(R50ParamAmpSustain): 0.5,
+            addr(R50ParamAmpRelease): 0.2,
+        ]),
+
         R50FactoryPreset(name: "Glass Bell", values: [
             addr(R50ParamOscWave): 10,
             addr(R50ParamCutoff): 8500,

@@ -12,7 +12,7 @@ import AudioToolbox
 import SwiftUI
 
 enum R50Layout {
-    static let width: CGFloat  = 940
+    static let width: CGFloat  = 1180
     static let height: CGFloat = 520
 }
 

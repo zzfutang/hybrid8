@@ -27,6 +27,7 @@ struct R50View: View {
             header
             HStack(alignment: .top, spacing: 10) {
                 oscillator.frame(width: 190)
+                noise.frame(width: 230)
                 filter.frame(width: 300)
                 ampEnvelope.frame(width: 190)
                 filterEnvelope.frame(width: 190)
@@ -111,6 +112,24 @@ struct R50View: View {
         }
     }
 
+    private var noise: some View {
+        R50Panel(title: "Noise") {
+            VStack(alignment: .leading, spacing: 12) {
+                R50WaveGrid(title: "Spectrum", address: R50ParamNoiseSpectrum,
+                            options: R50Parameters.noiseSpectrumNames,
+                            columns: 3, model: model)
+                HStack(spacing: 4) {
+                    R50Knob(title: "Mix", address: R50ParamNoiseMix, model: model)
+                    R50Knob(title: "Tone", address: R50ParamNoiseTone, model: model)
+                    R50Knob(title: "Rate", address: R50ParamNoiseRate, model: model)
+                }
+                R50Selector(title: "Tone / Rate Source",
+                            address: R50ParamNoisePitchTrack,
+                            options: R50Parameters.trackNames, model: model)
+            }
+        }
+    }
+
     private var filter: some View {
         R50Panel(title: "Filter") {
             VStack(alignment: .leading, spacing: 14) {
@@ -164,7 +183,7 @@ struct R50View: View {
             R50Knob(title: "Master", address: R50ParamMasterGain, model: model)
             R50Knob(title: "Bend", address: R50ParamPitchBendRange, model: model)
             Spacer()
-            Text("8-VOICE · BAND-LIMITED PCM · ZDF LADDER")
+            Text("8-VOICE · BAND-LIMITED PCM + NOISE · ZDF LADDER")
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .tracking(1.4)
                 .foregroundColor(R50Palette.glowDim)

@@ -35,6 +35,14 @@ typedef enum R50Param : unsigned long long {
     R50ParamMasterGain,          // 0 .. 1 (linear)
     R50ParamPitchBendRange,      // semitones
 
+    // Appended in phase 2. The enum is append-only: inserting here would
+    // silently remap every saved preset and host automation lane.
+    R50ParamNoiseMix,            // 0 = oscillator only .. 1 = noise only
+    R50ParamNoiseSpectrum,       // 0..6, see NoiseSpectrum in R50Noise.hpp
+    R50ParamNoiseTone,           // 0 .. 1 (band centre / step-rate scaling)
+    R50ParamNoiseRate,           // Hz (Sample & Hold step rate)
+    R50ParamNoisePitchTrack,     // 0 = fixed, 1 = follows the note
+
     R50ParamCount
 } R50Param;
 

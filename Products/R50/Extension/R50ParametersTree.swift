@@ -15,6 +15,12 @@ enum R50Parameters {
     ]
     static let slopeNames    = ["12 dB", "24 dB"]
 
+    /// Order must match NoiseSpectrum in R50Noise.hpp.
+    static let noiseSpectrumNames = [
+        "White", "Pink", "Brown", "Blue", "Violet", "Band", "S&H"
+    ]
+    static let trackNames = ["Fixed", "Track"]
+
     private static let readWrite: AudioUnitParameterOptions =
         [.flag_IsReadable, .flag_IsWritable]
     private static let readWriteLog: AudioUnitParameterOptions =
@@ -55,6 +61,23 @@ enum R50Parameters {
                       min: 0.02, max: 0.98, value: 0.5),
                 param(R50ParamOctave, "octave", "Octave",
                       min: -2, max: 2, value: 0, unit: .indexed),
+            ])
+
+        let noise = AUParameterTree.createGroup(
+            withIdentifier: "noise", name: "Noise", children: [
+                param(R50ParamNoiseMix, "noiseMix", "Noise Mix",
+                      min: 0, max: 1, value: 0),
+                param(R50ParamNoiseSpectrum, "noiseSpectrum", "Spectrum",
+                      min: 0, max: AUValue(noiseSpectrumNames.count - 1),
+                      value: 0, unit: .indexed, strings: noiseSpectrumNames),
+                param(R50ParamNoiseTone, "noiseTone", "Noise Tone",
+                      min: 0, max: 1, value: 0.5),
+                param(R50ParamNoiseRate, "noiseRate", "Noise Rate",
+                      min: 20, max: 16000, value: 4000,
+                      unit: .hertz, log: true),
+                param(R50ParamNoisePitchTrack, "noiseTrack", "Noise Track",
+                      min: 0, max: 1, value: 0, unit: .indexed,
+                      strings: trackNames),
             ])
 
         let filter = AUParameterTree.createGroup(
@@ -114,6 +137,6 @@ enum R50Parameters {
             ])
 
         return AUParameterTree.createTree(
-            withChildren: [osc, filter, ampEnv, filterEnv, global])
+            withChildren: [osc, noise, filter, ampEnv, filterEnv, global])
     }
 }

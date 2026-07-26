@@ -12,6 +12,7 @@
 
 #include "ADSR.hpp"
 #include "Filter.hpp"
+#include "R50Noise.hpp"
 #include "R50WaveOscillator.hpp"
 #include "Utils.hpp"
 
@@ -23,6 +24,13 @@ struct VoiceParams {
     int   waveIndex           = 0;      // index into waveDescriptors()
     float pulseWidth          = 0.5f;   // only read by Difference-mode waves
     int   octave              = 0;
+
+    // Source mix: 0 = oscillator only, 1 = noise only.
+    float         noiseMix      = 0.0f;
+    NoiseSpectrum noiseSpectrum = NoiseSpectrum::White;
+    float         noiseTone     = 0.5f;
+    float         noiseRateHz   = 4000.0f;
+    bool          noisePitchTrack = false;
 
     float cutoffHz            = 4000.0f;
     float resonance           = 0.2f;
@@ -40,12 +48,16 @@ public:
     void setSampleRate(double sr) {
         sampleRate_ = sr;
         osc_.setSampleRate(sr);
+        noise_.setSampleRate(sr);
         filter_.setSampleRate(sr);
         ampEnv_.setSampleRate(sr);
         filterEnv_.setSampleRate(sr);
     }
 
+    void setSeed(uint64_t seed) { noise_.setSeed(seed); }
+
     void reset() {
+        noise_.reset();
         filter_.reset();
         ampEnv_.resetHard();
         filterEnv_.resetHard();
@@ -84,9 +96,13 @@ public:
 
         osc_.setWave(p.waveIndex);
         osc_.setWidth(p.pulseWidth);
+        noiseMix_ = synth::clampf(p.noiseMix, 0.0f, 1.0f);
         const double midi = static_cast<double>(note_)
                           + p.octave * 12.0 + pitchBendSemitones;
-        osc_.setFrequency(synth::noteToHz(midi));
+        const double noteHz = synth::noteToHz(midi);
+        osc_.setFrequency(noteHz);
+        noise_.updateBlock(p.noiseSpectrum, p.noiseTone, p.noiseRateHz,
+                           p.noisePitchTrack, noteHz);
 
         // Cutoff in octaves: base + key tracking + bipolar envelope.
         const double keyOctaves = p.keyTrack * (note_ - 60) / 12.0;
@@ -110,8 +126,12 @@ public:
             return 0.0f;
         }
 
-        const float osc = osc_.process();
-        return filter_.process(osc) * ampLevel_ * velocity_;
+        // Crossfade the two sources before the filter, so the filter and its
+        // envelope shape noise exactly as they shape the oscillator.
+        const float osc   = osc_.process();
+        const float noise = noise_.process();
+        const float source = osc + (noise - osc) * noiseMix_;
+        return filter_.process(source) * ampLevel_ * velocity_;
     }
 
 private:
@@ -127,6 +147,7 @@ private:
     }
 
     WaveOscillator     osc_;
+    NoiseSource        noise_;
     synth::LadderFilter filter_;
     synth::ADSR        ampEnv_;
     synth::ADSR        filterEnv_;
@@ -136,6 +157,7 @@ private:
     float  velocity_    = 1.0f;
     bool   held_        = false;
     bool   active_      = false;
+    float  noiseMix_    = 0.0f;
     float  ampLevel_    = 0.0f;
     float  filterLevel_ = 0.0f;
 };
