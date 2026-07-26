@@ -9,6 +9,13 @@
 //  voice. Each voice is seeded deterministically from its index, so voices
 //  decorrelate from one another while a render stays bit-repeatable.
 //
+//  The per-spectrum gains are trimmed so every colour lands at the same output
+//  level as a wave table. They are not equal, and cannot be: each filter shapes
+//  a different amount of the spectrum away, and the voice filter then removes a
+//  different share again depending on where the energy sits. Measured before
+//  trimming, the colours spanned 11 dB — violet and the band-pass nearly 9 dB
+//  below a saw while blue sat 2 dB above it.
+//
 
 #pragma once
 
@@ -79,15 +86,15 @@ public:
 
         switch (spectrum_) {
             case NoiseSpectrum::White:
-                return white * 0.65f;
+                return white * 1.06f;
 
             case NoiseSpectrum::Pink:
-                return processPink(white) * 0.20f;
+                return processPink(white) * 0.31f;
 
             case NoiseSpectrum::Brown: {
                 // Leaky integrator: -6 dB/oct without unbounded DC drift.
                 brown_ = (brown_ + 0.02f * white) / 1.02f;
-                return brown_ * 5.0f;
+                return brown_ * 8.4f;
             }
 
             case NoiseSpectrum::Blue: {
@@ -95,18 +102,18 @@ public:
                 const float pink = processPink(white);
                 const float blue = pink - lastPink_;
                 lastPink_ = pink;
-                return blue * 1.7f;
+                return blue * 1.33f;
             }
 
             case NoiseSpectrum::Violet: {
                 // Differentiated white is +6 dB/oct.
                 const float violet = white - lastWhite_;
                 lastWhite_ = white;
-                return violet * 0.35f;
+                return violet * 0.98f;
             }
 
             case NoiseSpectrum::Filtered:
-                return bandpass_.process(white).bp * 0.5f;
+                return bandpass_.process(white).bp * 1.35f;
 
             case NoiseSpectrum::SampleHold: {
                 stepPhase_ += stepInc_;
@@ -114,7 +121,7 @@ public:
                     stepPhase_ -= std::floor(stepPhase_);
                     stepValue_ = white;
                 }
-                return stepValue_ * 0.65f;
+                return stepValue_ * 0.81f;
             }
         }
         return 0.0f;

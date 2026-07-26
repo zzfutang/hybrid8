@@ -58,9 +58,17 @@ public:
             double offsetPhase = phase_ - width;
             if (offsetPhase < 0.0) offsetPhase += 1.0;
             // saw(t) - saw(t - w) is a pulse of width w. Its mean is already
-            // zero for any w, so no DC removal is needed; the gain restores unit
-            // peak, which would otherwise approach 2 as the pulse narrows.
-            const float gain = 0.5f / std::max(width, 1.0f - width);
+            // zero for any w, so no DC removal is needed.
+            //
+            // A rectangular wave's RMS is 2*g*sqrt(w*(1-w)), so peak-matching
+            // leaves a 10% pulse about 5 dB below a square. Match RMS instead,
+            // then fall back to the peak ceiling for very narrow widths where
+            // that would push the peak too high.
+            const float rmsGain = kSourceTargetRms
+                                / (2.0f * std::sqrt(std::max(width * (1.0f - width), 1e-6f)));
+            const float peakGain = kSourcePeakCeiling
+                                 / (2.0f * std::max(width, 1.0f - width));
+            const float gain = std::min(rmsGain, peakGain);
             value = (waveSample(pyramid, levelF_, phase_)
                    - waveSample(pyramid, levelF_, offsetPhase)) * gain;
         }

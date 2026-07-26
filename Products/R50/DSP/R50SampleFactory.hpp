@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "Filter.hpp"
+#include "R50Levels.hpp"
 #include "R50Sample.hpp"
 #include "Utils.hpp"
 
@@ -91,6 +92,22 @@ inline void normalise(std::vector<float> &buffer, float peak) {
     float maximum = 1e-9f;
     for (float value : buffer) maximum = std::max(maximum, std::fabs(value));
     const float scale = peak / maximum;
+    for (float &value : buffer) value *= scale;
+}
+
+/// Match a looped sustain to the same RMS the wave tables use, so switching a
+/// Partial between a wave and a sample is a change of timbre and not of level.
+inline void normaliseRms(std::vector<float> &buffer) {
+    double sumSquares = 0.0;
+    float maximum = 1e-9f;
+    for (float value : buffer) {
+        sumSquares += static_cast<double>(value) * value;
+        maximum = std::max(maximum, std::fabs(value));
+    }
+    const float rms = static_cast<float>(
+        std::sqrt(sumSquares / std::max<size_t>(1, buffer.size())));
+    float scale = kSourceTargetRms / std::max(rms, 1e-9f);
+    if (maximum * scale > kSourcePeakCeiling) scale = kSourcePeakCeiling / maximum;
     for (float &value : buffer) value *= scale;
 }
 
@@ -176,7 +193,7 @@ inline SampleData generateSustain(SustainVoicing voicing, double frequency,
 
     SampleData data;
     data.samples = renderPartials(partials, length);
-    normalise(data.samples, 0.85f);
+    normaliseRms(data.samples);
     data.sourceSampleRate = sampleRate;
     data.rootKey  = rootKey;
     data.loopStart = 0;

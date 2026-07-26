@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "R50Levels.hpp"
 #include "Utils.hpp"
 
 namespace r50 {
@@ -154,13 +155,22 @@ inline WavePyramid waveBuildPyramid(const WaveSpectrum &spectrum) {
     WavePyramid pyramid;
     pyramid.levels[0] = waveBuildMip(spectrum, 0, 0.0f);
 
+    double sumSquares = 0.0;
     float peak = 1e-9f;
-    for (float sample : pyramid.levels[0].samples)
+    for (float sample : pyramid.levels[0].samples) {
+        sumSquares += static_cast<double>(sample) * sample;
         peak = std::max(peak, std::fabs(sample));
-    for (float &sample : pyramid.levels[0].samples) sample /= peak;
+    }
+    const float rms = static_cast<float>(
+        std::sqrt(sumSquares / std::max<size_t>(1, pyramid.levels[0].samples.size())));
 
+    float scale = kSourceTargetRms / std::max(rms, 1e-9f);
+    if (peak * scale > kSourcePeakCeiling) scale = kSourcePeakCeiling / peak;
+    const float normFactor = 1.0f / scale;
+
+    for (float &sample : pyramid.levels[0].samples) sample /= normFactor;
     for (int level = 1; level < kWaveNumLevels; ++level)
-        pyramid.levels[level] = waveBuildMip(spectrum, level, peak);
+        pyramid.levels[level] = waveBuildMip(spectrum, level, normFactor);
 
     return pyramid;
 }

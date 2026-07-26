@@ -123,6 +123,7 @@
 		500DB9C8FB202ADBA6321677 /* R50Product.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50Product.swift; sourceTree = "<group>"; };
 		5C2CF0929FB2CD6E611FF697 /* InstrumentProduct.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstrumentProduct.swift; sourceTree = "<group>"; };
 		5D2A41C1C9551453765E809A /* Hybrid8App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hybrid8App.swift; sourceTree = "<group>"; };
+		5FF121422DF67029FFE09351 /* R50Levels.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Levels.hpp; sourceTree = "<group>"; };
 		61D2883D0081EEAEB74A495F /* FactoryPresets.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FactoryPresets.json; sourceTree = "<group>"; };
 		67713C77EF118D8CE3CD5898 /* R50Waveshaper.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Waveshaper.hpp; sourceTree = "<group>"; };
 		772DF3A82502AEDD6C9C552E /* R50ParametersTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50ParametersTree.swift; sourceTree = "<group>"; };
@@ -271,6 +272,7 @@
 			children = (
 				B1F99D67BD35FB874E88A075 /* R50Engine.hpp */,
 				035FA057E8E955E7FAC3B81D /* R50Envelope.hpp */,
+				5FF121422DF67029FFE09351 /* R50Levels.hpp */,
 				4E1AA536D5BCEFC6B916629C /* R50Noise.hpp */,
 				8D90BFA8D15AB1DC1692CC68 /* R50Partial.hpp */,
 				19FA9B3BB4AE406828814F9A /* R50Sample.hpp */,

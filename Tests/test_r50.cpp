@@ -702,7 +702,10 @@ int main() {
                     if (!std::isfinite(value)) allGood = false;
                     peak = std::max(peak, std::fabs(value));
                 }
-                if (peak < 0.2f || peak > 1.0f) allGood = false;
+                // Sources are RMS-matched with a peak ceiling above unity, so
+                // the bound tracks that convention rather than a bare 1.0.
+                if (peak < 0.2f || peak > r50::kSourcePeakCeiling + 0.01f)
+                    allGood = false;
 
                 if (data->loopMode == r50::LoopMode::Forward) {
                     ++loopedCount;

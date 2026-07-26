@@ -201,7 +201,7 @@ enum R50FactoryPresets {
         // Ring modulation: a bell against a fifth above it.
         R50FactoryPreset(name: "◆ Ring Bells", values: [
             addr(R50ParamToneStructure): AUValue(Structure.ring),
-            addr(R50ParamToneRingLevel): 3.5,
+            addr(R50ParamToneRingLevel): 2.2,
 
             p1(R50FieldOscWave): 10,          // Bell
             p1(R50FieldCutoff): 9000,

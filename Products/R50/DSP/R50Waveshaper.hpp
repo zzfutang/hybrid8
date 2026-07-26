@@ -53,15 +53,19 @@ public:
         // Exponential taper: the useful range of a shaper is bunched at the
         // bottom, exactly as it is for the filter's own drive control.
         //
-        // Folding gets a gentler range than the clippers. Each extra fold
-        // multiplies the harmonics it generates, and measured on a sine the
-        // inharmonic energy runs 0.3% at a gain of 6 but 5% at 12.8 and stops
-        // improving with oversampling beyond that. Deep folding of an already
-        // bright source is grit, not tone, so the control does not offer it.
+        // A Partial reaches this stage at roughly half full scale, so the
+        // folder needs enough gain to fold that several times over — a range
+        // sized for a unit-amplitude signal barely folds a real one at all.
         const float amount = synth::clampf(drive, 0.0f, 1.0f);
-        const float depth = (type == ShaperType::Fold) ? 6.0f : 24.0f;
+        const float depth = (type == ShaperType::Fold) ? 18.0f : 24.0f;
         gain_ = 1.0f + amount * amount * depth;
-        makeup_ = 1.0f / (1.0f + amount * 1.8f);
+
+        // No makeup. Every type here is bounded to +/-1 by construction, so
+        // driving one harder redistributes energy rather than adding level.
+        // The filter's drive compensation, which this was copied from, exists
+        // because a tanh stage genuinely does get louder; applying it to a
+        // wavefolder just made folding quieter the harder it folded.
+        makeup_ = 1.0f;
     }
 
     ShaperType type() const { return type_; }

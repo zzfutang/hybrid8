@@ -163,7 +163,10 @@ public:
                 }
 
                 // Headroom for stacked voices, then a gentle safety clip.
-                const float gain = 0.25f * gainSmoother_.next();
+                // 0.25 was sized for eight voices all peaking together, which
+                // left a single note at -20 dBFS; the soft clip exists exactly
+                // to catch the rare moment when a dense chord does line up.
+                const float gain = 0.55f * gainSmoother_.next();
                 sumL = synth::softClip(sumL * gain);
                 sumR = synth::softClip(sumR * gain);
 
