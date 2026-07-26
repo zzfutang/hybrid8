@@ -59,10 +59,25 @@ typedef enum R50Param : unsigned long long {
     R50ParamP1Semitone,          // -24 .. +24
     R50ParamP1Fine,              // -100 .. +100 cents
 
+    // The workstation EG's extra levels and times, the pitch envelope and the
+    // waveshaper — Partial 1's copies, appended like everything else.
+    R50ParamP1AmpAttackLevel,
+    R50ParamP1AmpBreak,
+    R50ParamP1AmpSlope,
+    R50ParamP1FilterAttackLevel,
+    R50ParamP1FilterBreak,
+    R50ParamP1FilterSlope,
+    R50ParamP1PitchAmount,
+    R50ParamP1PitchAttack,
+    R50ParamP1PitchDecay,
+    R50ParamP1ShaperType,
+    R50ParamP1ShaperDrive,
+    R50ParamP1ShaperPosition,
+
     // Partial 2: the full field set in R50PartialField order. Address it with
     // r50PartialParam() rather than by name.
     R50ParamP2Base,
-    R50ParamP2Last = R50ParamP2Base + 29,
+    R50ParamP2Last = R50ParamP2Base + 41,
 
     // --- Tone structure -----------------------------------------------------
     R50ParamToneStructure,       // 0..4, see ToneStructure in R50Voice.hpp
@@ -107,6 +122,21 @@ typedef enum R50PartialField {
     R50FieldPan,
     R50FieldSemitone,
     R50FieldFine,
+
+    // Workstation EG extras, pitch envelope and waveshaper.
+    R50FieldAmpAttackLevel,
+    R50FieldAmpBreak,
+    R50FieldAmpSlope,
+    R50FieldFilterAttackLevel,
+    R50FieldFilterBreak,
+    R50FieldFilterSlope,
+    R50FieldPitchAmount,
+    R50FieldPitchAttack,
+    R50FieldPitchDecay,
+    R50FieldShaperType,
+    R50FieldShaperDrive,
+    R50FieldShaperPosition,
+
     R50PartialFieldCount
 } R50PartialField;
 
@@ -149,6 +179,18 @@ static inline R50Param r50PartialParam(int partial, R50PartialField field) {
         case R50FieldPan:              return R50ParamP1Pan;
         case R50FieldSemitone:         return R50ParamP1Semitone;
         case R50FieldFine:             return R50ParamP1Fine;
+        case R50FieldAmpAttackLevel:   return R50ParamP1AmpAttackLevel;
+        case R50FieldAmpBreak:         return R50ParamP1AmpBreak;
+        case R50FieldAmpSlope:         return R50ParamP1AmpSlope;
+        case R50FieldFilterAttackLevel:return R50ParamP1FilterAttackLevel;
+        case R50FieldFilterBreak:      return R50ParamP1FilterBreak;
+        case R50FieldFilterSlope:      return R50ParamP1FilterSlope;
+        case R50FieldPitchAmount:      return R50ParamP1PitchAmount;
+        case R50FieldPitchAttack:      return R50ParamP1PitchAttack;
+        case R50FieldPitchDecay:       return R50ParamP1PitchDecay;
+        case R50FieldShaperType:       return R50ParamP1ShaperType;
+        case R50FieldShaperDrive:      return R50ParamP1ShaperDrive;
+        case R50FieldShaperPosition:   return R50ParamP1ShaperPosition;
         default:                       return R50ParamCount;
     }
 }

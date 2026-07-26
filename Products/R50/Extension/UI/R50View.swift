@@ -4,14 +4,19 @@
 //  scaled uniformly to fit whatever size the host gives us, so the panel keeps
 //  its proportions in Logic, in the standalone app and at any zoom.
 //
+//  The visual language is a digital workstation rather than an analogue
+//  emulation: values are read out as numbers over bars, lists are lists, and
+//  the envelopes are plotted. Nothing pretends to be a panel-mounted pot.
+//
 
 import SwiftUI
 import UniformTypeIdentifiers
 
 enum R50Page: String, CaseIterable {
-    case partial = "Partial"
-    case tone    = "Tone"
-    case samples = "Samples"
+    case partial   = "Partial"
+    case envelopes = "Envelopes"
+    case tone      = "Tone"
+    case samples   = "Samples"
 }
 
 struct R50View: View {
@@ -19,7 +24,7 @@ struct R50View: View {
     @ObservedObject var samples: R50SampleStore
     @State private var page: R50Page = .partial
     @State private var showingImporter = false
-    /// Which Partial the Synth page panels are editing.
+    /// Which Partial the Partial and Envelopes pages are editing.
     @State private var partial = 0
 
     private func addr(_ field: R50PartialField) -> R50Param {
@@ -36,7 +41,7 @@ struct R50View: View {
                 .frame(width: geo.size.width, height: geo.size.height)
         }
         .background(R50Palette.chassisLow)
-        // Keep the sample browser pointed at the Partial the Synth page edits.
+        // Keep the sample browser pointed at the Partial being edited.
         .onChange(of: partial) { samples.partial = $0 }
     }
 
@@ -56,34 +61,93 @@ struct R50View: View {
                            startPoint: .top, endPoint: .bottom))
     }
 
-    // MARK: - Pages
-
     @ViewBuilder
     private var pageContent: some View {
         switch page {
-        case .partial: partialPage
-        case .tone:    tonePage
-        case .samples: samplePage
+        case .partial:   partialPage
+        case .envelopes: envelopePage
+        case .tone:      tonePage
+        case .samples:   samplePage
         }
     }
 
-    private var partialPage: some View {
-        VStack(spacing: 8) {
-            partialStrip
-            HStack(alignment: .top, spacing: 10) {
-                oscillator.frame(width: 200)
-                noise.frame(width: 215)
-                filter.frame(width: 285)
-                ampEnvelope.frame(width: 175)
-                filterEnvelope.frame(width: 175)
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("R50")
+                    .font(.system(size: 30, weight: .heavy, design: .monospaced))
+                    .tracking(4)
+                    .foregroundColor(R50Palette.legend)
+                Text("Rytell · monotimbral 8-voice")
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .tracking(1.2)
+                    .foregroundColor(R50Palette.engrave)
             }
-            .frame(maxHeight: .infinity)
+
+            pageTabs
+            Spacer()
+            presetBrowser
+            Spacer()
+            R50Meter(level: model.outputLevel)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private var pageTabs: some View {
+        HStack(spacing: 2) {
+            ForEach(R50Page.allCases, id: \.self) { candidate in
+                let selected = candidate == page
+                Text(candidate.rawValue.uppercased())
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .tracking(1.0)
+                    .foregroundColor(selected ? Color.black : R50Palette.legend)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(selected ? R50Palette.glow : Color(white: 0.14))
+                    .contentShape(Rectangle())
+                    .onTapGesture { page = candidate }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 2))
+        .overlay(RoundedRectangle(cornerRadius: 2)
+            .stroke(Color(white: 0.32), lineWidth: 1))
+    }
+
+    private var presetBrowser: some View {
+        HStack(spacing: 8) {
+            stepButton("◀") { step(-1) }
+            Text(R50FactoryPresets.all[safe: model.presetIndex]?.name ?? "Init")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundColor(R50Palette.glow)
+                .frame(width: 170, height: 24)
+                .background(R50Palette.track)
+                .overlay(RoundedRectangle(cornerRadius: 2)
+                    .stroke(Color(white: 0.30), lineWidth: 1))
+            stepButton("▶") { step(1) }
         }
     }
 
-    /// Which Partial the panels below edit, plus that Partial's own mix
-    /// controls — they belong next to the selector rather than buried in a
-    /// panel, because they are what make two Partials a Tone.
+    private func stepButton(_ glyph: String, action: @escaping () -> Void) -> some View {
+        Text(glyph)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(R50Palette.legend)
+            .frame(width: 22, height: 24)
+            .background(Color(white: 0.15))
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color(white: 0.30), lineWidth: 1))
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+    }
+
+    private func step(_ delta: Int) {
+        let count = R50FactoryPresets.all.count
+        guard count > 0 else { return }
+        model.applyPreset((model.presetIndex + delta + count) % count)
+    }
+
+    /// Which Partial the page below edits, and whether it sounds at all.
     private var partialStrip: some View {
         HStack(spacing: 10) {
             HStack(spacing: 2) {
@@ -111,22 +175,195 @@ struct R50View: View {
             R50Selector(title: "", address: addr(R50FieldEnabled),
                         options: R50Parameters.onOffNames, model: model)
                 .frame(width: 96)
-
-            Text("EDITING PARTIAL \(partial + 1) — MIX AND STRUCTURE ON THE TONE PAGE")
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                .tracking(1.0)
-                .foregroundColor(R50Palette.glowDim)
             Spacer()
         }
     }
 
-    /// How the two Partials relate: the structure that combines them and the
-    /// mix that balances them. Moving these off the Partial page is what let
-    /// that page stop overflowing its fascia.
+    // MARK: - Partial page
+
+    private var partialPage: some View {
+        VStack(spacing: 8) {
+            partialStrip
+            HStack(alignment: .top, spacing: 10) {
+                source.frame(width: 262)
+                noise.frame(width: 262)
+                filter.frame(width: 300)
+                shaper.frame(width: 236)
+            }
+            .frame(maxHeight: .infinity)
+        }
+    }
+
+    /// The Partial's sound source. Whichever kind is selected, its name is on
+    /// screen — a grid with one button per entry cannot do that once the list
+    /// is a dozen waves plus however many samples have been imported.
+    private var source: some View {
+        let isSample = model.value(addr(R50FieldSourceType)) >= 0.5
+        return R50Panel(title: "Source") {
+            VStack(alignment: .leading, spacing: 8) {
+                R50Selector(title: "Type", address: addr(R50FieldSourceType),
+                            options: R50Parameters.sourceTypeNames, model: model)
+                R50NameSelector(
+                    title: isSample ? "Instrument" : "Wave",
+                    address: isSample ? addr(R50FieldSampleInstrument)
+                                      : addr(R50FieldOscWave),
+                    names: isSample ? samples.entries.map(\.name)
+                                    : R50Parameters.waveformNames,
+                    model: model)
+                if isSample {
+                    R50Value(title: "Sample Start",
+                             address: addr(R50FieldSampleStart), model: model)
+                } else {
+                    R50Value(title: "Pulse Width",
+                             address: addr(R50FieldPulseWidth), model: model)
+                }
+                R50Value(title: "Octave", address: addr(R50FieldOctave), model: model)
+                R50Value(title: "Semitone", address: addr(R50FieldSemitone), model: model)
+                R50Value(title: "Fine", address: addr(R50FieldFine), model: model)
+            }
+        }
+    }
+
+    private var noise: some View {
+        R50Panel(title: "Noise") {
+            VStack(alignment: .leading, spacing: 8) {
+                R50WaveGrid(title: "Spectrum", address: addr(R50FieldNoiseSpectrum),
+                            options: R50Parameters.noiseSpectrumNames,
+                            columns: 4, model: model)
+                R50Value(title: "Mix", address: addr(R50FieldNoiseMix), model: model)
+                R50Value(title: "Tone", address: addr(R50FieldNoiseTone), model: model)
+                R50Value(title: "Rate", address: addr(R50FieldNoiseRate), model: model)
+                R50Selector(title: "Tone / Rate Source",
+                            address: addr(R50FieldNoisePitchTrack),
+                            options: R50Parameters.trackNames, model: model)
+            }
+        }
+    }
+
+    private var filter: some View {
+        R50Panel(title: "Filter") {
+            VStack(alignment: .leading, spacing: 8) {
+                R50Selector(title: "Slope", address: addr(R50FieldSlope),
+                            options: R50Parameters.slopeNames, model: model)
+                R50Value(title: "Cutoff", address: addr(R50FieldCutoff), model: model)
+                R50Value(title: "Resonance", address: addr(R50FieldResonance), model: model)
+                R50Value(title: "Drive", address: addr(R50FieldDrive), model: model)
+                R50Value(title: "Key Track", address: addr(R50FieldKeyTrack), model: model)
+                R50Value(title: "Env Amount", address: addr(R50FieldFilterEnvAmount),
+                         model: model)
+            }
+        }
+    }
+
+    private var shaper: some View {
+        R50Panel(title: "Waveshaper") {
+            VStack(alignment: .leading, spacing: 8) {
+                R50Selector(title: "Type", address: addr(R50FieldShaperType),
+                            options: R50Parameters.shaperTypeNames, model: model)
+                R50Value(title: "Drive", address: addr(R50FieldShaperDrive), model: model)
+                R50Selector(title: "Position", address: addr(R50FieldShaperPosition),
+                            options: R50Parameters.shaperPositionNames, model: model)
+                Text("PRE lets the filter tame what shaping adds. POST puts it on top of the filtered signal.")
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundColor(R50Palette.engrave)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - Envelopes page
+
+    private var envelopePage: some View {
+        VStack(spacing: 8) {
+            partialStrip
+            HStack(alignment: .top, spacing: 10) {
+                envelopePanel(title: "Amp Envelope",
+                              attack: R50FieldAmpAttack,
+                              attackLevel: R50FieldAmpAttackLevel,
+                              decay: R50FieldAmpDecay,
+                              breakPoint: R50FieldAmpBreak,
+                              slope: R50FieldAmpSlope,
+                              sustain: R50FieldAmpSustain,
+                              release: R50FieldAmpRelease)
+                    .frame(width: 372)
+                envelopePanel(title: "Filter Envelope",
+                              attack: R50FieldFilterAttack,
+                              attackLevel: R50FieldFilterAttackLevel,
+                              decay: R50FieldFilterDecay,
+                              breakPoint: R50FieldFilterBreak,
+                              slope: R50FieldFilterSlope,
+                              sustain: R50FieldFilterSustain,
+                              release: R50FieldFilterRelease)
+                    .frame(width: 372)
+                pitchEnvelope.frame(width: 316)
+            }
+            .frame(maxHeight: .infinity)
+        }
+    }
+
+    private func envelopePanel(title: String,
+                               attack: R50PartialField,
+                               attackLevel: R50PartialField,
+                               decay: R50PartialField,
+                               breakPoint: R50PartialField,
+                               slope: R50PartialField,
+                               sustain: R50PartialField,
+                               release: R50PartialField) -> some View {
+        R50Panel(title: title) {
+            VStack(alignment: .leading, spacing: 6) {
+                R50EnvelopeGraph(attack: addr(attack),
+                                 attackLevel: addr(attackLevel),
+                                 decay: addr(decay),
+                                 breakPoint: addr(breakPoint),
+                                 slope: addr(slope),
+                                 sustain: addr(sustain),
+                                 release: addr(release),
+                                 model: model)
+                    .frame(height: 58)
+
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(spacing: 1) {
+                        R50Value(title: "Attack", address: addr(attack), model: model)
+                        R50Value(title: "Decay", address: addr(decay), model: model)
+                        R50Value(title: "Slope", address: addr(slope), model: model)
+                        R50Value(title: "Release", address: addr(release), model: model)
+                    }
+                    VStack(spacing: 1) {
+                        R50Value(title: "Atk Level", address: addr(attackLevel), model: model)
+                        R50Value(title: "Break", address: addr(breakPoint), model: model)
+                        R50Value(title: "Sustain", address: addr(sustain), model: model)
+                        Text("SLOPE 0 SKIPS BREAK")
+                            .font(.system(size: 7, weight: .medium, design: .monospaced))
+                            .foregroundColor(R50Palette.glowDim)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+    }
+
+    private var pitchEnvelope: some View {
+        R50Panel(title: "Pitch Envelope") {
+            VStack(alignment: .leading, spacing: 8) {
+                R50Value(title: "Amount", address: addr(R50FieldPitchAmount), model: model)
+                R50Value(title: "Attack", address: addr(R50FieldPitchAttack), model: model)
+                R50Value(title: "Decay", address: addr(R50FieldPitchDecay), model: model)
+                Text("Bends this Partial at note-on and settles back to pitch. A few semitones with a short decay is what makes a sampled attack read as struck.")
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundColor(R50Palette.engrave)
+                    .lineLimit(6)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - Tone page
+
     private var tonePage: some View {
         HStack(alignment: .top, spacing: 10) {
             R50Panel(title: "Structure") {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 12) {
                     R50WaveGrid(title: "Tone Structure",
                                 address: R50ParamToneStructure,
                                 options: R50Parameters.toneStructureNames,
@@ -134,48 +371,46 @@ struct R50View: View {
                     Text(structureHelp)
                         .font(.system(size: 8, weight: .medium, design: .monospaced))
                         .foregroundColor(R50Palette.engrave)
-                        .lineLimit(4)
+                        .lineLimit(5)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: 320)
+
+            R50Panel(title: "Structure Controls") {
+                VStack(alignment: .leading, spacing: 8) {
+                    R50Value(title: "Ring Level", address: R50ParamToneRingLevel,
+                             model: model)
+                    R50Value(title: "Blend Time", address: R50ParamToneBlendTime,
+                             model: model)
+                    R50Value(title: "XF Low", address: R50ParamToneCrossfadeLow,
+                             model: model)
+                    R50Value(title: "XF High", address: R50ParamToneCrossfadeHigh,
+                             model: model)
                 }
             }
             .frame(width: 300)
 
-            R50Panel(title: "Structure Controls") {
-                HStack(spacing: 4) {
-                    R50Knob(title: "Ring", address: R50ParamToneRingLevel, model: model)
-                    R50Knob(title: "Blend", address: R50ParamToneBlendTime, model: model)
-                    R50Knob(title: "XF Low", address: R50ParamToneCrossfadeLow, model: model)
-                    R50Knob(title: "XF High", address: R50ParamToneCrossfadeHigh, model: model)
-                }
-            }
-            .frame(width: 290)
-
             R50Panel(title: "Partial Mix") {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     ForEach(0..<2, id: \.self) { index in
-                        HStack(spacing: 4) {
-                            Text("P\(index + 1)")
-                                .font(.system(size: 10, weight: .bold,
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("PARTIAL \(index + 1)")
+                                .font(.system(size: 8, weight: .bold,
                                               design: .monospaced))
-                                .foregroundColor(R50Palette.legend)
-                                .frame(width: 24)
-                            R50Knob(title: "Level",
-                                    address: r50PartialParam(Int32(index), R50FieldLevel),
-                                    model: model)
-                            R50Knob(title: "Pan",
-                                    address: r50PartialParam(Int32(index), R50FieldPan),
-                                    model: model)
-                            R50Knob(title: "Semi",
-                                    address: r50PartialParam(Int32(index), R50FieldSemitone),
-                                    model: model)
-                            R50Knob(title: "Fine",
-                                    address: r50PartialParam(Int32(index), R50FieldFine),
-                                    model: model)
+                                .tracking(1.0)
+                                .foregroundColor(R50Palette.glowDim)
+                            R50Value(title: "Level",
+                                     address: r50PartialParam(Int32(index), R50FieldLevel),
+                                     model: model)
+                            R50Value(title: "Pan",
+                                     address: r50PartialParam(Int32(index), R50FieldPan),
+                                     model: model)
                         }
                     }
                 }
             }
-            .frame(width: 330)
+            .frame(width: 300)
         }
         .frame(maxHeight: .infinity)
     }
@@ -189,6 +424,8 @@ struct R50View: View {
         default: return "Mix: both Partials sum, balanced by their Levels."
         }
     }
+
+    // MARK: - Samples page
 
     private var samplePage: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -221,17 +458,14 @@ struct R50View: View {
             .frame(width: 800)
 
             R50Panel(title: "Playback") {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 4) {
-                        R50Knob(title: "Start", address: addr(R50FieldSampleStart),
-                                model: model)
-                        R50Knob(title: "Octave", address: addr(R50FieldOctave),
-                                model: model)
-                    }
+                VStack(alignment: .leading, spacing: 8) {
+                    R50Value(title: "Sample Start", address: addr(R50FieldSampleStart),
+                             model: model)
+                    R50Value(title: "Octave", address: addr(R50FieldOctave), model: model)
                     Text(statusText)
                         .font(.system(size: 8, weight: .medium, design: .monospaced))
                         .foregroundColor(R50Palette.engrave)
-                        .lineLimit(4)
+                        .lineLimit(5)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -248,8 +482,8 @@ struct R50View: View {
     }
 
     /// A table, not a grid of buttons: what matters when picking a sample is
-    /// its key span, whether it loops and how long it is, none of which fit on
-    /// a button.
+    /// its key span, whether it loops and how long it is, and none of that fits
+    /// on a button.
     private var sampleTable: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -269,15 +503,9 @@ struct R50View: View {
                     ForEach(samples.entries) { entry in
                         let selected = entry.index == samples.selectedIndex
                         HStack(spacing: 0) {
-                            // Imported samples are marked on the row itself
-                            // rather than given a column: the distinction only
-                            // matters for the handful you have added, and only
-                            // because Delete applies to those and not to the
-                            // generated ones.
                             tableCell(entry.isFactory ? entry.name : "+ " + entry.name,
                                       width: 235, selected: selected,
-                                      align: .leading,
-                                      accent: !entry.isFactory)
+                                      align: .leading, accent: !entry.isFactory)
                             tableCell("\(entry.zones)", width: 60, selected: selected)
                             tableCell(entry.keyRange, width: 120, selected: selected)
                             tableCell(entry.loopLabel, width: 70, selected: selected)
@@ -334,193 +562,20 @@ struct R50View: View {
         if let message = samples.errorMessage { return message }
         let sourceIsSample = model.value(addr(R50FieldSourceType)) >= 0.5
         return sourceIsSample
-            ? "Sample source active. Factory instruments are generated at startup."
-            : "Set Source to Sample on the Synth page to hear these."
-    }
-
-    // MARK: - Header
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("R50")
-                    .font(.system(size: 30, weight: .heavy, design: .monospaced))
-                    .tracking(4)
-                    .foregroundColor(R50Palette.legend)
-                Text("Rytell · monotimbral 8-voice")
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    .tracking(1.2)
-                    .foregroundColor(R50Palette.engrave)
-            }
-
-            pageTabs
-            Spacer()
-            presetBrowser
-            Spacer()
-            R50Meter(level: model.outputLevel)
-        }
-        .padding(.horizontal, 4)
-    }
-
-    private var pageTabs: some View {
-        HStack(spacing: 2) {
-            ForEach(R50Page.allCases, id: \.self) { candidate in
-                let selected = candidate == page
-                Text(candidate.rawValue.uppercased())
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .tracking(1.2)
-                    .foregroundColor(selected ? Color.black : R50Palette.legend)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(selected ? R50Palette.glow : Color(white: 0.14))
-                    .contentShape(Rectangle())
-                    .onTapGesture { page = candidate }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 2))
-        .overlay(RoundedRectangle(cornerRadius: 2)
-            .stroke(Color(white: 0.32), lineWidth: 1))
-    }
-
-    private var presetBrowser: some View {
-        HStack(spacing: 8) {
-            stepButton("◀") { step(-1) }
-            Text(R50FactoryPresets.all[safe: model.presetIndex]?.name ?? "Init")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundColor(R50Palette.glow)
-                .frame(width: 170, height: 24)
-                .background(R50Palette.track)
-                .overlay(RoundedRectangle(cornerRadius: 2)
-                    .stroke(Color(white: 0.30), lineWidth: 1))
-            stepButton("▶") { step(1) }
-        }
-    }
-
-    private func stepButton(_ glyph: String, action: @escaping () -> Void) -> some View {
-        Text(glyph)
-            .font(.system(size: 10, weight: .bold))
-            .foregroundColor(R50Palette.legend)
-            .frame(width: 22, height: 24)
-            .background(Color(white: 0.15))
-            .overlay(RoundedRectangle(cornerRadius: 2)
-                .stroke(Color(white: 0.30), lineWidth: 1))
-            .contentShape(Rectangle())
-            .onTapGesture(perform: action)
-    }
-
-    private func step(_ delta: Int) {
-        let count = R50FactoryPresets.all.count
-        guard count > 0 else { return }
-        model.applyPreset((model.presetIndex + delta + count) % count)
-    }
-
-    // MARK: - Panels
-
-    /// The Partial's sound source. Whichever kind is selected, its *name* is on
-    /// screen here — a grid with one button per entry cannot do that once the
-    /// list is a dozen waves plus however many samples have been imported.
-    private var oscillator: some View {
-        let isSample = model.value(addr(R50FieldSourceType)) >= 0.5
-        return R50Panel(title: "Source") {
-            VStack(alignment: .leading, spacing: 12) {
-                R50Selector(title: "Type", address: addr(R50FieldSourceType),
-                            options: R50Parameters.sourceTypeNames, model: model)
-
-                R50NameSelector(
-                    title: isSample ? "Instrument" : "Wave",
-                    address: isSample ? addr(R50FieldSampleInstrument)
-                                      : addr(R50FieldOscWave),
-                    names: isSample ? samples.entries.map(\.name)
-                                    : R50Parameters.waveformNames,
-                    model: model)
-
-                HStack(spacing: 4) {
-                    if isSample {
-                        R50Knob(title: "Start", address: addr(R50FieldSampleStart),
-                                model: model)
-                    } else {
-                        R50Knob(title: "Width", address: addr(R50FieldPulseWidth),
-                                model: model)
-                    }
-                    R50Knob(title: "Octave", address: addr(R50FieldOctave), model: model)
-                }
-            }
-        }
-    }
-
-    private var noise: some View {
-        R50Panel(title: "Noise") {
-            VStack(alignment: .leading, spacing: 12) {
-                R50WaveGrid(title: "Spectrum", address: addr(R50FieldNoiseSpectrum),
-                            options: R50Parameters.noiseSpectrumNames,
-                            columns: 3, model: model)
-                HStack(spacing: 4) {
-                    R50Knob(title: "Mix", address: addr(R50FieldNoiseMix), model: model)
-                    R50Knob(title: "Tone", address: addr(R50FieldNoiseTone), model: model)
-                    R50Knob(title: "Rate", address: addr(R50FieldNoiseRate), model: model)
-                }
-                R50Selector(title: "Tone / Rate Source",
-                            address: addr(R50FieldNoisePitchTrack),
-                            options: R50Parameters.trackNames, model: model)
-            }
-        }
-    }
-
-    private var filter: some View {
-        R50Panel(title: "Filter") {
-            VStack(alignment: .leading, spacing: 14) {
-                R50Selector(title: "Slope", address: addr(R50FieldSlope),
-                            options: R50Parameters.slopeNames, model: model)
-                HStack(spacing: 4) {
-                    R50Knob(title: "Cutoff", address: addr(R50FieldCutoff), model: model)
-                    R50Knob(title: "Reso", address: addr(R50FieldResonance), model: model)
-                    R50Knob(title: "Drive", address: addr(R50FieldDrive), model: model)
-                    R50Knob(title: "Key Trk", address: addr(R50FieldKeyTrack), model: model)
-                }
-                HStack(spacing: 4) {
-                    R50Knob(title: "Env Amt", address: addr(R50FieldFilterEnvAmount), model: model)
-                }
-            }
-        }
-    }
-
-    private var ampEnvelope: some View {
-        R50Panel(title: "Amp Envelope") {
-            envelopeGrid(attack: R50FieldAmpAttack, decay: R50FieldAmpDecay,
-                         sustain: R50FieldAmpSustain, release: R50FieldAmpRelease)
-        }
-    }
-
-    private var filterEnvelope: some View {
-        R50Panel(title: "Filter Envelope") {
-            envelopeGrid(attack: R50FieldFilterAttack, decay: R50FieldFilterDecay,
-                         sustain: R50FieldFilterSustain, release: R50FieldFilterRelease)
-        }
-    }
-
-    private func envelopeGrid(attack: R50PartialField, decay: R50PartialField,
-                              sustain: R50PartialField,
-                              release: R50PartialField) -> some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 4) {
-                R50Knob(title: "Attack", address: addr(attack), model: model)
-                R50Knob(title: "Decay", address: addr(decay), model: model)
-            }
-            HStack(spacing: 4) {
-                R50Knob(title: "Sustain", address: addr(sustain), model: model)
-                R50Knob(title: "Release", address: addr(release), model: model)
-            }
-        }
+            ? "Sample source active on Partial \(partial + 1). Factory samples are generated at startup."
+            : "Set Source to Sample on the Partial page to hear these."
     }
 
     // MARK: - Footer
 
     private var footer: some View {
         HStack(spacing: 18) {
-            R50Knob(title: "Master", address: R50ParamMasterGain, model: model)
-            R50Knob(title: "Bend", address: R50ParamPitchBendRange, model: model)
+            R50Value(title: "Master", address: R50ParamMasterGain, model: model)
+                .frame(width: 190)
+            R50Value(title: "Bend Range", address: R50ParamPitchBendRange, model: model)
+                .frame(width: 190)
             Spacer()
-            Text("8-VOICE · BAND-LIMITED PCM + NOISE · ZDF LADDER")
+            Text("8-VOICE · 2 PARTIALS · BAND-LIMITED PCM + NOISE · ZDF LADDER")
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .tracking(1.4)
                 .foregroundColor(R50Palette.glowDim)

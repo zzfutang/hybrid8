@@ -259,6 +259,24 @@ private:
         setPartial(1, R50FieldLevel,           1.0f);
         setPartial(1, R50FieldPan,             0.0f);
 
+        // Defaults that reduce the EG to the plain ADSR it replaces: full
+        // attack level, and a slope time at the minimum so the break stage is
+        // skipped entirely.
+        for (int partial = 0; partial < kPartialsPerVoice; ++partial) {
+            setPartial(partial, R50FieldAmpAttackLevel,    1.0f);
+            setPartial(partial, R50FieldAmpBreak,          1.0f);
+            setPartial(partial, R50FieldAmpSlope,          0.0f);
+            setPartial(partial, R50FieldFilterAttackLevel, 1.0f);
+            setPartial(partial, R50FieldFilterBreak,       1.0f);
+            setPartial(partial, R50FieldFilterSlope,       0.0f);
+            setPartial(partial, R50FieldPitchAmount,       0.0f);
+            setPartial(partial, R50FieldPitchAttack,       0.001f);
+            setPartial(partial, R50FieldPitchDecay,        0.2f);
+            setPartial(partial, R50FieldShaperType,        0.0f);
+            setPartial(partial, R50FieldShaperDrive,       0.0f);
+            setPartial(partial, R50FieldShaperPosition,    0.0f);
+        }
+
         set(R50ParamToneStructure,     0.0f);   // Mix
         set(R50ParamToneRingLevel,     1.0f);
         set(R50ParamToneBlendTime,     0.25f);
@@ -321,6 +339,24 @@ private:
         out.filterDecay   = std::max(0.0005f, field(R50FieldFilterDecay));
         out.filterSustain = synth::clampf(field(R50FieldFilterSustain), 0.0f, 1.0f);
         out.filterRelease = std::max(0.0005f, field(R50FieldFilterRelease));
+
+        out.ampAttackLevel    = synth::clampf(field(R50FieldAmpAttackLevel), 0.0f, 1.0f);
+        out.ampBreak          = synth::clampf(field(R50FieldAmpBreak), 0.0f, 1.0f);
+        out.ampSlope          = std::max(0.0f, field(R50FieldAmpSlope));
+        out.filterAttackLevel = synth::clampf(field(R50FieldFilterAttackLevel), 0.0f, 1.0f);
+        out.filterBreak       = synth::clampf(field(R50FieldFilterBreak), 0.0f, 1.0f);
+        out.filterSlope       = std::max(0.0f, field(R50FieldFilterSlope));
+
+        out.pitchAmount = synth::clampf(field(R50FieldPitchAmount), -24.0f, 24.0f);
+        out.pitchAttack = std::max(0.0005f, field(R50FieldPitchAttack));
+        out.pitchDecay  = std::max(0.0005f, field(R50FieldPitchDecay));
+
+        const int shaper = static_cast<int>(field(R50FieldShaperType) + 0.5f);
+        out.shaperType = static_cast<ShaperType>(
+            shaper < 0 ? 0 : (shaper >= kShaperTypeCount ? kShaperTypeCount - 1 : shaper));
+        out.shaperDrive = synth::clampf(field(R50FieldShaperDrive), 0.0f, 1.0f);
+        out.shaperPosition = field(R50FieldShaperPosition) >= 0.5f
+                           ? ShaperPosition::PostFilter : ShaperPosition::PreFilter;
 
         out.level = synth::clampf(field(R50FieldLevel), 0.0f, 1.0f);
         out.pan   = synth::clampf(field(R50FieldPan), -1.0f, 1.0f);

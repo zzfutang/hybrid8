@@ -97,6 +97,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		035FA057E8E955E7FAC3B81D /* R50Envelope.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Envelope.hpp; sourceTree = "<group>"; };
 		0819922753384559AB9FC581 /* R50.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = R50.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0849F4EBC3B7AC32F39479EF /* WavetablePianoData.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = WavetablePianoData.hpp; sourceTree = "<group>"; };
 		084F96412A2DD5355819DB83 /* Hybrid8Wavetable.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Hybrid8Wavetable.hpp; sourceTree = "<group>"; };
@@ -123,6 +124,7 @@
 		5C2CF0929FB2CD6E611FF697 /* InstrumentProduct.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstrumentProduct.swift; sourceTree = "<group>"; };
 		5D2A41C1C9551453765E809A /* Hybrid8App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hybrid8App.swift; sourceTree = "<group>"; };
 		61D2883D0081EEAEB74A495F /* FactoryPresets.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FactoryPresets.json; sourceTree = "<group>"; };
+		67713C77EF118D8CE3CD5898 /* R50Waveshaper.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Waveshaper.hpp; sourceTree = "<group>"; };
 		772DF3A82502AEDD6C9C552E /* R50ParametersTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50ParametersTree.swift; sourceTree = "<group>"; };
 		7915BC69DA6FDB8EC6117CD2 /* R50Wave.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Wave.hpp; sourceTree = "<group>"; };
 		7B32D6BB2F88D3FA24D09D2A /* MusicalTypingStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicalTypingStateMachine.swift; sourceTree = "<group>"; };
@@ -268,6 +270,7 @@
 			isa = PBXGroup;
 			children = (
 				B1F99D67BD35FB874E88A075 /* R50Engine.hpp */,
+				035FA057E8E955E7FAC3B81D /* R50Envelope.hpp */,
 				4E1AA536D5BCEFC6B916629C /* R50Noise.hpp */,
 				8D90BFA8D15AB1DC1692CC68 /* R50Partial.hpp */,
 				19FA9B3BB4AE406828814F9A /* R50Sample.hpp */,
@@ -276,6 +279,7 @@
 				C1767F6F1334E44D6F16411B /* R50Voice.hpp */,
 				7915BC69DA6FDB8EC6117CD2 /* R50Wave.hpp */,
 				4531DF6E83F3C47C88B2DB27 /* R50WaveOscillator.hpp */,
+				67713C77EF118D8CE3CD5898 /* R50Waveshaper.hpp */,
 			);
 			path = DSP;
 			sourceTree = "<group>";

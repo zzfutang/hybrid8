@@ -7,10 +7,12 @@
 
 #include "R50Engine.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <thread>
+#include <tuple>
 #include <vector>
 
 static int g_failures = 0;
@@ -1068,6 +1070,170 @@ int main() {
         const float peak = render(engine, 0.4);
         check(std::isfinite(peak) && peak > 0.02f && peak <= 1.05f,
               "sample and noise Partials render together");
+    }
+
+    // --- Workstation EG -----------------------------------------------------
+    {
+        // Sample the envelope's trajectory so each segment can be checked at
+        // the point it should have arrived.
+        auto trajectory = [](float attackLevel, float breakPoint, float slope,
+                             float sustain, int samples) {
+            r50::R50Envelope env;
+            env.setSampleRate(kSR);
+            env.setAttack(0.01f);
+            env.setAttackLevel(attackLevel);
+            env.setDecay(0.05f);
+            env.setBreakPoint(breakPoint);
+            env.setSlope(slope);
+            env.setSustain(sustain);
+            env.setRelease(0.1f);
+            env.gate(true);
+            std::vector<float> out(samples);
+            for (int n = 0; n < samples; ++n) out[n] = env.process();
+            return out;
+        };
+
+        // A long slope holds the envelope near the break point long enough to
+        // observe it. With a short slope the decay has already finished and the
+        // slope is well underway by the time it could be sampled.
+        const std::vector<float> held =
+            trajectory(1.0f, 0.6f, 4.0f, 0.2f, static_cast<int>(0.2 * kSR));
+        const float peak = *std::max_element(held.begin(), held.end());
+        const float atBreak = held[static_cast<int>(0.065 * kSR)];
+
+        // A short slope settles on sustain quickly.
+        const std::vector<float> settled =
+            trajectory(1.0f, 0.6f, 0.2f, 0.2f, static_cast<int>(0.5 * kSR));
+        const float atSustain = settled[static_cast<int>(0.45 * kSR)];
+
+        printf("       EG: peak=%.3f break=%.3f sustain=%.3f\n",
+               peak, atBreak, atSustain);
+        check(peak > 0.98f, "EG attack reaches the attack level");
+        check(std::fabs(atBreak - 0.6f) < 0.05f, "EG decay lands on the break point");
+        check(std::fabs(atSustain - 0.2f) < 0.02f, "EG slope settles on sustain");
+
+        // Attack level below full caps the peak.
+        const std::vector<float> capped =
+            trajectory(0.5f, 1.0f, 0.0f, 0.4f, static_cast<int>(0.1 * kSR));
+        check(*std::max_element(capped.begin(), capped.end()) < 0.55f,
+              "EG attack level caps the peak");
+
+        // A break point below sustain dips and recovers — a legitimate shape,
+        // and the one that catches a segment which only handles falling.
+        const std::vector<float> dip =
+            trajectory(1.0f, 0.1f, 0.15f, 0.6f, static_cast<int>(0.5 * kSR));
+        check(std::fabs(dip[static_cast<int>(0.45 * kSR)] - 0.6f) < 0.03f,
+              "EG recovers when the break point sits below sustain");
+    }
+    {
+        // With slope at the minimum the EG must behave exactly as the ADSR it
+        // replaced — this is what keeps every existing preset intact.
+        r50::R50Envelope eg;
+        synth::ADSR adsr;
+        eg.setSampleRate(kSR);  adsr.setSampleRate(kSR);
+        eg.setAttack(0.02f);    adsr.setAttack(0.02f);
+        eg.setDecay(0.3f);      adsr.setDecay(0.3f);
+        eg.setSustain(0.45f);   adsr.setSustain(0.45f);
+        eg.setRelease(0.25f);   adsr.setRelease(0.25f);
+        eg.setAttackLevel(1.0f);
+        eg.setBreakPoint(1.0f);
+        eg.setSlope(0.0f);      // break stage disabled
+        eg.gate(true);          adsr.gate(true);
+
+        double worst = 0.0;
+        for (int n = 0; n < static_cast<int>(1.5 * kSR); ++n) {
+            if (n == static_cast<int>(1.0 * kSR)) { eg.gate(false); adsr.gate(false); }
+            worst = std::max(worst,
+                std::fabs(static_cast<double>(eg.process()) - adsr.process()));
+        }
+        printf("       EG vs ADSR worst difference: %.3e\n", worst);
+        check(worst < 1e-6, "EG with slope off reproduces plain ADSR");
+    }
+
+    // --- Pitch envelope -----------------------------------------------------
+    {
+        auto pitchAt = [](double seconds, float amount) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(r50PartialParam(0, R50FieldPitchAmount), amount);
+            engine.setParameter(r50PartialParam(0, R50FieldPitchAttack), 0.001f);
+            engine.setParameter(r50PartialParam(0, R50FieldPitchDecay), 0.25f);
+            engine.noteOn(60, 100);
+            const std::vector<float> buffer = renderBuffer(engine, seconds + 0.2);
+            // Analyse a window starting at `seconds`.
+            const int from = static_cast<int>(seconds * kSR);
+            const double f0 = midiToHz(60);
+            const double atPitch = magAt(buffer, f0, kSR, from);
+            const double aboveIt = magAt(buffer, f0 * 1.5, kSR, from);
+            return atPitch / (aboveIt + 1e-12);
+        };
+        // +12 semitones at note-on: the fundamental is absent early on and
+        // present once the envelope has decayed.
+        const double early = pitchAt(0.01, 12.0f);
+        const double late  = pitchAt(0.60, 12.0f);
+        printf("       pitch env: f0 ratio early=%.2f late=%.2f\n", early, late);
+        check(late > early * 2.0, "pitch envelope bends the note and returns");
+    }
+
+    // --- Waveshaper ---------------------------------------------------------
+    {
+        auto shaperEnergy = [](int type, int note) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(r50PartialParam(0, R50FieldShaperType),
+                                static_cast<float>(type));
+            engine.setParameter(r50PartialParam(0, R50FieldShaperDrive), 0.7f);
+            engine.setParameter(r50PartialParam(0, R50FieldAmpSustain), 1.0f);
+            engine.noteOn(static_cast<uint8_t>(note), 100);
+            const std::vector<float> buffer = renderBuffer(engine, 0.5);
+            const int from = static_cast<int>(buffer.size()) - kAnalysisLength;
+            const double f0 = midiToHz(note);
+
+            double harmonic = 0.0, offGrid = 0.0;
+            const double fundamental = magAt(buffer, f0, kSR, from);
+            for (int k = 2; k * f0 < kSR * 0.47; ++k)
+                harmonic += magAt(buffer, k * f0, kSR, from);
+            for (double f = 40.0; f < kSR * 0.47; f += 20.0) {
+                const double nearest = std::round(f / f0) * f0;
+                if (std::fabs(f - nearest) < 0.3 * f0) continue;
+                offGrid = std::max(offGrid, magAt(buffer, f, kSR, from));
+            }
+            return std::tuple<double, double, double>(
+                fundamental, harmonic, offGrid / (fundamental + 1e-12));
+        };
+
+        static const char *names[] = {"Off", "SoftClip", "HardClip", "Fold", "Rectify"};
+        bool allGood = true;
+        double worstAlias = 0.0;
+        for (int type = 1; type < r50::kShaperTypeCount; ++type) {
+            const auto low  = shaperEnergy(type, 48);
+            const auto high = shaperEnergy(type, 84);
+            const double harmonics = std::get<1>(low);
+            const double alias = std::max(std::get<2>(low), std::get<2>(high));
+            worstAlias = std::max(worstAlias, alias);
+            printf("       shaper %-9s harmonics=%.4f  worst off-grid=%.4f\n",
+                   names[type], harmonics, alias);
+            if (!std::isfinite(harmonics) || harmonics <= 0.0) allGood = false;
+        }
+        check(allGood, "every waveshaper type adds harmonics and stays finite");
+        // Folding measured 21% before its depth was bounded; this holds that.
+        printf("       worst shaper aliasing across all types: %.4f\n", worstAlias);
+        check(worstAlias < 0.10, "no waveshaper aliases beyond 10% of the fundamental");
+
+        // Bounded output regardless of type or drive.
+        bool bounded = true;
+        for (int type = 0; type < r50::kShaperTypeCount; ++type) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(r50PartialParam(0, R50FieldShaperType),
+                                static_cast<float>(type));
+            engine.setParameter(r50PartialParam(0, R50FieldShaperDrive), 1.0f);
+            engine.setParameter(r50PartialParam(0, R50FieldShaperPosition), 1.0f);
+            engine.noteOn(48, 127);
+            const float peak = render(engine, 0.3);
+            if (!std::isfinite(peak) || peak > 1.05f) bounded = false;
+        }
+        check(bounded, "waveshapers stay bounded at full drive, post-filter");
     }
 
     // --- Determinism --------------------------------------------------------

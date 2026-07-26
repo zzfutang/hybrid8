@@ -18,10 +18,12 @@
 
 #include "ADSR.hpp"
 #include "Filter.hpp"
+#include "R50Envelope.hpp"
 #include "R50Noise.hpp"
 #include "R50SampleFactory.hpp"
 #include "R50SamplePlayer.hpp"
 #include "R50WaveOscillator.hpp"
+#include "R50Waveshaper.hpp"
 #include "Utils.hpp"
 
 namespace r50 {
@@ -57,8 +59,24 @@ struct PartialParams {
     float keyTrack            = 0.5f;
     float filterEnvAmount     = 0.4f;   // bipolar, +/- 4 octaves at full scale
 
-    float ampAttack = 0.005f, ampDecay = 0.2f, ampSustain = 0.8f, ampRelease = 0.3f;
-    float filterAttack = 0.005f, filterDecay = 0.4f, filterSustain = 0.3f, filterRelease = 0.3f;
+    // Workstation EG: attack to a level, decay to a break point, slope to
+    // sustain, release. A slope time at the minimum skips the break stage and
+    // the envelope behaves exactly as a plain ADSR.
+    float ampAttack = 0.005f, ampAttackLevel = 1.0f, ampDecay = 0.2f;
+    float ampBreak = 1.0f, ampSlope = 0.0f, ampSustain = 0.8f, ampRelease = 0.3f;
+
+    float filterAttack = 0.005f, filterAttackLevel = 1.0f, filterDecay = 0.4f;
+    float filterBreak = 1.0f, filterSlope = 0.0f, filterSustain = 0.3f,
+          filterRelease = 0.3f;
+
+    // Pitch envelope: a rise and fall applied to this Partial's pitch.
+    float pitchAmount = 0.0f;      // semitones, bipolar
+    float pitchAttack = 0.001f;
+    float pitchDecay  = 0.2f;
+
+    ShaperType     shaperType     = ShaperType::Off;
+    float          shaperDrive    = 0.0f;
+    ShaperPosition shaperPosition = ShaperPosition::PreFilter;
 
     float level = 1.0f;
     float pan   = 0.0f;                 // -1 = left, +1 = right
@@ -73,6 +91,7 @@ public:
         filter_.setSampleRate(sr);
         ampEnv_.setSampleRate(sr);
         filterEnv_.setSampleRate(sr);
+        pitchEnv_.setSampleRate(sr);
     }
 
     void setSeed(uint64_t seed) { noise_.setSeed(seed); }
@@ -81,8 +100,10 @@ public:
         sample_.stop();
         noise_.reset();
         filter_.reset();
+        shaper_.reset();
         ampEnv_.resetHard();
         filterEnv_.resetHard();
+        pitchEnv_.resetHard();
         active_ = false;
     }
 
@@ -117,11 +138,13 @@ public:
         applyEnvelopeTimes(p);
         ampEnv_.gate(true);
         filterEnv_.gate(true);
+        pitchEnv_.gate(true);
     }
 
     void noteOff() {
         ampEnv_.gate(false);
         filterEnv_.gate(false);
+        pitchEnv_.gate(false);
     }
 
     bool  isActive() const { return active_; }
@@ -143,8 +166,11 @@ public:
         panLeft_  = std::cos(angle);
         panRight_ = std::sin(angle);
 
+        shaper_.setParams(p.shaperType, p.shaperDrive, p.shaperPosition);
+
         const double detune = p.octave * 12.0 + p.semitone
-                            + p.fineCents / 100.0 + pitchBendSemitones;
+                            + p.fineCents / 100.0 + pitchBendSemitones
+                            + p.pitchAmount * pitchLevel_;
         const double noteHz = synth::noteToHz(note_ + detune);
         osc_.setFrequency(noteHz);
         noise_.updateBlock(p.noiseSpectrum, p.noiseTone, p.noiseRateHz,
@@ -179,6 +205,7 @@ public:
 
         ampLevel_    = ampEnv_.process();
         filterLevel_ = filterEnv_.process();
+        pitchLevel_  = pitchEnv_.process();
 
         if (!ampEnv_.isActive()) {
             active_ = false;
@@ -192,8 +219,13 @@ public:
                           ? sample_.process()
                           : osc_.process();
         const float noise = noise_.process();
-        const float source = tonal + (noise - tonal) * noiseMix_;
-        return filter_.process(source) * ampLevel_ * velocity_;
+        float source = tonal + (noise - tonal) * noiseMix_;
+
+        if (shaper_.position() == ShaperPosition::PreFilter) {
+            source = shaper_.process(source);
+            return filter_.process(source) * ampLevel_ * velocity_;
+        }
+        return shaper_.process(filter_.process(source)) * ampLevel_ * velocity_;
     }
 
     float level() const { return level_; }
@@ -203,21 +235,37 @@ public:
 private:
     void applyEnvelopeTimes(const PartialParams &p) {
         ampEnv_.setAttack(p.ampAttack);
+        ampEnv_.setAttackLevel(p.ampAttackLevel);
         ampEnv_.setDecay(p.ampDecay);
+        ampEnv_.setBreakPoint(p.ampBreak);
+        ampEnv_.setSlope(p.ampSlope);
         ampEnv_.setSustain(p.ampSustain);
         ampEnv_.setRelease(p.ampRelease);
+
         filterEnv_.setAttack(p.filterAttack);
+        filterEnv_.setAttackLevel(p.filterAttackLevel);
         filterEnv_.setDecay(p.filterDecay);
+        filterEnv_.setBreakPoint(p.filterBreak);
+        filterEnv_.setSlope(p.filterSlope);
         filterEnv_.setSustain(p.filterSustain);
         filterEnv_.setRelease(p.filterRelease);
+
+        // A pitch envelope wants exactly a rise then a fall to nothing, so the
+        // seven-stage machinery would be wasted on it.
+        pitchEnv_.setAttack(p.pitchAttack);
+        pitchEnv_.setDecay(p.pitchDecay);
+        pitchEnv_.setSustain(0.0f);
+        pitchEnv_.setRelease(0.001f);
     }
 
     WaveOscillator      osc_;
     SamplePlayer        sample_;
     NoiseSource         noise_;
     synth::LadderFilter filter_;
-    synth::ADSR         ampEnv_;
-    synth::ADSR         filterEnv_;
+    Waveshaper          shaper_;
+    R50Envelope         ampEnv_;
+    R50Envelope         filterEnv_;
+    synth::ADSR         pitchEnv_;
 
     double sampleRate_  = 44100.0;
     int    note_        = -1;
@@ -232,6 +280,7 @@ private:
     float  panRight_    = 0.7071f;
     float  ampLevel_    = 0.0f;
     float  filterLevel_ = 0.0f;
+    float  pitchLevel_  = 0.0f;
 };
 
 } // namespace r50

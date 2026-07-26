@@ -65,6 +65,203 @@ struct R50Panel<Content: View>: View {
     }
 }
 
+// MARK: - Value row
+
+/// A parameter as a digital readout: name, numeric value, and a bar showing
+/// where it sits in its range. Drag horizontally to change it, hold option for
+/// fine adjustment, double-click to reset.
+///
+/// This is a workstation, not an analogue emulation — the instrument reports
+/// values rather than implying them with a pointer angle, and a row of these
+/// packs far more into a panel than a row of knobs.
+struct R50Value: View {
+    let title: String
+    let address: R50Param
+    @ObservedObject var model: R50ParameterModel
+
+    @State private var dragStart: Float?
+
+    private var param: AUParameter? { model.parameter(address) }
+    private var bipolar: Bool { (param?.minValue ?? 0) < 0 }
+
+    var body: some View {
+        let value = model.value(address)
+        let norm = CGFloat(normalized(value))
+
+        VStack(spacing: 3) {
+            HStack(spacing: 6) {
+                Text(title.uppercased())
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .tracking(0.7)
+                    .foregroundColor(R50Palette.engrave)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text(model.displayString(address))
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundColor(R50Palette.glow)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(R50Palette.track)
+                    if bipolar {
+                        // Bipolar values read from the centre, so a glance says
+                        // which side of zero the value is on.
+                        let centre = geo.size.width * 0.5
+                        Rectangle()
+                            .fill(R50Palette.glow)
+                            .frame(width: abs(norm - 0.5) * geo.size.width)
+                            .offset(x: norm >= 0.5 ? centre : norm * geo.size.width)
+                        Rectangle().fill(R50Palette.engrave.opacity(0.5))
+                            .frame(width: 1).offset(x: centre)
+                    } else {
+                        Rectangle().fill(R50Palette.glow)
+                            .frame(width: norm * geo.size.width)
+                    }
+                }
+            }
+            .frame(height: 5)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { drag in
+                    guard let param else { return }
+                    if dragStart == nil { dragStart = value }
+                    let start = dragStart ?? value
+                    let fine = NSEvent.modifierFlags.contains(.option) ? 0.25 : 1.0
+                    let delta = Float(drag.translation.width * fine / 180.0)
+                    param.setValue(denormalized(min(max(normalized(start) + delta, 0), 1)),
+                                   originator: nil)
+                    model.objectWillChange.send()
+                }
+                .onEnded { _ in dragStart = nil })
+        .onTapGesture(count: 2) {
+            if let param { param.setValue(resetValue, originator: nil) }
+            model.objectWillChange.send()
+        }
+    }
+
+    private var isLogarithmic: Bool {
+        param?.flags.contains(.flag_DisplayLogarithmic) ?? false
+    }
+
+    private var resetValue: Float {
+        guard let param else { return 0 }
+        return param.minValue < 0 ? 0 : param.minValue
+    }
+
+    private func normalized(_ value: Float) -> Float {
+        guard let param else { return 0 }
+        let lo = param.minValue, hi = param.maxValue
+        guard hi > lo else { return 0 }
+        if isLogarithmic && lo > 0 {
+            return Float(log(Double(value / lo)) / log(Double(hi / lo)))
+        }
+        return (value - lo) / (hi - lo)
+    }
+
+    private func denormalized(_ norm: Float) -> Float {
+        guard let param else { return 0 }
+        let lo = param.minValue, hi = param.maxValue
+        if isLogarithmic && lo > 0 {
+            return lo * Float(pow(Double(hi / lo), Double(norm)))
+        }
+        return lo + norm * (hi - lo)
+    }
+}
+
+// MARK: - Envelope display
+
+/// Plots the EG so its shape is readable at a glance. Seven numbers do not say
+/// what an envelope does; the curve does, and the break point in particular is
+/// hard to picture from a list of values.
+struct R50EnvelopeGraph: View {
+    let attack: R50Param
+    let attackLevel: R50Param
+    let decay: R50Param
+    let breakPoint: R50Param
+    let slope: R50Param
+    let sustain: R50Param
+    let release: R50Param
+    @ObservedObject var model: R50ParameterModel
+
+    /// Envelope vertices as (cumulative time, level). Built outside the view
+    /// body: Swift's type checker gives up on a tuple-array ternary this size
+    /// inside a ViewBuilder.
+    private struct Shape {
+        var points: [CGPoint] = []      // x = seconds, y = level
+        var total: Float = 1
+    }
+
+    private func shape() -> Shape {
+        let attackTime = model.value(attack)
+        let decayTime = model.value(decay)
+        let slopeTime = model.value(slope)
+        let releaseTime = model.value(release)
+        let peak = model.value(attackLevel)
+        let breakLevel = model.value(breakPoint)
+        let sustainLevel = model.value(sustain)
+
+        // Slope at the minimum disables the break stage, exactly as the engine
+        // does, so the plot shows what will actually be heard.
+        let breakActive = slopeTime > 0.0015
+        let span = attackTime + decayTime + slopeTime + releaseTime
+        let hold = max(0.15 * span, 0.08)
+
+        var segments: [(Float, Float)] = [(0, 0), (attackTime, peak)]
+        if breakActive {
+            segments.append((decayTime, breakLevel))
+            segments.append((slopeTime, sustainLevel))
+        } else {
+            segments.append((decayTime, sustainLevel))
+        }
+        segments.append((hold, sustainLevel))
+        segments.append((releaseTime, 0))
+
+        var result = Shape()
+        var t: Float = 0
+        for segment in segments {
+            t += segment.0
+            result.points.append(CGPoint(x: CGFloat(t), y: CGFloat(segment.1)))
+        }
+        result.total = max(t, 0.0001)
+        return result
+    }
+
+    var body: some View {
+        let plot = shape()
+        return GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+
+            Path { path in
+                for (index, point) in plot.points.enumerated() {
+                    let x = point.x / CGFloat(plot.total) * w
+                    let y = h - point.y * (h - 4) - 2
+                    if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                    else { path.addLine(to: CGPoint(x: x, y: y)) }
+                }
+            }
+            .stroke(R50Palette.glow, lineWidth: 1.5)
+
+            // Node markers, as on the hardware displays this follows.
+            ForEach(Array(plot.points.enumerated()), id: \.offset) { _, point in
+                Rectangle()
+                    .fill(R50Palette.legend)
+                    .frame(width: 4, height: 4)
+                    .position(x: point.x / CGFloat(plot.total) * w,
+                              y: h - point.y * (h - 4) - 2)
+            }
+        }
+        .background(R50Palette.track)
+        .overlay(Rectangle().stroke(Color(white: 0.28), lineWidth: 1))
+    }
+}
+
 // MARK: - Knob
 
 /// Rotary control. Vertical drag changes the value; ⌥-drag is a fine adjust and

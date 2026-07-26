@@ -28,6 +28,10 @@ enum R50Parameters {
     static let sourceTypeNames = ["Wave", "Sample"]
     static let onOffNames      = ["Off", "On"]
 
+    /// Order must match ShaperType in R50Waveshaper.hpp.
+    static let shaperTypeNames = ["Off", "Soft", "Hard", "Fold", "Rect"]
+    static let shaperPositionNames = ["Pre", "Post"]
+
     /// Order must match ToneStructure in R50Voice.hpp.
     static let toneStructureNames = [
         "Mix", "Ring", "Atk/Sus", "Vel XF", "Key XF"
@@ -153,6 +157,41 @@ enum R50Parameters {
                   min: 0, max: 1, value: 1),
             Field(field: R50FieldPan, id: "Pan", name: "Pan",
                   min: -1, max: 1, value: 0),
+
+            // Workstation EG: attack to a level, decay to a break point, slope
+            // to sustain. Slope at 0 skips the break stage, which is what makes
+            // the defaults identical to the ADSR this replaced.
+            Field(field: R50FieldAmpAttackLevel, id: "AmpAttackLevel",
+                  name: "Amp Attack Level", min: 0, max: 1, value: 1),
+            Field(field: R50FieldAmpBreak, id: "AmpBreak",
+                  name: "Amp Break", min: 0, max: 1, value: 1),
+            Field(field: R50FieldAmpSlope, id: "AmpSlope",
+                  name: "Amp Slope", min: 0, max: 8, value: 0, unit: .seconds),
+            Field(field: R50FieldFilterAttackLevel, id: "FilterAttackLevel",
+                  name: "Filter Attack Level", min: 0, max: 1, value: 1),
+            Field(field: R50FieldFilterBreak, id: "FilterBreak",
+                  name: "Filter Break", min: 0, max: 1, value: 1),
+            Field(field: R50FieldFilterSlope, id: "FilterSlope",
+                  name: "Filter Slope", min: 0, max: 8, value: 0, unit: .seconds),
+
+            Field(field: R50FieldPitchAmount, id: "PitchAmount",
+                  name: "Pitch Env Amount", min: -24, max: 24, value: 0),
+            Field(field: R50FieldPitchAttack, id: "PitchAttack",
+                  name: "Pitch Env Attack", min: 0.001, max: 4, value: 0.001,
+                  unit: .seconds, log: true),
+            Field(field: R50FieldPitchDecay, id: "PitchDecay",
+                  name: "Pitch Env Decay", min: 0.001, max: 8, value: 0.2,
+                  unit: .seconds, log: true),
+
+            Field(field: R50FieldShaperType, id: "ShaperType",
+                  name: "Shaper", min: 0,
+                  max: AUValue(shaperTypeNames.count - 1), value: 0,
+                  unit: .indexed, strings: shaperTypeNames),
+            Field(field: R50FieldShaperDrive, id: "ShaperDrive",
+                  name: "Shaper Drive", min: 0, max: 1, value: 0),
+            Field(field: R50FieldShaperPosition, id: "ShaperPosition",
+                  name: "Shaper Position", min: 0, max: 1, value: 0,
+                  unit: .indexed, strings: shaperPositionNames),
         ]
     }
 
