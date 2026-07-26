@@ -16,3 +16,6 @@ xcuserdata/
 # Local audio assets / scratch archives (not part of the build)
 *.wav
 *.zip
+
+# Editor backup files
+*~
