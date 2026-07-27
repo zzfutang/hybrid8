@@ -1732,6 +1732,12 @@ Use it for:
 
 # 34. Development roadmap
 
+Phases 1–3 and 5–7 are built, bar the exceptions noted under each. Phase 4 has
+not been started and phase 8 has barely been. Where the shipped instrument
+departs from what a phase asked for, the departure is recorded rather than the
+plan quietly restated — the roadmap is only useful if it can be trusted to say
+what is missing.
+
 ## Phase 1 — Minimal synth
 
 - plugin-independent engine;
@@ -1740,6 +1746,9 @@ Use it for:
 - amp envelope;
 - stereo output;
 - 16 voices.
+
+Built, at **8 voices** rather than 16. Deliberate: R50 is a monotimbral
+eight-voice instrument and the fascia says so.
 
 ## Phase 2 — Partial engine
 
@@ -1751,6 +1760,22 @@ Use it for:
 - pitch/filter/amp envelopes;
 - LFO.
 
+Built. Interpolation is Catmull-Rom cubic; loops are forward and ping-pong,
+both reachable from the factory manifest's `loopMode`.
+
+**Multisamples were removed after the fact.** Every instrument is now one
+sample stretched across the whole keyboard, which is what the D-50 did — it has
+no per-Partial key range at all, and its waves break up at the extremes as part
+of the sound rather than in spite of it. `SampleRegion` keeps its key range and
+the loader still reads multi-zone manifests, so the machinery is intact and a
+zoned instrument would still work; nothing in the factory set uses it.
+
+The compensating control is the Partial's **Key Follow**
+(`R50FieldPitchKeyFollow`), which scales how far the key's distance from middle
+C reaches the pitch. It is the D-50's own answer to the same problem: rather
+than restricting where a sample sounds, it asks the extremes to travel less
+far.
+
 ## Phase 3 — Tone engine
 
 - two Partials;
@@ -1758,6 +1783,9 @@ Use it for:
 - RingMod;
 - Attack/Sustain;
 - velocity crossfade.
+
+Built, with five structures rather than four: key crossfade was added beside
+velocity crossfade.
 
 ## Phase 4 — Patch engine
 
@@ -1768,6 +1796,9 @@ Use it for:
 - vector mix;
 - 32 voices.
 
+**Not started.** This is the one structural block of the version-one boundary
+still outstanding: there is a single Tone, and no Patch layer above it.
+
 ## Phase 5 — Modulation
 
 - modulation matrix;
@@ -1776,12 +1807,17 @@ Use it for:
 - host automation;
 - smoothing.
 
+Built bar **MPE**. Six matrix slots, four macros, host automation through the
+AU parameter tree, and per-block smoothing.
+
 ## Phase 6 — Effects
 
 - chorus;
 - stereo delay;
 - reverb;
 - master EQ.
+
+Built bar the **master EQ**, and with a compressor that was not on the list.
 
 ## Phase 7 — Plugin and UI
 
@@ -1795,6 +1831,10 @@ Use it for:
 - modulation matrix;
 - sample browser.
 
+Built bar **VST3** — Audio Unit and standalone only. There is no Patch page
+because there is no Patch; the pages are Partial, Envelopes, Tone, Mod, FX and
+Samples.
+
 ## Phase 8 — Production quality
 
 - background sample loading;
@@ -1807,6 +1847,11 @@ Use it for:
 - crash recovery;
 - installer and signing.
 
+**Barely started.** Imports decode on a background queue, but the factory set
+loads synchronously the first time `SampleLibrary::shared()` is touched. None
+of preset migration, asset hashing, missing-sample resolution, SIMD,
+oversampling or signing exists yet.
+
 ---
 
 # 35. Version-one feature boundary
@@ -1818,7 +1863,7 @@ Ship version one with:
 - 2 Tones;
 - 1 Patch;
 - Mix, RingMod, Attack/Sustain, and Crossfade structures;
-- multisamples;
+- ~~multisamples~~ — dropped, see phase 2;
 - forward and ping-pong loops;
 - linear and cubic interpolation;
 - saw, pulse, triangle, sine, and noise;
