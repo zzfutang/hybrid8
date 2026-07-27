@@ -1,120 +1,73 @@
 {
-  "instruments": [
+    "instruments": [
+
+
+	
     { "name": "Choir",
       "zones": [
-        { "file": "choir_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "choir_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "choir_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "choir_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "choir_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "airvox_f3.wav", "rootKey": 54, "lowKey": 0, "highKey": 127,
+          "loop": true }
       ]
     },
     { "name": "Strings",
       "zones": [
-        { "file": "strings_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "strings_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "strings_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "strings_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "strings_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "strings_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Warm Pad",
       "zones": [
-        { "file": "warm_pad_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "warm_pad_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "warm_pad_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "warm_pad_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "warm_pad_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+
+        { "file": "warm_pad_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Glass Pad",
       "zones": [
-        { "file": "glass_pad_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "glass_pad_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "glass_pad_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "glass_pad_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "glass_pad_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "glass_pad_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Voice Ooh",
       "zones": [
-        { "file": "voice_ooh_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "voice_ooh_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "voice_ooh_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "voice_ooh_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "voice_ooh_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "voice_ooh_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Flute",
       "zones": [
-        { "file": "flute_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "flute_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "flute_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "flute_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "flute_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+          { "file": "flute_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Trumpet",
       "zones": [
-        { "file": "trumpet_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "trumpet_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "trumpet_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "trumpet_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "trumpet_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "trumpet_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Organ",
       "zones": [
-        { "file": "organ_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "organ_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "organ_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "organ_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "organ_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "organ_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Nylon Guitar",
       "zones": [
-        { "file": "nylon_guitar_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "nylon_guitar_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "nylon_guitar_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "nylon_guitar_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "nylon_guitar_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "nylon_guitar_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Piano",
       "zones": [
-        { "file": "piano_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "piano_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "piano_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "piano_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "piano_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "piano_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Gong",
       "zones": [
-        { "file": "gong_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "gong_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "gong_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "gong_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "gong_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "gong_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Nasty",
       "zones": [
-        { "file": "nasty_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "nasty_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "nasty_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "nasty_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "nasty_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "nasty_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Fat Block",
       "zones": [
-        { "file": "fat_block_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "fat_block_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "fat_block_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "fat_block_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "fat_block_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "fat_block_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Mallet",
@@ -209,88 +162,110 @@
     },
     { "name": "Spectrum 1",
       "zones": [
-        { "file": "spectrum_1_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "spectrum_1_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "spectrum_1_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "spectrum_1_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "spectrum_1_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "spectrum_1_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Spectrum 2",
       "zones": [
-        { "file": "spectrum_2_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "spectrum_2_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "spectrum_2_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "spectrum_2_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "spectrum_2_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "spectrum_2_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Spectrum 3",
       "zones": [
-        { "file": "spectrum_3_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "spectrum_3_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "spectrum_3_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "spectrum_3_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "spectrum_3_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "spectrum_3_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Spectrum 4",
       "zones": [
-        { "file": "spectrum_4_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "spectrum_4_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "spectrum_4_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "spectrum_4_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "spectrum_4_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "spectrum_4_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Spectrum 5",
       "zones": [
-        { "file": "spectrum_5_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "spectrum_5_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "spectrum_5_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "spectrum_5_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "spectrum_5_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "spectrum_5_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Spectrum 6",
       "zones": [
-        { "file": "spectrum_6_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "spectrum_6_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "spectrum_6_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "spectrum_6_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "spectrum_6_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "spectrum_6_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Spectrum 7",
       "zones": [
-        { "file": "spectrum_7_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "spectrum_7_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "spectrum_7_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "spectrum_7_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "spectrum_7_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "spectrum_7_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
       ]
     },
     { "name": "Spectrum 8",
       "zones": [
-        { "file": "spectrum_8_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "spectrum_8_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "spectrum_8_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "spectrum_8_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "spectrum_8_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "spectrum_8_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127}
       ]
     },
     { "name": "Spectrum 9",
       "zones": [
-        { "file": "spectrum_9_z0.wav", "rootKey": 36, "lowKey": 0, "highKey": 44 },
-        { "file": "spectrum_9_z1.wav", "rootKey": 54, "lowKey": 45, "highKey": 62 },
-        { "file": "spectrum_9_z2.wav", "rootKey": 72, "lowKey": 63, "highKey": 80 },
-        { "file": "spectrum_9_z3.wav", "rootKey": 90, "lowKey": 81, "highKey": 98 },
-        { "file": "spectrum_9_z4.wav", "rootKey": 108, "lowKey": 99, "highKey": 127 }
+        { "file": "spectrum_9_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
+
       ]
     },
     { "name": "Pizzicato",
       "zones": [
         { "file": "pizzicato.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
+      ]
+    },
+
+    { "name": "Bassoon",
+      "zones": [
+        { "file": "BASSOON-B2.wav", "rootKey": 47, "lowKey": 0, "highKey": 127,
+          "loop": true,
+          "tuneCents": -14.6 }
+      ]
+    },
+    { "name": "Clarinet",
+      "zones": [
+        { "file": "CLARINET D4.wav", "rootKey": 74, "lowKey": 0, "highKey": 127,
+          "loop": true,
+          "tuneCents": -2.0 }
+      ]
+    },
+    { "name": "Sax",
+      "zones": [
+        { "file": "sax-C2.wav", "rootKey": 60, "lowKey": 0, "highKey": 127,
+          "loop": true,
+          "tuneCents": 1.9 }
+      ]
+    },
+    { "name": "Tenor Sax",
+      "zones": [
+        { "file": "tenorsax-D#2.wav", "rootKey": 51, "lowKey": 0, "highKey": 127,
+          "loop": true,
+          "tuneCents": -17.3 }
+      ]
+    },
+    { "name": "Low Brass",
+      "zones": [
+        { "file": "lowbrass-C2.wav", "rootKey": 36, "lowKey": 0, "highKey": 127,
+          "loop": true,
+          "tuneCents": -6.7 }
+      ]
+    },
+    { "name": "Male Choir",
+      "zones": [
+        { "file": "male-choir-C2.wav", "rootKey": 48, "lowKey": 0, "highKey": 127,
+          "loop": true,
+          "tuneCents": 13.2 }
+      ]
+    },
+    { "name": "Flute Air",
+      "zones": [
+        { "file": "flute-C#4.wav", "rootKey": 73, "lowKey": 0, "highKey": 127,
+          "loop": true,
+          "tuneCents": 10.6 }
+      ]
+    },
+    { "name": "Flute Wave",
+      "zones": [
+        { "file": "FLUTE G4.wav", "rootKey": 79, "lowKey": 0, "highKey": 127,
+          "loop": true,
+          "tuneCents": -7.7 }
       ]
     }
   ]
