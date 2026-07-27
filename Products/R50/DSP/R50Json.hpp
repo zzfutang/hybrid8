@@ -53,6 +53,20 @@ public:
     int intOr(int fallback) const {
         return kind == Kind::Number ? static_cast<int>(number) : fallback;
     }
+
+    double doubleOr(double fallback) const {
+        return kind == Kind::Number ? number : fallback;
+    }
+
+    bool boolOr(bool fallback) const {
+        return kind == Kind::Bool ? boolean : fallback;
+    }
+
+    /// True when the member was actually present. The `...Or` accessors cannot
+    /// distinguish "absent" from "written with the fallback value", and the
+    /// manifest's loop flag needs that difference: absent means defer to the
+    /// file, false means override it.
+    bool exists() const { return kind != Kind::Null; }
 };
 
 namespace detail {

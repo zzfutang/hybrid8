@@ -265,10 +265,29 @@ inline int loadSampleDirectory(SampleLibrary &library, const std::string &direct
 ///
 ///   { "instruments": [ { "name": "Choir",
 ///                        "zones": [ {"file": "...", "rootKey": 36,
-///                                    "lowKey": 0, "highKey": 44} ] } ] }
+///                                    "lowKey": 0, "highKey": 44,
+///                                    "loop": true,
+///                                    "loopStart": 0, "loopEnd": 22050} ] } ] }
 ///
-/// Loop points, root fine-tuning and sample rate are not repeated here: they
-/// live in the WAV, which is the single source of truth for what the audio is.
+/// `loop` is optional and overrides the file when present: true sustains, false
+/// makes a one-shot of audio that carries a loop. Omit it and the WAV's `smpl`
+/// chunk decides, which is what every zone did before the key existed.
+///
+/// The override exists because a WAV dropped in from anywhere else usually has
+/// no `smpl` chunk at all, and the strict rule — no chunk, no loop — turned
+/// every such file into a one-shot with nothing said about why. Stating it in
+/// the manifest is a way to loop audio without having to rewrite the file
+/// first. `loopStart`/`loopEnd` (exclusive, as everywhere in R50) are likewise
+/// optional; with `loop: true` and no points the whole file loops.
+///
+/// `tuneCents` is the correction applied on playback, not a description of the
+/// recording: a file that sits 15 cents sharp of its declared root wants -15.
+/// (Same sign convention as the importer's editable root.) It exists because
+/// `rootKey` only resolves to the nearest semitone, and a loop landing a
+/// quarter-tone off beats audibly against the other Partial.
+///
+/// Sample rate is still not repeated here: it lives in the WAV, which remains
+/// the source of truth for what the audio *is*.
 inline bool loadFactoryManifest(SampleLibrary &library, const std::string &directory) {
     std::vector<uint8_t> raw;
     if (!readWholeFile(directory + "/factory_samples.json", raw)) return false;
@@ -279,7 +298,11 @@ inline bool loadFactoryManifest(SampleLibrary &library, const std::string &direc
     if (!instruments.isArray() || instruments.items.empty()) return false;
 
     // Decode everything before publishing anything.
-    struct PendingZone { SampleData data; int rootKey, lowKey, highKey; };
+    struct PendingZone {
+        SampleData data;
+        int   rootKey, lowKey, highKey;
+        float tuneCents;
+    };
     struct Pending { std::string name; std::vector<PendingZone> zones; };
     std::vector<Pending> pending;
 
@@ -304,21 +327,40 @@ inline bool loadFactoryManifest(SampleLibrary &library, const std::string &direc
 
             PendingZone out;
             out.rootKey = zone["rootKey"].intOr(wav.rootKey);
+            // Clamped to a semitone either way: past that the root key is
+            // simply wrong, and a manifest that says so is describing a
+            // different note rather than detuning this one.
+            out.tuneCents = static_cast<float>(
+                std::min(100.0, std::max(-100.0,
+                    zone["tuneCents"].doubleOr(0.0))));
             out.lowKey  = zone["lowKey"].intOr(0);
             out.highKey = zone["highKey"].intOr(127);
             out.data.samples          = wav.samples;
             out.data.sourceSampleRate = wav.sampleRate;
             out.data.rootKey          = out.rootKey;
-            if (wav.hasLoop && wav.loopEnd > wav.loopStart + 1
-             && wav.loopEnd <= static_cast<uint32_t>(out.data.length())) {
-                out.data.loopStart = wav.loopStart;
-                out.data.loopEnd   = wav.loopEnd;
-                out.data.loopMode  = LoopMode::Forward;
-            } else {
-                out.data.loopStart = 0;
-                out.data.loopEnd   = static_cast<uint32_t>(out.data.length());
-                out.data.loopMode  = LoopMode::None;
-            }
+
+            const uint32_t frames = static_cast<uint32_t>(out.data.length());
+            const JsonValue &loopFlag = zone["loop"];
+            const bool wavLoops = wav.hasLoop && wav.loopEnd > wav.loopStart + 1
+                               && wav.loopEnd <= frames;
+            const bool looped = loopFlag.exists() ? loopFlag.boolOr(false)
+                                                  : wavLoops;
+
+            // Points: whatever the manifest states, else the file's, else the
+            // whole thing. Clamped rather than rejected — a loopEnd past the
+            // end of the audio is the manifest describing a file that has since
+            // been re-edited shorter, and losing the whole factory set over
+            // that is out of proportion to a loop that stops early.
+            uint32_t start = zone["loopStart"].intOr(
+                wavLoops ? static_cast<int>(wav.loopStart) : 0);
+            uint32_t end = zone["loopEnd"].intOr(
+                wavLoops ? static_cast<int>(wav.loopEnd) : static_cast<int>(frames));
+            if (end > frames) end = frames;
+            if (end <= start + 1) { start = 0; end = frames; }
+
+            out.data.loopStart = looped ? start : 0;
+            out.data.loopEnd   = looped ? end : frames;
+            out.data.loopMode  = looped ? LoopMode::Forward : LoopMode::None;
             instrument.zones.push_back(std::move(out));
         }
         pending.push_back(std::move(instrument));
@@ -333,7 +375,8 @@ inline bool loadFactoryManifest(SampleLibrary &library, const std::string &direc
             SampleRegion region;
             region.lowKey  = zone.lowKey;
             region.highKey = zone.highKey;
-            region.rootKey = zone.rootKey;
+            region.rootKey   = zone.rootKey;
+            region.tuneCents = zone.tuneCents;
             region.slot    = slot;
             published.regions[published.regionCount++] = region;
         }

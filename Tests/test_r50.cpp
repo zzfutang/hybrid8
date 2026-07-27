@@ -2571,7 +2571,72 @@ int main() {
             library.sample(library.instrument(0)->regions[0].slot);
         check(looped->loopMode == r50::LoopMode::Forward
            && looped->loopStart == 500 && looped->loopEnd == 19000,
-              "the loop comes from the wav, not the manifest");
+              "the loop comes from the wav when the manifest says nothing");
+
+        // The manifest's `loop` overrides the file in both directions. hit.wav
+        // has no smpl chunk at all, which is the case that matters: audio
+        // brought in from anywhere else arrives that way, and before this key
+        // the only way to sustain it was to rewrite the file.
+        {
+            r50::SampleLibrary over{r50::SampleLibrary::Empty{}};
+            writeManifest(R"({"instruments": [
+                {"name": "Forced",  "zones": [{"file": "hit.wav", "loop": true}]},
+                {"name": "Silenced","zones": [{"file": "low.wav", "loop": false}]},
+                {"name": "Points",  "zones": [{"file": "hit.wav", "loop": true,
+                                               "loopStart": 100,
+                                               "loopEnd": 900}]},
+                {"name": "TooLong", "zones": [{"file": "hit.wav", "loop": true,
+                                               "loopStart": 10,
+                                               "loopEnd": 999999}]}]})");
+            check(r50::loadFactoryManifest(over, directory),
+                  "a manifest carrying loop overrides loads");
+
+            const r50::SampleData *forced =
+                over.sample(over.instrument(0)->regions[0].slot);
+            check(forced->loopMode == r50::LoopMode::Forward
+               && forced->loopStart == 0
+               && forced->loopEnd == static_cast<uint32_t>(forced->length()),
+                  "loop:true loops a file that carries no loop at all");
+
+            const r50::SampleData *silenced =
+                over.sample(over.instrument(1)->regions[0].slot);
+            check(silenced->loopMode == r50::LoopMode::None,
+                  "loop:false makes a one-shot of a file that does loop");
+
+            const r50::SampleData *points =
+                over.sample(over.instrument(2)->regions[0].slot);
+            check(points->loopMode == r50::LoopMode::Forward
+               && points->loopStart == 100 && points->loopEnd == 900,
+                  "the manifest's loop points are used when it gives them");
+
+            // Clamped, not rejected: the alternative is losing every other
+            // instrument in the set over one stale number.
+            const r50::SampleData *tooLong =
+                over.sample(over.instrument(3)->regions[0].slot);
+            check(tooLong->loopMode == r50::LoopMode::Forward
+               && tooLong->loopEnd == static_cast<uint32_t>(tooLong->length()),
+                  "a loopEnd past the end of the audio clamps to the end");
+        }
+
+        // tuneCents corrects the gap between a recording's real pitch and the
+        // nearest semitone, which rootKey alone cannot express.
+        {
+            r50::SampleLibrary tuned{r50::SampleLibrary::Empty{}};
+            writeManifest(R"({"instruments": [
+                {"name": "Flat",   "zones": [{"file": "low.wav", "rootKey": 40,
+                                              "tuneCents": -14.6}]},
+                {"name": "Plain",  "zones": [{"file": "low.wav", "rootKey": 40}]},
+                {"name": "Absurd", "zones": [{"file": "low.wav", "rootKey": 40,
+                                              "tuneCents": 5000}]}]})");
+            check(r50::loadFactoryManifest(tuned, directory),
+                  "a manifest carrying tuneCents loads");
+            check(std::fabs(tuned.instrument(0)->regions[0].tuneCents + 14.6f) < 0.01f,
+                  "the zone's tuneCents reaches the region");
+            check(tuned.instrument(1)->regions[0].tuneCents == 0.0f,
+                  "a zone without tuneCents is left untuned");
+            check(tuned.instrument(2)->regions[0].tuneCents == 100.0f,
+                  "tuneCents past a semitone clamps rather than transposing");
+        }
 
         // A manifest naming a file that is not there must leave the library
         // alone, so the caller can fall back rather than publish half a set.
