@@ -9,7 +9,10 @@ sources.**
 
 ## 0. Status and relationship to existing code
 
-This is a target architecture, not a description of what is built today.
+This is the earlier PCM/noise-only target architecture, not a description of
+what is built today. The implementation status and current product boundary
+are tracked in §34–35 of `hybrid_pcm_va_soft_synth_architecture.md`; where the
+documents disagree, that later roadmap is authoritative.
 
 The R50 that exists in this repo is a virtual-analog subtractive synth: one
 PolyBLEP oscillator per voice into the shared ZDF filter. Under this design its
@@ -1228,7 +1231,11 @@ Modulation matrix, four macros, LFO tempo sync (requires restoring the
 `AUHostMusicalContextBlock` path), parameter smoothing.
 
 ### Phase 6 — Effects
-Chorus, stereo delay, reverb, master EQ.
+Complete as a substantially expanded three-slot global rack: four named
+routing topologies, independent sends per Partial, 16 selectable algorithms
+covering modulation, delay, space, EQ, nonlinear color and exciter, followed by
+the global compressor. Nonlinear slots and the per-Partial waveshaper use 4x
+oversampling. See `FX-updated.plan` for the completed implementation record.
 
 ### Phase 7 — UI
 Page-based editor, browser, sample page with loop editor, envelope editor,

@@ -17,7 +17,6 @@ typedef enum R50Param : unsigned long long {
 
     R50ParamCutoff,              // Hz
     R50ParamResonance,           // 0 .. 1
-    R50ParamDrive,               // 0 .. 1
     R50ParamSlope,               // 0 = 12 dB/oct, 1 = 24 dB/oct
     R50ParamKeyTrack,            // 0 .. 1 (cutoff follows note pitch)
     R50ParamFilterEnvAmount,     // -1 .. 1 (bipolar, scaled to octaves)
@@ -96,18 +95,6 @@ typedef enum R50Param : unsigned long long {
     // --- Effects ------------------------------------------------------------
     // A global stage after the voice sum, so none of these are per Partial.
     R50ParamFxCompressor,        // 0 = off .. 1 = heavily compressed
-    R50ParamFxChorusMix,         // 0 .. 1
-    R50ParamFxChorusRate,        // Hz
-    R50ParamFxChorusDepth,       // 0 .. 1
-    R50ParamFxDelayMix,          // 0 .. 1
-    R50ParamFxDelayTime,         // seconds
-    R50ParamFxDelayFeedback,     // 0 .. 1
-    R50ParamFxDelayTone,         // 0 .. 1 (damping of the repeats)
-    R50ParamFxDelayPingPong,     // 0 .. 1
-    R50ParamFxReverbMix,         // 0 .. 1
-    R50ParamFxReverbSize,        // 0 .. 1
-    R50ParamFxReverbDecay,       // seconds
-    R50ParamFxReverbTone,        // 0 .. 1
 
     // --- Modulation ---------------------------------------------------------
     // Per voice, not per Partial, so these are plain appended addresses rather
@@ -135,6 +122,16 @@ typedef enum R50Param : unsigned long long {
     R50ParamMacro3,
     R50ParamMacro4,
 
+    // --- Three-slot global effects rack ------------------------------------
+    // Stable address block for routing and three generic effect slots.
+    R50ParamP1DryLevel,
+    R50ParamP1Send1,
+    R50ParamP1Send2,
+    R50ParamP1Send3,
+    R50ParamFxTopology,          // 0..3, see EffectTopology
+    R50ParamFxSlotBase,
+    R50ParamFxSlotLast = R50ParamFxSlotBase + 47,
+
     R50ParamCount
 } R50Param;
 
@@ -154,7 +151,6 @@ typedef enum R50PartialField {
     R50FieldNoisePitchTrack,
     R50FieldCutoff,
     R50FieldResonance,
-    R50FieldDrive,
     R50FieldSlope,
     R50FieldKeyTrack,
     R50FieldFilterEnvAmount,
@@ -186,9 +182,40 @@ typedef enum R50PartialField {
     R50FieldShaperDrive,
     R50FieldShaperPosition,
     R50FieldPitchKeyFollow,
+    R50FieldDryLevel,
+    R50FieldSend1,
+    R50FieldSend2,
+    R50FieldSend3,
 
     R50PartialFieldCount
 } R50PartialField;
+
+/// Common fields stored for each global effect slot.
+typedef enum R50FxSlotField {
+    R50FxFieldAlgorithm = 0,
+    R50FxFieldBypass,
+    R50FxFieldInputGain,
+    R50FxFieldOutputGain,
+    R50FxFieldMix,
+    R50FxFieldWidth,
+    R50FxFieldControl1,
+    R50FxFieldControl2,
+    R50FxFieldControl3,
+    R50FxFieldControl4,
+    R50FxFieldControl5,
+    R50FxFieldControl6,
+    R50FxFieldControl7,
+    R50FxFieldControl8,
+    R50FxFieldMode1,
+    R50FxFieldMode2,
+    R50FxSlotFieldCount
+} R50FxSlotField;
+
+static inline R50Param r50FxSlotParam(int slot, R50FxSlotField field) {
+    return (R50Param)((unsigned long long)R50ParamFxSlotBase
+                    + (unsigned long long)slot * R50FxSlotFieldCount
+                    + (unsigned long long)field);
+}
 
 /// Fields a matrix slot owns. The order defines the slot block's layout, so it
 /// is append-only for the same reason the parameter enum is.
@@ -229,7 +256,6 @@ static inline R50Param r50PartialParam(int partial, R50PartialField field) {
         case R50FieldNoisePitchTrack:  return R50ParamNoisePitchTrack;
         case R50FieldCutoff:           return R50ParamCutoff;
         case R50FieldResonance:        return R50ParamResonance;
-        case R50FieldDrive:            return R50ParamDrive;
         case R50FieldSlope:            return R50ParamSlope;
         case R50FieldKeyTrack:         return R50ParamKeyTrack;
         case R50FieldFilterEnvAmount:  return R50ParamFilterEnvAmount;
@@ -259,6 +285,10 @@ static inline R50Param r50PartialParam(int partial, R50PartialField field) {
         case R50FieldShaperDrive:      return R50ParamP1ShaperDrive;
         case R50FieldShaperPosition:   return R50ParamP1ShaperPosition;
         case R50FieldPitchKeyFollow:   return R50ParamP1PitchKeyFollow;
+        case R50FieldDryLevel:         return R50ParamP1DryLevel;
+        case R50FieldSend1:            return R50ParamP1Send1;
+        case R50FieldSend2:            return R50ParamP1Send2;
+        case R50FieldSend3:            return R50ParamP1Send3;
         default:                       return R50ParamCount;
     }
 }

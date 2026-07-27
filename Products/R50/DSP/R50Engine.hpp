@@ -26,6 +26,11 @@ public:
     R50Engine() {
         setDefaults();
         snapshotParams();
+        for (int partial = 0; partial < kPartialsPerVoice; ++partial) {
+            dryLevel_[partial] = dryLevelTarget_[partial];
+            for (int slot = 0; slot < kEffectSlotCount; ++slot)
+                sendLevel_[partial][slot] = sendLevelTarget_[partial][slot];
+        }
         // Force the generated libraries to build here, on whatever thread
         // constructs the engine — never lazily from the render thread.
         (void)waveLibrary();
@@ -43,6 +48,8 @@ public:
         for (auto &voice : voices_) voice.setSampleRate(sr);
         auditionVoice_.setSampleRate(sr);
         effects_.setup(sr);
+        routingSmoothCoef_ =
+            static_cast<float>(std::exp(-1.0 / (0.010 * sampleRate_)));
         gainSmoother_.setSampleRate(sr);
         gainSmoother_.setTimeConstant(20.0);
         gainSmoother_.snap(store_[R50ParamMasterGain].load(std::memory_order_relaxed));
@@ -183,20 +190,45 @@ public:
 
             // Effect coefficients are control-rate too; several of them run
             // trig or allocate delay reads that have no business per sample.
-            effects_.setParams(
-                get(R50ParamFxChorusMix), get(R50ParamFxChorusRate),
-                get(R50ParamFxChorusDepth),
-                get(R50ParamFxDelayMix), get(R50ParamFxDelayTime),
-                get(R50ParamFxDelayFeedback), get(R50ParamFxDelayTone),
-                get(R50ParamFxDelayPingPong),
-                get(R50ParamFxReverbMix), get(R50ParamFxReverbSize),
-                get(R50ParamFxReverbDecay), get(R50ParamFxReverbTone),
-                0.015f,
+            effects_.setCompressorParams(
                 compressorAmount_ > 0.001f ? 1.0f : 0.0f,
                 -6.0f - 24.0f * compressorAmount_,   // threshold
                 1.0f + 7.0f * compressorAmount_,     // ratio
                 0.010f, 0.120f,
                 6.0f * compressorAmount_);           // makeup
+            const int topology = static_cast<int>(get(R50ParamFxTopology) + 0.5f);
+            effects_.setRackTopology(static_cast<EffectTopology>(
+                topology < 0 ? 0 : (topology >= kEffectTopologyCount
+                    ? kEffectTopologyCount - 1 : topology)));
+            for (int slot = 0; slot < kEffectSlotCount; ++slot) {
+                const auto slotValue = [&](R50FxSlotField field) {
+                    return get(r50FxSlotParam(slot, field));
+                };
+                const int algorithm =
+                    static_cast<int>(slotValue(R50FxFieldAlgorithm) + 0.5f);
+                EffectSlotDescriptor descriptor;
+                descriptor.algorithm = static_cast<EffectAlgorithm>(
+                    algorithm < 0 ? 0 : (algorithm >= kEffectAlgorithmCount
+                        ? kEffectAlgorithmCount - 1 : algorithm));
+                descriptor.bypass = slotValue(R50FxFieldBypass) >= 0.5f;
+                descriptor.inputGain =
+                    std::pow(10.0f, slotValue(R50FxFieldInputGain) / 20.0f);
+                descriptor.outputGain =
+                    std::pow(10.0f, slotValue(R50FxFieldOutputGain) / 20.0f);
+                descriptor.mix = synth::clampf(slotValue(R50FxFieldMix), 0.0f, 1.0f);
+                descriptor.width =
+                    synth::clampf(slotValue(R50FxFieldWidth), 0.0f, 2.0f);
+                for (int control = 0; control < 8; ++control) {
+                    descriptor.control[control] = synth::clampf(
+                        slotValue(static_cast<R50FxSlotField>(
+                            R50FxFieldControl1 + control)), 0.0f, 1.0f);
+                }
+                descriptor.mode[0] = static_cast<int>(
+                    std::lround(slotValue(R50FxFieldMode1)));
+                descriptor.mode[1] = static_cast<int>(
+                    std::lround(slotValue(R50FxFieldMode2)));
+                effects_.setRackSlot(slot, descriptor);
+            }
 
             // One free-running phase per LFO, so voices whose LFO is not set to
             // retrigger all agree with each other across a held chord.
@@ -219,25 +251,50 @@ public:
             }
 
             for (int i = 0; i < block; ++i) {
-                float sumL = 0.0f, sumR = 0.0f;
+                EffectRackInput rackInput;
+                for (int partial = 0; partial < kPartialsPerVoice; ++partial) {
+                    dryLevel_[partial] = dryLevelTarget_[partial]
+                        + (dryLevel_[partial] - dryLevelTarget_[partial])
+                        * routingSmoothCoef_;
+                    for (int slot = 0; slot < kEffectSlotCount; ++slot) {
+                        sendLevel_[partial][slot] = sendLevelTarget_[partial][slot]
+                            + (sendLevel_[partial][slot]
+                               - sendLevelTarget_[partial][slot])
+                            * routingSmoothCoef_;
+                    }
+                }
                 for (auto &voice : voices_) {
-                    float voiceL = 0.0f, voiceR = 0.0f;
-                    voice.process(voiceL, voiceR);
-                    sumL += voiceL;
-                    sumR += voiceR;
+                    VoiceOutput voiceOutput;
+                    voice.processPartials(voiceOutput);
+                    for (int partial = 0; partial < kPartialsPerVoice; ++partial) {
+                        const float left = voiceOutput.partial[partial].l;
+                        const float right = voiceOutput.partial[partial].r;
+                        rackInput.dry.l += left * dryLevel_[partial];
+                        rackInput.dry.r += right * dryLevel_[partial];
+                        for (int slot = 0; slot < kEffectSlotCount; ++slot) {
+                            rackInput.send[slot].l +=
+                                left * sendLevel_[partial][slot];
+                            rackInput.send[slot].r +=
+                                right * sendLevel_[partial][slot];
+                        }
+                    }
                 }
 
                 // Headroom for stacked voices, then a gentle safety clip.
                 // 0.25 was sized for eight voices all peaking together, which
                 // left a single note at -20 dBFS; the soft clip exists exactly
                 // to catch the rare moment when a dense chord does line up.
-                sumL *= 0.55f;
-                sumR *= 0.55f;
+                rackInput.dry.l *= 0.55f;
+                rackInput.dry.r *= 0.55f;
+                for (StereoSample &send : rackInput.send) {
+                    send.l *= 0.55f;
+                    send.r *= 0.55f;
+                }
 
                 // Effects run before the master trim, so moving the output
                 // level does not change how hard the compressor works or how
                 // loud the reverb tail sits against the dry signal.
-                const StereoSample wet = effects_.process(sumL, sumR);
+                const StereoSample wet = effects_.processRack(rackInput);
 
                 // The preview joins after the effects and before the master
                 // trim: it is not part of the patch, so the patch's reverb and
@@ -252,8 +309,10 @@ public:
                 }
 
                 const float gain = gainSmoother_.next();
-                sumL = synth::softClip((wet.l + auditionL * kAuditionLevel) * gain);
-                sumR = synth::softClip((wet.r + auditionR * kAuditionLevel) * gain);
+                const float sumL =
+                    synth::softClip((wet.l + auditionL * kAuditionLevel) * gain);
+                const float sumR =
+                    synth::softClip((wet.r + auditionR * kAuditionLevel) * gain);
 
                 outL[offset + i] = sumL;
                 outR[offset + i] = sumR;
@@ -284,7 +343,6 @@ private:
         set(R50ParamOctave,          0.0f);
         set(R50ParamCutoff,          3200.0f);
         set(R50ParamResonance,       0.15f);
-        set(R50ParamDrive,           0.0f);
         set(R50ParamSlope,           1.0f);   // 24 dB
         set(R50ParamKeyTrack,        0.5f);
         set(R50ParamFilterEnvAmount, 0.45f);
@@ -332,7 +390,6 @@ private:
         setPartial(1, R50FieldNoisePitchTrack, 0.0f);
         setPartial(1, R50FieldCutoff,          3200.0f);
         setPartial(1, R50FieldResonance,       0.15f);
-        setPartial(1, R50FieldDrive,           0.0f);
         setPartial(1, R50FieldSlope,           1.0f);
         setPartial(1, R50FieldKeyTrack,        0.5f);
         setPartial(1, R50FieldFilterEnvAmount, 0.45f);
@@ -372,21 +429,8 @@ private:
         set(R50ParamToneCrossfadeLow,  48.0f);
         set(R50ParamToneCrossfadeHigh, 72.0f);
 
-        // Effects default to silent so an existing preset, which names none of
-        // them, sounds exactly as it did.
+        // The compressor is the sole processor outside the three-slot rack.
         set(R50ParamFxCompressor,    0.0f);
-        set(R50ParamFxChorusMix,     0.0f);
-        set(R50ParamFxChorusRate,    0.6f);
-        set(R50ParamFxChorusDepth,   0.4f);
-        set(R50ParamFxDelayMix,      0.0f);
-        set(R50ParamFxDelayTime,     0.32f);
-        set(R50ParamFxDelayFeedback, 0.35f);
-        set(R50ParamFxDelayTone,     0.5f);
-        set(R50ParamFxDelayPingPong, 1.0f);
-        set(R50ParamFxReverbMix,     0.0f);
-        set(R50ParamFxReverbSize,    0.55f);
-        set(R50ParamFxReverbDecay,   2.4f);
-        set(R50ParamFxReverbTone,    0.55f);
 
         // Modulation defaults to nothing routed, so an existing preset — which
         // names no slot — sounds exactly as it did.
@@ -404,6 +448,32 @@ private:
         }
         set(R50ParamMacro1, 0.0f); set(R50ParamMacro2, 0.0f);
         set(R50ParamMacro3, 0.0f); set(R50ParamMacro4, 0.0f);
+
+        for (int partial = 0; partial < kPartialsPerVoice; ++partial) {
+            // The default Serial topology uses Slot 1 as its rack entrance.
+            // Off slots are transparent in a serial path, so this is identical
+            // to a unity dry path until an algorithm is selected — and makes
+            // that selection immediately audible without a second routing edit.
+            setPartial(partial, R50FieldDryLevel, 0.0f);
+            setPartial(partial, R50FieldSend1, 1.0f);
+            setPartial(partial, R50FieldSend2, 0.0f);
+            setPartial(partial, R50FieldSend3, 0.0f);
+        }
+        set(R50ParamFxTopology, 0.0f);
+        for (int slot = 0; slot < kEffectSlotCount; ++slot) {
+            set(r50FxSlotParam(slot, R50FxFieldAlgorithm), 0.0f);
+            set(r50FxSlotParam(slot, R50FxFieldBypass), 0.0f);
+            set(r50FxSlotParam(slot, R50FxFieldInputGain), 0.0f);
+            set(r50FxSlotParam(slot, R50FxFieldOutputGain), 0.0f);
+            set(r50FxSlotParam(slot, R50FxFieldMix), 1.0f);
+            set(r50FxSlotParam(slot, R50FxFieldWidth), 1.0f);
+            for (int control = 0; control < 8; ++control) {
+                set(r50FxSlotParam(slot, static_cast<R50FxSlotField>(
+                    R50FxFieldControl1 + control)), 0.5f);
+            }
+            set(r50FxSlotParam(slot, R50FxFieldMode1), 0.0f);
+            set(r50FxSlotParam(slot, R50FxFieldMode2), 0.0f);
+        }
     }
 
     /// Derive the denormalised block the voices read from the atomic store.
@@ -448,7 +518,6 @@ private:
 
         out.cutoffHz        = field(R50FieldCutoff);
         out.resonance       = synth::clampf(field(R50FieldResonance), 0.0f, 1.0f);
-        out.drive           = synth::clampf(field(R50FieldDrive), 0.0f, 1.0f);
         out.slope           = synth::clampf(field(R50FieldSlope), 0.0f, 1.0f);
         out.keyTrack        = synth::clampf(field(R50FieldKeyTrack), 0.0f, 1.0f);
         out.filterEnvAmount = synth::clampf(field(R50FieldFilterEnvAmount), -1.0f, 1.0f);
@@ -483,6 +552,10 @@ private:
 
         out.level = synth::clampf(field(R50FieldLevel), 0.0f, 1.0f);
         out.pan   = synth::clampf(field(R50FieldPan), -1.0f, 1.0f);
+        out.dryLevel = synth::clampf(field(R50FieldDryLevel), 0.0f, 1.0f);
+        out.send[0] = synth::clampf(field(R50FieldSend1), 0.0f, 1.0f);
+        out.send[1] = synth::clampf(field(R50FieldSend2), 0.0f, 1.0f);
+        out.send[2] = synth::clampf(field(R50FieldSend3), 0.0f, 1.0f);
     }
 
     /// Derive the denormalised block the voices read from the atomic store.
@@ -494,6 +567,9 @@ private:
     void snapshotParams() {
         for (int i = 0; i < kPartialsPerVoice; ++i) {
             snapshotPartial(i, params_.partial[i]);
+            dryLevelTarget_[i] = params_.partial[i].dryLevel;
+            for (int slot = 0; slot < kEffectSlotCount; ++slot)
+                sendLevelTarget_[i][slot] = params_.partial[i].send[slot];
         }
 
         const int structure = static_cast<int>(get(R50ParamToneStructure) + 0.5f);
@@ -644,6 +720,11 @@ private:
 
     GlobalEffects          effects_;
     float                  compressorAmount_ = 0.0f;
+    float dryLevel_[kPartialsPerVoice] = {1.0f, 1.0f};
+    float dryLevelTarget_[kPartialsPerVoice] = {1.0f, 1.0f};
+    float sendLevel_[kPartialsPerVoice][kEffectSlotCount] = {};
+    float sendLevelTarget_[kPartialsPerVoice][kEffectSlotCount] = {};
+    float routingSmoothCoef_ = 0.0f;
     synth::OnePoleSmoother gainSmoother_;
     std::atomic<float>     meter_{0.0f};
 };

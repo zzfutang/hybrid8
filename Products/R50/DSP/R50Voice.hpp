@@ -35,6 +35,15 @@ enum class ToneStructure {
 
 static constexpr int kToneStructureCount = 5;
 
+struct VoicePartialOutput {
+    float l = 0.0f;
+    float r = 0.0f;
+};
+
+struct VoiceOutput {
+    VoicePartialOutput partial[kPartialsPerVoice];
+};
+
 struct VoiceParams {
     PartialParams partial[kPartialsPerVoice];
     ModParams     modulation;
@@ -146,8 +155,16 @@ public:
 
     /// One stereo sample.
     inline void process(float &outL, float &outR) {
-        outL = 0.0f;
-        outR = 0.0f;
+        VoiceOutput output;
+        processPartials(output);
+        outL = output.partial[0].l + output.partial[1].l;
+        outR = output.partial[0].r + output.partial[1].r;
+    }
+
+    /// Render the two Partial contributions separately so the engine can
+    /// accumulate independent dry and global-send buses without allocating.
+    inline void processPartials(VoiceOutput &output) {
+        output = {};
         if (!active_) return;
 
         const float a = partials_[0].process();
@@ -193,14 +210,14 @@ public:
             }
         }
 
-        const float left = a * weightA * partials_[0].panLeft()
-                         + b * weightB * partials_[1].panLeft()
-                         + extra * 0.7071f;
-        const float right = a * weightA * partials_[0].panRight()
-                          + b * weightB * partials_[1].panRight()
-                          + extra * 0.7071f;
-        outL = left;
-        outR = right;
+        // Ring modulation belongs to both source Partials. Split it equally so
+        // either Partial's send can route the product without doubling it when
+        // their dry/send levels match.
+        const float ringShare = extra * 0.35355f;
+        output.partial[0].l = a * weightA * partials_[0].panLeft() + ringShare;
+        output.partial[0].r = a * weightA * partials_[0].panRight() + ringShare;
+        output.partial[1].l = b * weightB * partials_[1].panLeft() + ringShare;
+        output.partial[1].r = b * weightB * partials_[1].panRight() + ringShare;
     }
 
 private:

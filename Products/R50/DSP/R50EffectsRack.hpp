@@ -18,10 +18,12 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <vector>
 
 #include "Utils.hpp"
+#include "R50Oversampling.hpp"
 
 namespace r50 {
 
@@ -210,6 +212,11 @@ public:
     }
 
     inline StereoSample process(float inputL, float inputR) {
+        const StereoSample wet = processWet(inputL, inputR);
+        return equalPowerMix(inputL, inputR, wet.l, wet.r, mix_);
+    }
+
+    inline StereoSample processWet(float inputL, float inputR) {
         smooth();
         left_.write(inputL);
         right_.write(inputR);
@@ -243,7 +250,7 @@ public:
         // Cross-distribute the voices for width without polarity tricks.
         float wetL = 0.5f * (tapsL[0] + tapsL[1]);
         float wetR = 0.5f * (tapsR[0] + tapsR[1]);
-        return equalPowerMix(inputL, inputR, wetL, wetR, mix_);
+        return {wetL, wetR};
     }
 
 private:
@@ -297,6 +304,11 @@ public:
     }
 
     inline StereoSample process(float inputL, float inputR) {
+        const StereoSample wet = processWet(inputL, inputR);
+        return equalPowerMix(inputL, inputR, wet.l, wet.r, mix_);
+    }
+
+    inline StereoSample processWet(float inputL, float inputR) {
         smooth();
         if (crossfade_ >= 1.0f && std::fabs(requestedDelay_ - delayA_) > 0.5f) {
             delayB_ = requestedDelay_;
@@ -325,7 +337,7 @@ public:
         left_.write(inputL + std::tanh(returnL * 1.15f) * feedback_);
         right_.write(inputR + std::tanh(returnR * 1.15f) * feedback_);
 
-        return equalPowerMix(inputL, inputR, delayedL, delayedR, mix_);
+        return {delayedL, delayedR};
     }
 
 private:
@@ -392,6 +404,11 @@ public:
     }
 
     inline StereoSample process(float inputL, float inputR) {
+        const StereoSample wet = processWet(inputL, inputR);
+        return equalPowerMix(inputL, inputR, wet.l, wet.r, mix_);
+    }
+
+    inline StereoSample processWet(float inputL, float inputR) {
         smooth();
 
         // Mono-compatible injection, with a little side information retained.
@@ -455,7 +472,7 @@ public:
                           - tap[4] - tap[5] + tap[6] - tap[7]) * 0.35355339f;
         const float wetR = (-tap[0] + tap[1] + tap[2] + tap[3]
                           + tap[4] - tap[5] - tap[6] - tap[7]) * 0.35355339f;
-        return equalPowerMix(inputL, inputR, wetL, wetR, mix_);
+        return {wetL, wetR};
     }
 
 private:
@@ -480,56 +497,459 @@ private:
     float smoothCoef_ = 0.0f;
 };
 
+#include "R50ModulationEffects.hpp"
+
+enum class EffectAlgorithm {
+    Off = 0,
+    HallReverb,
+    RoomReverb,
+    PlateStageReverb,
+    EarlyReflections,
+    StereoDelay,
+    CrossDelay,
+    Chorus,
+    Ensemble,
+    Flanger,
+    Phaser,
+    TremoloAutoPan,
+    RotarySpeaker,
+    Equalizer,
+    Overdrive,
+    Distortion,
+    Exciter
+};
+
+static constexpr int kEffectAlgorithmCount = 17;
+static constexpr int kEffectSlotCount = 3;
+
+enum class EffectTopology {
+    Serial = 0,
+    Parallel,
+    SerialPairParallel,
+    ParallelPairMaster
+};
+
+static constexpr int kEffectTopologyCount = 4;
+
+struct EffectSlotDescriptor {
+    EffectAlgorithm algorithm = EffectAlgorithm::Off;
+    bool bypass = false;
+    float inputGain = 1.0f;
+    float outputGain = 1.0f;
+    float mix = 1.0f;
+    float width = 1.0f;
+    float control[8] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+    int mode[2] = {0, 0};
+};
+
+struct EffectRackInput {
+    StereoSample dry{};
+    StereoSample send[kEffectSlotCount]{};
+};
+
+class EffectSlot {
+public:
+    void setup(double sampleRate) {
+        sampleRate_ = sampleRate;
+        smoothCoef_ = static_cast<float>(std::exp(-1.0 / (0.010 * sampleRate)));
+        transitionStep_ = 1.0f / static_cast<float>(
+            std::max(1.0, sampleRate * 0.020));
+        chorus_.setup(sampleRate);
+        delay_.setup(sampleRate);
+        reverb_.setup(sampleRate);
+        ensemble_.setup(sampleRate);
+        flanger_.setup(sampleRate);
+        phaser_.setup(sampleRate);
+        tremolo_.setup(sampleRate);
+        rotary_.setup(sampleRate);
+        early_.setup(sampleRate);
+        modernDelay_.setup(sampleRate);
+        toneEffect_.setup(sampleRate);
+        reset();
+    }
+
+    void reset() {
+        chorus_.reset();
+        delay_.reset();
+        reverb_.reset();
+        ensemble_.reset();
+        flanger_.reset();
+        phaser_.reset();
+        tremolo_.reset();
+        rotary_.reset();
+        early_.reset();
+        modernDelay_.reset();
+        toneEffect_.reset();
+        inputGain_ = descriptor_.inputGain;
+        outputGain_ = descriptor_.outputGain;
+        mix_ = descriptor_.mix;
+        width_ = descriptor_.width;
+        enabled_ = isEnabled(descriptor_) ? 1.0f : 0.0f;
+        transition_ = 1.0f;
+        lastSerial_ = {};
+        lastParallel_ = {};
+    }
+
+    void setDescriptor(const EffectSlotDescriptor &descriptor) {
+        if (descriptor.algorithm != descriptor_.algorithm) {
+            transition_ = 0.0f;
+            serialAnchor_ = lastSerial_;
+            parallelAnchor_ = lastParallel_;
+        }
+        descriptor_ = descriptor;
+        const float c1 = clampf(descriptor.control[0], 0.0f, 1.0f);
+        const float c2 = clampf(descriptor.control[1], 0.0f, 1.0f);
+        const float c3 = clampf(descriptor.control[2], 0.0f, 1.0f);
+        const float c4 = clampf(descriptor.control[3], 0.0f, 1.0f);
+        const float c5 = clampf(descriptor.control[4], 0.0f, 1.0f);
+        const float c6 = clampf(descriptor.control[5], 0.0f, 1.0f);
+        const float c7 = clampf(descriptor.control[6], 0.0f, 1.0f);
+        const float c8 = clampf(descriptor.control[7], 0.0f, 1.0f);
+        chorus_.setParams(0.0f, 0.05f * std::pow(160.0f, c1), c2);
+        delay_.setParams(0.0f, 0.02f * std::pow(100.0f, c1),
+                         c2 * 0.94f, c3,
+                         descriptor.algorithm == EffectAlgorithm::CrossDelay
+                             ? 1.0f : static_cast<float>(descriptor.mode[0] != 0));
+        if (descriptor.algorithm == EffectAlgorithm::RoomReverb)
+            reverb_.setParams(0.0f, c3, 0.15f * std::pow(26.6667f, c2),
+                              c4, c1 * 0.08f);
+        else if (descriptor.algorithm == EffectAlgorithm::PlateStageReverb)
+            reverb_.setParams(0.0f,
+                              descriptor.mode[0] == 0 ? c3 : c3 * 0.72f,
+                              0.3f * std::pow(40.0f, c2),
+                              descriptor.mode[0] == 0
+                                  ? clampf(c4 + 0.18f, 0.0f, 1.0f)
+                                  : clampf(c4 - 0.12f, 0.0f, 1.0f),
+                              c1 * 0.2f);
+        else
+            reverb_.setParams(0.0f, c3, 0.4f * std::pow(30.0f, c2),
+                              c4, c1 * 0.2f);
+        ensemble_.setParams(0.03f * std::pow(100.0f, c1), c2, c3, c4,
+                            1000.0f * std::pow(20.0f, c5),
+                            20.0f * std::pow(25.0f, c6));
+        flanger_.setParams(0.03f * std::pow(333.333f, c1), c2,
+                           0.1f * std::pow(150.0f, c3), c4 * 1.9f - 0.95f,
+                           descriptor.mode[0] != 0, descriptor.mode[1] != 0,
+                           c5 * 0.5f, 1000.0f * std::pow(20.0f, c6));
+        phaser_.setParams(0.03f * std::pow(333.333f, c1), c2,
+                          80.0f * std::pow(50.0f, c3), 0.5f + 5.5f * c4,
+                          c5 * 1.9f - 0.95f,
+                          descriptor.mode[0] != 0 ? 12 : 6,
+                          descriptor.mode[1] != 0, c8 * 0.5f);
+        tremolo_.setParams(0.03f * std::pow(666.667f, c1), c2,
+                           c3 * 2.0f - 1.0f, c4 * 0.5f,
+                           c5 * 2.0f - 1.0f, descriptor.mode[0]);
+        rotary_.setParams(descriptor.mode[0],
+                          0.2f * std::pow(7.5f, c1),
+                          3.0f * std::pow(3.333333f, c2),
+                          0.5f * std::pow(4.0f, c3),
+                          0.2f * std::pow(40.0f, c4), c5, c6,
+                          400.0f * std::pow(5.0f, c7));
+        early_.setParams(c1 * 0.2f, 0.03f * std::pow(26.6667f, c2), c3,
+                         c4 * 2.0f - 1.0f,
+                         500.0f * std::pow(40.0f, c5), c6 * 2.0f,
+                         descriptor.mode[0]);
+        modernDelay_.setParams(0.001f * std::pow(2000.0f, c1),
+                               0.001f * std::pow(2000.0f, c2),
+                               c3 * 1.9f - 0.95f,
+                               descriptor.algorithm == EffectAlgorithm::CrossDelay
+                                   ? c4 : 0.0f,
+                               20.0f * std::pow(100.0f, c5),
+                               500.0f * std::pow(40.0f, c6), c7);
+        if (descriptor.algorithm >= EffectAlgorithm::Equalizer
+            && descriptor.algorithm <= EffectAlgorithm::Exciter) {
+            const auto kind = static_cast<ToneAndNonlinearEffect::Kind>(
+                static_cast<int>(descriptor.algorithm)
+                - static_cast<int>(EffectAlgorithm::Equalizer));
+            toneEffect_.setParams(kind, descriptor.control, descriptor.mode[0]);
+        }
+    }
+
+    inline StereoSample processSerial(StereoSample input) {
+        // A zero return is an exact bypass contract, including the first
+        // render quantum after selecting an algorithm. Do not let the mix or
+        // algorithm-transition smoothers briefly colour that dry signal.
+        if (descriptor_.mix <= 0.0f) {
+            smooth();
+            (void)processWet(input);
+            transition_ = 1.0f;
+            lastSerial_ = input;
+            return input;
+        }
+        smooth();
+        StereoSample wet = processWet(input);
+        const float dryGain = std::cos(mix_ * 0.5f * static_cast<float>(synth::kPi));
+        const float wetGain = std::sin(mix_ * 0.5f * static_cast<float>(synth::kPi));
+        StereoSample effected = {input.l * dryGain + wet.l * wetGain,
+                                 input.r * dryGain + wet.r * wetGain};
+        StereoSample output = {input.l + (effected.l - input.l) * enabled_,
+                               input.r + (effected.r - input.r) * enabled_};
+        output = applyTransition(output, serialAnchor_);
+        lastSerial_ = output;
+        return output;
+    }
+
+    inline StereoSample processParallel(StereoSample input) {
+        if (descriptor_.mix <= 0.0f) {
+            smooth();
+            (void)processWet(input);
+            transition_ = 1.0f;
+            lastParallel_ = {};
+            return {};
+        }
+        smooth();
+        StereoSample wet = processWet(input);
+        StereoSample output = {wet.l * mix_ * enabled_, wet.r * mix_ * enabled_};
+        output = applyTransition(output, parallelAnchor_);
+        lastParallel_ = output;
+        return output;
+    }
+
+    float tailSeconds() const {
+        switch (descriptor_.algorithm) {
+            case EffectAlgorithm::StereoDelay:
+            case EffectAlgorithm::CrossDelay: return 12.0f;
+            case EffectAlgorithm::HallReverb: return 12.0f;
+            case EffectAlgorithm::RoomReverb: return 4.0f;
+            case EffectAlgorithm::PlateStageReverb: return 12.0f;
+            case EffectAlgorithm::EarlyReflections: return 1.0f;
+            case EffectAlgorithm::Chorus: return 0.060f;
+            case EffectAlgorithm::Ensemble: return 0.060f;
+            case EffectAlgorithm::Flanger: return 0.020f;
+            case EffectAlgorithm::RotarySpeaker: return 0.010f;
+            default: return 0.0f;
+        }
+    }
+    int latencySamples() const { return 0; }
+
+private:
+    static bool isEnabled(const EffectSlotDescriptor &descriptor) {
+        return !descriptor.bypass
+            && descriptor.algorithm != EffectAlgorithm::Off;
+    }
+
+    inline void smooth() {
+        inputGain_ = descriptor_.inputGain
+                   + (inputGain_ - descriptor_.inputGain) * smoothCoef_;
+        outputGain_ = descriptor_.outputGain
+                    + (outputGain_ - descriptor_.outputGain) * smoothCoef_;
+        mix_ = descriptor_.mix + (mix_ - descriptor_.mix) * smoothCoef_;
+        width_ = descriptor_.width + (width_ - descriptor_.width) * smoothCoef_;
+        const float enabledTarget = isEnabled(descriptor_) ? 1.0f : 0.0f;
+        enabled_ = enabledTarget + (enabled_ - enabledTarget) * smoothCoef_;
+    }
+
+    inline StereoSample processWet(StereoSample input) {
+        // Hostile/non-finite host buffers must not poison recursive delay,
+        // filter, or oversampling state for all subsequent renders.
+        const float safeL = std::isfinite(input.l) ? input.l : 0.0f;
+        const float safeR = std::isfinite(input.r) ? input.r : 0.0f;
+        float left = safeL * inputGain_;
+        float right = safeR * inputGain_;
+        StereoSample wet;
+        switch (descriptor_.algorithm) {
+            case EffectAlgorithm::Chorus:
+                wet = chorus_.processWet(left, right);
+                break;
+            case EffectAlgorithm::StereoDelay:
+            case EffectAlgorithm::CrossDelay:
+                wet = modernDelay_.processWet(left, right);
+                break;
+            case EffectAlgorithm::HallReverb:
+                wet = reverb_.processWet(left, right);
+                break;
+            case EffectAlgorithm::RoomReverb:
+            case EffectAlgorithm::PlateStageReverb:
+                wet = reverb_.processWet(left, right);
+                break;
+            case EffectAlgorithm::EarlyReflections:
+                wet = early_.processWet(left, right);
+                break;
+            case EffectAlgorithm::Ensemble:
+                wet = ensemble_.processWet(left, right);
+                break;
+            case EffectAlgorithm::Flanger:
+                wet = flanger_.processWet(left, right);
+                break;
+            case EffectAlgorithm::Phaser:
+                wet = phaser_.processWet(left, right);
+                break;
+            case EffectAlgorithm::TremoloAutoPan:
+                wet = tremolo_.processWet(left, right);
+                break;
+            case EffectAlgorithm::RotarySpeaker:
+                wet = rotary_.processWet(left, right);
+                break;
+            case EffectAlgorithm::Equalizer:
+            case EffectAlgorithm::Overdrive:
+            case EffectAlgorithm::Distortion:
+            case EffectAlgorithm::Exciter:
+                wet = toneEffect_.processWet(left, right);
+                break;
+            case EffectAlgorithm::Off:
+                wet = input;
+                break;
+            default:
+                // Algorithms introduced in later phases remain transparent in
+                // serial paths and silent in parallel through enabled_.
+                wet = {left, right};
+                break;
+        }
+        const float wetMid = 0.5f * (wet.l + wet.r);
+        const float wetSide = 0.5f * (wet.l - wet.r) * width_;
+        return {(wetMid + wetSide) * outputGain_,
+                (wetMid - wetSide) * outputGain_};
+    }
+
+    inline StereoSample applyTransition(StereoSample output,
+                                        const StereoSample &anchor) {
+        if (transition_ >= 1.0f) return output;
+        const float x = transition_;
+        output = {anchor.l + (output.l - anchor.l) * x,
+                  anchor.r + (output.r - anchor.r) * x};
+        transition_ = std::min(1.0f, transition_ + transitionStep_);
+        return output;
+    }
+
+    EffectSlotDescriptor descriptor_{};
+    StereoChorus chorus_;
+    StereoDelay delay_;
+    StereoReverb reverb_;
+    SymphonicEnsemble ensemble_;
+    StereoFlanger flanger_;
+    StereoPhaser phaser_;
+    TremoloAutoPan tremolo_;
+    RotarySpeaker rotary_;
+    EarlyReflections early_;
+    ModernStereoDelay modernDelay_;
+    ToneAndNonlinearEffect toneEffect_;
+    double sampleRate_ = 44100.0;
+    float smoothCoef_ = 0.0f;
+    float transitionStep_ = 1.0f, transition_ = 1.0f;
+    float inputGain_ = 1.0f, outputGain_ = 1.0f;
+    float mix_ = 1.0f, width_ = 1.0f, enabled_ = 0.0f;
+    StereoSample lastSerial_{}, lastParallel_{};
+    StereoSample serialAnchor_{}, parallelAnchor_{};
+};
+
+class ThreeSlotEffectsRack {
+public:
+    void setup(double sampleRate) {
+        topologyStep_ = 1.0f / static_cast<float>(
+            std::max(1.0, sampleRate * 0.020));
+        for (EffectSlot &slot : slot_) slot.setup(sampleRate);
+        reset();
+    }
+    void reset() {
+        for (EffectSlot &slot : slot_) slot.reset();
+        topologyTransition_ = 1.0f;
+        lastOutput_ = {};
+        topologyAnchor_ = {};
+    }
+    void setTopology(EffectTopology topology) {
+        if (topology != topology_) {
+            topology_ = topology;
+            topologyAnchor_ = lastOutput_;
+            topologyTransition_ = 0.0f;
+        }
+    }
+    void setSlot(int index, const EffectSlotDescriptor &descriptor) {
+        if (index >= 0 && index < kEffectSlotCount)
+            slot_[index].setDescriptor(descriptor);
+    }
+
+    inline StereoSample process(const EffectRackInput &input) {
+        StereoSample result = input.dry;
+        switch (topology_) {
+            case EffectTopology::Serial: {
+                StereoSample chain = slot_[0].processSerial(input.send[0]);
+                chain = slot_[1].processSerial(add(chain, input.send[1]));
+                chain = slot_[2].processSerial(add(chain, input.send[2]));
+                result = add(result, chain);
+                break;
+            }
+            case EffectTopology::Parallel:
+                for (int i = 0; i < kEffectSlotCount; ++i)
+                    result = add(result, slot_[i].processParallel(input.send[i]));
+                break;
+            case EffectTopology::SerialPairParallel: {
+                StereoSample pair = slot_[0].processSerial(input.send[0]);
+                pair = slot_[1].processSerial(add(pair, input.send[1]));
+                result = add(result, pair);
+                result = add(result, slot_[2].processParallel(input.send[2]));
+                break;
+            }
+            case EffectTopology::ParallelPairMaster: {
+                StereoSample pair = add(slot_[0].processParallel(input.send[0]),
+                                        slot_[1].processParallel(input.send[1]));
+                result = add(result, slot_[2].processSerial(add(pair, input.send[2])));
+                break;
+            }
+        }
+        if (topologyTransition_ < 1.0f) {
+            result = {topologyAnchor_.l
+                        + (result.l - topologyAnchor_.l) * topologyTransition_,
+                      topologyAnchor_.r
+                        + (result.r - topologyAnchor_.r) * topologyTransition_};
+            topologyTransition_ =
+                std::min(1.0f, topologyTransition_ + topologyStep_);
+        }
+        lastOutput_ = result;
+        return result;
+    }
+
+private:
+    static inline StereoSample add(StereoSample a, StereoSample b) {
+        return {a.l + b.l, a.r + b.r};
+    }
+
+    EffectTopology topology_ = EffectTopology::Serial;
+    EffectSlot slot_[kEffectSlotCount];
+    float topologyStep_ = 1.0f, topologyTransition_ = 1.0f;
+    StereoSample topologyAnchor_{}, lastOutput_{};
+};
+
 class GlobalEffects {
 public:
     void setup(double sampleRate) {
         compressor_.setup(sampleRate);
-        chorus_.setup(sampleRate);
-        delay_.setup(sampleRate);
-        reverb_.setup(sampleRate);
+        rack_.setup(sampleRate);
     }
     void reset() {
-        compressor_.reset(); chorus_.reset(); delay_.reset(); reverb_.reset();
+        compressor_.reset();
+        rack_.reset();
     }
 
-    void setParams(float chorusMix, float chorusRate, float chorusDepth,
-                   float delayMix, float delayTime, float delayFeedback,
-                   float delayTone, float delayPingPong,
-                   float reverbMix = 0.0f, float reverbSize = 0.55f,
-                   float reverbDecay = 2.4f, float reverbTone = 0.55f,
-                   float reverbPreDelay = 0.015f,
-                   float compressorOn = 0.0f,
-                   float compressorThreshold = -18.0f,
-                   float compressorRatio = 4.0f,
-                   float compressorAttack = 0.010f,
-                   float compressorRelease = 0.120f,
-                   float compressorMakeup = 0.0f) {
+    // The compressor is the sole processor outside the three-slot rack.
+    // Keeping its configuration separate prevents the retired fixed
+    // Chorus -> Delay -> Reverb chain from becoming a second effects path.
+    void setCompressorParams(float compressorOn,
+                             float compressorThreshold,
+                             float compressorRatio,
+                             float compressorAttack,
+                             float compressorRelease,
+                             float compressorMakeup) {
         compressor_.setParams(compressorOn, compressorThreshold,
                               compressorRatio, compressorAttack,
                               compressorRelease, compressorMakeup);
-        chorus_.setParams(chorusMix, chorusRate, chorusDepth);
-        delay_.setParams(delayMix, delayTime, delayFeedback, delayTone, delayPingPong);
-        reverb_.setParams(reverbMix, reverbSize, reverbDecay,
-                          reverbTone, reverbPreDelay);
     }
 
-    inline StereoSample process(float inputL, float inputR) {
-        StereoSample compressed = compressor_.process(inputL, inputR);
-        StereoSample c = chorus_.process(compressed.l, compressed.r);
-        StereoSample d = delay_.process(c.l, c.r);
-        return reverb_.process(d.l, d.r);
-    }
-
-    inline StereoSample process(float mono) { return process(mono, mono); }
     float compressorGainReductionDb() const {
         return compressor_.gainReductionDb();
     }
 
+    void setRackTopology(EffectTopology topology) { rack_.setTopology(topology); }
+    void setRackSlot(int index, const EffectSlotDescriptor &descriptor) {
+        rack_.setSlot(index, descriptor);
+    }
+    inline StereoSample processRack(const EffectRackInput &input) {
+        const StereoSample routed = rack_.process(input);
+        return compressor_.process(routed.l, routed.r);
+    }
+
 private:
     StereoCompressor compressor_;
-    StereoChorus chorus_;
-    StereoDelay delay_;
-    StereoReverb reverb_;
+    ThreeSlotEffectsRack rack_;
 };
 
 } // namespace r50

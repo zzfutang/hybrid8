@@ -10,25 +10,17 @@
 //  Gain compensation keeps each type roughly level-matched with Off, so
 //  auditioning types is a comparison of character rather than of loudness.
 //
-//  The stage runs at 2x. Measured at the host rate, folding put 22.6% of the
-//  fundamental's level into inharmonic partials — a wavefolder generates
-//  harmonics far above anything the source contained, and they fold straight
-//  back down. Soft and hard clipping measured near 0.3%, but the stage
-//  oversamples whenever it is active regardless of type, because "the shaper
-//  runs at 2x" is a simpler thing to reason about than a per-type rule.
-//
-//  The half-band filters add roughly two and a half samples of group delay to
-//  a shaped Partial. Two Partials at the same pitch with only one of them
-//  shaped are therefore very slightly out of alignment; at 57 microseconds
-//  that is well below anything audible as timing, and only a few degrees of
-//  phase even at 10 kHz.
+//  The stage runs at 4x through two cascaded high-quality 129-tap half-band
+//  stages. Folding and rectification create harmonics far above anything the
+//  source contained, so both the old 2x rate and short decimator's ~-45 dB
+//  rejection were insufficient for the production effects architecture.
 //
 
 #pragma once
 
 #include <cmath>
 
-#include "Decimator.hpp"
+#include "R50Oversampling.hpp"
 #include "Utils.hpp"
 
 namespace r50 {
@@ -51,7 +43,7 @@ public:
         type_ = type;
         position_ = position;
         // Exponential taper: the useful range of a shaper is bunched at the
-        // bottom, exactly as it is for the filter's own drive control.
+        // bottom.
         //
         // A Partial reaches this stage at roughly half full scale, so the
         // folder needs enough gain to fold that several times over — a range
@@ -73,21 +65,24 @@ public:
     bool isActive() const { return type_ != ShaperType::Off; }
 
     void reset() {
-        upsampler_.reset();
-        downsampler_.reset();
+        oversampler_.reset();
+        std::fill(dryDelay_, dryDelay_ + Oversampler4x::latencySamples(), 0.0f);
+        dryPosition_ = 0;
     }
 
-    /// Shape one sample at 2x. Returns the input untouched when off, so the
-    /// whole stage costs one branch in the common case.
+    /// Shape one sample at 4x. The inexpensive Off path has the same fixed
+    /// latency as the active path, keeping Partials aligned when only some use
+    /// shaping and avoiding a timing jump when the type changes.
     inline float process(float input) {
-        if (type_ == ShaperType::Off) return input;
+        const float delayedDry = dryDelay_[dryPosition_];
+        dryDelay_[dryPosition_] = input;
+        if (++dryPosition_ == Oversampler4x::latencySamples()) dryPosition_ = 0;
 
-        // Zero-stuff and interpolate to two sub-samples, shape both, then
-        // band-limit on the way back down.
-        const float first  = 2.0f * upsampler_.process(input);
-        const float second = 2.0f * upsampler_.process(0.0f);
-        downsampler_.process(shapeOne(first));
-        return downsampler_.process(shapeOne(second));
+        if (type_ == ShaperType::Off) return delayedDry;
+
+        return oversampler_.process(input, [this](float sample) {
+            return shapeOne(sample);
+        });
     }
 
 private:
@@ -134,8 +129,9 @@ private:
     ShaperPosition position_ = ShaperPosition::PreFilter;
     float gain_   = 1.0f;
     float makeup_ = 1.0f;
-    synth::Decimator2x upsampler_;
-    synth::Decimator2x downsampler_;
+    Oversampler4x oversampler_;
+    float dryDelay_[Oversampler4x::latencySamples()] = {};
+    int dryPosition_ = 0;
 };
 
 } // namespace r50

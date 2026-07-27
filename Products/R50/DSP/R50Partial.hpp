@@ -17,8 +17,8 @@
 #pragma once
 
 #include "ADSR.hpp"
-#include "Filter.hpp"
 #include "R50Envelope.hpp"
+#include "R50DigitalFilter.hpp"
 #include "R50Modulation.hpp"
 #include "R50Noise.hpp"
 #include "R50SampleFactory.hpp"
@@ -55,7 +55,6 @@ struct PartialParams {
 
     float cutoffHz            = 4000.0f;
     float resonance           = 0.2f;
-    float drive               = 0.0f;
     float slope               = 0.0f;   // 0 = 12 dB, 1 = 24 dB
     float keyTrack            = 0.5f;
     float filterEnvAmount     = 0.4f;   // bipolar, +/- 4 octaves at full scale
@@ -94,6 +93,8 @@ struct PartialParams {
 
     float level = 1.0f;
     float pan   = 0.0f;                 // -1 = left, +1 = right
+    float dryLevel = 1.0f;
+    float send[3] = {0.0f, 0.0f, 0.0f};
 };
 
 class Partial {
@@ -236,7 +237,7 @@ public:
         cutoff = synth::clampf(static_cast<float>(cutoff), 20.0f,
                                static_cast<float>(sampleRate_ * 0.45));
         const float resonance = synth::clampf(p.resonance + mod.resonance, 0.0f, 1.0f);
-        filter_.setParams(cutoff, resonance, p.slope, 0.0f, p.drive);
+        filter_.setParams(cutoff, resonance, p.slope);
     }
 
     /// One sample, before level, pan and the Tone structure. Level is applied
@@ -338,7 +339,7 @@ private:
     WaveOscillator      osc_;
     SamplePlayer        sample_;
     NoiseSource         noise_;
-    synth::LadderFilter filter_;
+    DigitalLowPassFilter filter_;
     Waveshaper          shaper_;
     R50Envelope         ampEnv_;
     R50Envelope         filterEnv_;

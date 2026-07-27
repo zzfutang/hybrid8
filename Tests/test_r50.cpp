@@ -12,8 +12,10 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <thread>
 #include <tuple>
 #include <vector>
@@ -107,7 +109,6 @@ static void setupSpectralTone(r50::R50Engine &engine, int waveIndex) {
     engine.setParameter(R50ParamOscWave, static_cast<float>(waveIndex));
     engine.setParameter(R50ParamCutoff, 18000.0f);
     engine.setParameter(R50ParamResonance, 0.0f);
-    engine.setParameter(R50ParamDrive, 0.0f);
     engine.setParameter(R50ParamSlope, 0.0f);
     engine.setParameter(R50ParamKeyTrack, 0.0f);
     engine.setParameter(R50ParamFilterEnvAmount, 0.0f);
@@ -875,9 +876,8 @@ int main() {
 
     // --- Partial addressing -------------------------------------------------
     {
-        // Partial 1 must still live at the original addresses, or every saved
-        // preset and automation lane silently means something else.
-        const struct { R50PartialField field; R50Param legacy; } mapping[] = {
+        // Partial 1 fields and their public parameter addresses must agree.
+        const struct { R50PartialField field; R50Param parameter; } mapping[] = {
             {R50FieldSourceType, R50ParamSourceType},
             {R50FieldSampleInstrument, R50ParamSampleInstrument},
             {R50FieldSampleStart, R50ParamSampleStart},
@@ -891,7 +891,6 @@ int main() {
             {R50FieldNoisePitchTrack, R50ParamNoisePitchTrack},
             {R50FieldCutoff, R50ParamCutoff},
             {R50FieldResonance, R50ParamResonance},
-            {R50FieldDrive, R50ParamDrive},
             {R50FieldSlope, R50ParamSlope},
             {R50FieldKeyTrack, R50ParamKeyTrack},
             {R50FieldFilterEnvAmount, R50ParamFilterEnvAmount},
@@ -906,7 +905,7 @@ int main() {
         };
         bool stable = true;
         for (const auto &entry : mapping) {
-            if (r50PartialParam(0, entry.field) != entry.legacy) stable = false;
+            if (r50PartialParam(0, entry.field) != entry.parameter) stable = false;
         }
         check(stable, "Partial 1 keeps the original parameter addresses");
 
@@ -1245,8 +1244,48 @@ int main() {
         check(late > early * 2.0, "pitch envelope bends the note and returns");
     }
 
-    // --- Waveshaper ---------------------------------------------------------
+    // --- Oversampling and waveshaper ----------------------------------------
     {
+        // Identity processing exposes the exact round-trip group delay. These
+        // must remain integer base-rate delays so bypass and active paths can
+        // be aligned without a fractional-delay approximation.
+        auto impulsePeak = [](auto &oversampler) {
+            int peakIndex = 0;
+            float peak = 0.0f;
+            for (int i = 0; i < 256; ++i) {
+                const float output = oversampler.process(
+                    i == 0 ? 1.0f : 0.0f, [](float sample) { return sample; });
+                if (std::fabs(output) > peak) {
+                    peak = std::fabs(output);
+                    peakIndex = i;
+                }
+            }
+            return peakIndex;
+        };
+
+        r50::Oversampler2x oversampler2x;
+        r50::Oversampler4x oversampler4x;
+        check(impulsePeak(oversampler2x) == r50::Oversampler2x::latencySamples(),
+              "2x oversampler reports its exact impulse latency");
+        check(impulsePeak(oversampler4x) == r50::Oversampler4x::latencySamples(),
+              "4x oversampler reports its exact impulse latency");
+
+        oversampler4x.reset();
+        float dc = 0.0f;
+        for (int i = 0; i < 1024; ++i)
+            dc = oversampler4x.process(1.0f, [](float sample) { return sample; });
+        check(std::fabs(dc - 1.0f) < 1.0e-4f,
+              "4x oversampler has unity steady-state DC gain");
+
+        r50::Waveshaper bypassedShaper;
+        int bypassPeak = -1;
+        for (int i = 0; i < 160; ++i) {
+            const float output = bypassedShaper.process(i == 0 ? 1.0f : 0.0f);
+            if (std::fabs(output) > 0.5f) bypassPeak = i;
+        }
+        check(bypassPeak == r50::Oversampler4x::latencySamples(),
+              "waveshaper bypass is latency-aligned with active processing");
+
         auto shaperEnergy = [](int type, int note) {
             r50::R50Engine engine;
             setupSpectralTone(engine, 0);
@@ -1306,33 +1345,509 @@ int main() {
         check(bounded, "waveshapers stay bounded at full drive, post-filter");
     }
 
-    // --- Effects ------------------------------------------------------------
+    // --- Three-slot routing skeleton and effects ----------------------------
     {
+        r50::ThreeSlotEffectsRack rack;
+        rack.setup(kSR);
+        for (int slot = 0; slot < r50::kEffectSlotCount; ++slot) {
+            r50::EffectSlotDescriptor descriptor;
+            descriptor.algorithm = r50::EffectAlgorithm::Equalizer;
+            descriptor.outputGain = static_cast<float>(slot + 2);
+            descriptor.mix = 1.0f;
+            rack.setSlot(slot, descriptor);
+        }
+        rack.reset();
+        r50::EffectRackInput impulse;
+        impulse.dry = {1.0f, -1.0f};
+        impulse.send[0] = {2.0f, 20.0f};
+        impulse.send[1] = {3.0f, 30.0f};
+        impulse.send[2] = {5.0f, 50.0f};
+        const float expected[][2] = {
+            {105.0f, 1039.0f}, {34.0f, 329.0f},
+            {42.0f, 409.0f}, {73.0f, 719.0f}
+        };
+        bool topologyGood = true;
+        for (int topology = 0; topology < r50::kEffectTopologyCount; ++topology) {
+            rack.setTopology(static_cast<r50::EffectTopology>(topology));
+            rack.reset();
+            const r50::StereoSample output = rack.process(impulse);
+            topologyGood &= std::fabs(output.l - expected[topology][0]) < 1.0e-3f;
+            topologyGood &= std::fabs(output.r - expected[topology][1]) < 1.0e-3f;
+        }
+        check(topologyGood, "all four named FX topologies route deterministic impulses");
+
+        r50::ThreeSlotEffectsRack offRack;
+        offRack.setup(kSR);
+        offRack.setTopology(r50::EffectTopology::Parallel);
+        offRack.reset();
+        const r50::StereoSample offOutput = offRack.process(impulse);
+        check(offOutput.l == impulse.dry.l && offOutput.r == impulse.dry.r,
+              "Off slots are silent parallel returns");
+
+        // The default serial route enters at Slot 1. Selecting an algorithm
+        // must therefore be audible without requiring the user to discover
+        // and raise a separate Partial send first.
+        r50::R50Engine defaultDry, defaultTremolo;
+        setupSpectralTone(defaultDry, 0);
+        setupSpectralTone(defaultTremolo, 0);
+        defaultTremolo.setParameter(r50FxSlotParam(
+            0, R50FxFieldAlgorithm),
+            static_cast<float>(r50::EffectAlgorithm::TremoloAutoPan));
+        defaultTremolo.setParameter(r50FxSlotParam(
+            0, R50FxFieldControl2), 1.0f);
+        defaultDry.noteOn(60, 100);
+        defaultTremolo.noteOn(60, 100);
+        const auto defaultDryRender = renderBuffer(defaultDry, 0.7);
+        const auto defaultTremoloRender = renderBuffer(defaultTremolo, 0.7);
+        double tremoloDifference = 0.0;
+        for (size_t i = 0; i < defaultDryRender.size(); ++i)
+            tremoloDifference += std::fabs(
+                defaultDryRender[i] - defaultTremoloRender[i]);
+        check(tremoloDifference > 1.0,
+              "selecting Tremolo is audible with the default serial routing");
+
+        auto routedPartialPeak = [](int partial, int slot) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(r50PartialParam(0, R50FieldEnabled),
+                                partial == 0 ? 1.0f : 0.0f);
+            engine.setParameter(r50PartialParam(1, R50FieldEnabled),
+                                partial == 1 ? 1.0f : 0.0f);
+            engine.setParameter(r50PartialParam(partial, R50FieldDryLevel), 0.0f);
+            engine.setParameter(r50PartialParam(
+                partial, static_cast<R50PartialField>(R50FieldSend1 + slot)), 1.0f);
+            engine.setParameter(R50ParamFxTopology,
+                                static_cast<float>(r50::EffectTopology::Parallel));
+            engine.setParameter(r50FxSlotParam(slot, R50FxFieldAlgorithm),
+                                static_cast<float>(r50::EffectAlgorithm::Chorus));
+            engine.noteOn(60, 100);
+            return render(engine, 0.25);
+        };
+        check(routedPartialPeak(0, 0) > 0.001f,
+              "Partial 1 routes independently to a global slot");
+        check(routedPartialPeak(1, 2) > 0.001f,
+              "Partial 2 routes independently to a global slot");
+
+        bool adaptersEverywhere = true;
+        const r50::EffectAlgorithm adapted[] = {
+            r50::EffectAlgorithm::Chorus,
+            r50::EffectAlgorithm::StereoDelay,
+            r50::EffectAlgorithm::HallReverb
+        };
+        for (r50::EffectAlgorithm algorithm : adapted) {
+            for (int slot = 0; slot < r50::kEffectSlotCount; ++slot) {
+                r50::ThreeSlotEffectsRack adapterRack;
+                adapterRack.setup(kSR);
+                adapterRack.setTopology(r50::EffectTopology::Parallel);
+                r50::EffectSlotDescriptor descriptor;
+                descriptor.algorithm = algorithm;
+                descriptor.mix = 1.0f;
+                descriptor.control[0] = 0.25f;
+                descriptor.control[1] = 0.35f;
+                descriptor.control[2] = 0.6f;
+                descriptor.control[3] = 0.0f;
+                adapterRack.setSlot(slot, descriptor);
+                double energy = 0.0;
+                for (int i = 0; i < 24000; ++i) {
+                    r50::EffectRackInput in;
+                    in.send[slot] = {
+                        i < 256 ? std::sin(static_cast<float>(i) * 0.17f) : 0.0f,
+                        i < 256 ? std::sin(static_cast<float>(i) * 0.13f) : 0.0f
+                    };
+                    const r50::StereoSample output = adapterRack.process(in);
+                    if (i > 256)
+                        energy += output.l * output.l + output.r * output.r;
+                    adaptersEverywhere &= std::isfinite(output.l)
+                                       && std::isfinite(output.r);
+                }
+                adaptersEverywhere &= energy > 1.0e-8;
+            }
+        }
+        check(adaptersEverywhere,
+              "Chorus, Delay and Reverb run with tails in every slot");
+
+        // Phase 4 modulation processors: exercise every supported sample rate
+        // with deliberately aggressive controls and a mono source. This catches
+        // unstable allpass coefficients, delay reads outside their allocation,
+        // non-finite feedback, and sample-rate-dependent LFO mistakes.
+        const r50::EffectAlgorithm modulationAlgorithms[] = {
+            r50::EffectAlgorithm::Ensemble,
+            r50::EffectAlgorithm::Flanger,
+            r50::EffectAlgorithm::Phaser,
+            r50::EffectAlgorithm::TremoloAutoPan,
+            r50::EffectAlgorithm::RotarySpeaker
+        };
+        const double modulationRates[] = {
+            11025.0, 22050.0, 44100.0, 96000.0, 192000.0
+        };
+        bool modulationStable = true;
+        bool modulationAudible = true;
+        bool monoCompatible = true;
+        for (double sampleRate : modulationRates) {
+            for (r50::EffectAlgorithm algorithm : modulationAlgorithms) {
+                r50::EffectSlot slot;
+                slot.setup(sampleRate);
+                r50::EffectSlotDescriptor descriptor;
+                descriptor.algorithm = algorithm;
+                descriptor.mix = 1.0f;
+                descriptor.width = 1.0f;
+                for (float &control : descriptor.control) control = 0.82f;
+                descriptor.mode[0] = algorithm == r50::EffectAlgorithm::RotarySpeaker
+                    ? 2 : 1;
+                descriptor.mode[1] = 1;
+                slot.setDescriptor(descriptor);
+                slot.reset();
+                double energy = 0.0, monoEnergy = 0.0;
+                const int frames = static_cast<int>(sampleRate * 0.35);
+                for (int i = 0; i < frames; ++i) {
+                    const float input = 0.2f * std::sin(
+                        static_cast<float>(synth::kTwoPi * 311.0 * i / sampleRate));
+                    const r50::StereoSample output = slot.processParallel({input, input});
+                    modulationStable &= std::isfinite(output.l)
+                                     && std::isfinite(output.r)
+                                     && std::fabs(output.l) < 20.0f
+                                     && std::fabs(output.r) < 20.0f;
+                    energy += output.l * output.l + output.r * output.r;
+                    const float mono = 0.5f * (output.l + output.r);
+                    monoCompatible &= std::isfinite(mono);
+                    monoEnergy += mono * mono;
+                }
+                modulationAudible &= energy > 1.0e-8;
+                monoCompatible &= monoEnergy > 1.0e-10;
+            }
+        }
+        check(modulationStable,
+              "all modulation algorithms stay finite and bounded from 11–192 kHz");
+        check(modulationAudible,
+              "all modulation algorithms produce an audible return at every sample rate");
+        check(monoCompatible,
+              "all modulation returns remain audible and finite when folded to mono");
+
+        // Width zero must collapse the common wet return to exact mono; width
+        // above unity may widen it but must not alter the mid component.
+        bool widthGood = true;
+        for (r50::EffectAlgorithm algorithm : modulationAlgorithms) {
+            r50::EffectSlot monoSlot, wideSlot;
+            monoSlot.setup(kSR); wideSlot.setup(kSR);
+            r50::EffectSlotDescriptor descriptor;
+            descriptor.algorithm = algorithm;
+            descriptor.mix = 1.0f;
+            descriptor.control[0] = 0.7f;
+            descriptor.control[1] = 0.8f;
+            descriptor.control[2] = 0.65f;
+            descriptor.mode[0] = algorithm == r50::EffectAlgorithm::RotarySpeaker
+                ? 2 : 1;
+            descriptor.width = 0.0f;
+            monoSlot.setDescriptor(descriptor); monoSlot.reset();
+            descriptor.width = 2.0f;
+            wideSlot.setDescriptor(descriptor); wideSlot.reset();
+            for (int i = 0; i < 8000; ++i) {
+                const float input = 0.2f * std::sin(i * 0.071f);
+                const auto mono = monoSlot.processParallel({input, input});
+                const auto wide = wideSlot.processParallel({input, input});
+                widthGood &= std::fabs(mono.l - mono.r) < 1.0e-6f;
+                widthGood &= std::fabs((mono.l + mono.r)
+                                     - (wide.l + wide.r)) < 2.0e-4f;
+            }
+        }
+        check(widthGood,
+              "modulation stereo width collapses to mono without changing the mid");
+
+        auto modulationSignature = [](r50::EffectAlgorithm algorithm,
+                                      float feedback, int waveform) {
+            r50::EffectSlot slot;
+            slot.setup(kSR);
+            r50::EffectSlotDescriptor descriptor;
+            descriptor.algorithm = algorithm;
+            descriptor.mix = 1.0f;
+            descriptor.control[0] = 0.6f;
+            descriptor.control[1] = 0.8f;
+            descriptor.control[2] = 0.55f;
+            descriptor.control[3] = feedback;
+            if (algorithm == r50::EffectAlgorithm::Phaser)
+                descriptor.control[4] = feedback;
+            descriptor.mode[1] = waveform;
+            slot.setDescriptor(descriptor);
+            slot.reset();
+            double signature = 0.0;
+            for (int i = 0; i < 12000; ++i) {
+                const float input = i < 3000 ? 0.2f * std::sin(i * 0.093f) : 0.0f;
+                const auto output = slot.processParallel({input, input});
+                signature += output.l * std::sin(i * 0.017)
+                           + output.r * std::cos(i * 0.013);
+            }
+            return signature;
+        };
+        const double flangeNegative = modulationSignature(
+            r50::EffectAlgorithm::Flanger, 0.15f, 0);
+        const double flangePositive = modulationSignature(
+            r50::EffectAlgorithm::Flanger, 0.85f, 0);
+        const double flangeTriangle = modulationSignature(
+            r50::EffectAlgorithm::Flanger, 0.85f, 1);
+        const double phaseNegative = modulationSignature(
+            r50::EffectAlgorithm::Phaser, 0.15f, 0);
+        const double phasePositive = modulationSignature(
+            r50::EffectAlgorithm::Phaser, 0.85f, 0);
+        check(std::fabs(flangeNegative - flangePositive) > 1.0e-4
+           && std::fabs(phaseNegative - phasePositive) > 1.0e-4,
+              "flanger and phaser honor bipolar feedback polarity");
+        check(std::fabs(flangeTriangle - flangePositive) > 1.0e-4,
+              "modulation waveform mode changes the rendered sweep");
+
+        bool spaceDelayStable = true;
+        const r50::EffectAlgorithm spaceDelayAlgorithms[] = {
+            r50::EffectAlgorithm::HallReverb,
+            r50::EffectAlgorithm::RoomReverb,
+            r50::EffectAlgorithm::PlateStageReverb,
+            r50::EffectAlgorithm::EarlyReflections,
+            r50::EffectAlgorithm::StereoDelay,
+            r50::EffectAlgorithm::CrossDelay
+        };
+        for (double rate : {11025.0, 44100.0, 192000.0}) {
+            for (auto algorithm : spaceDelayAlgorithms) {
+                r50::EffectSlot slot;
+                slot.setup(rate);
+                r50::EffectSlotDescriptor descriptor;
+                descriptor.algorithm = algorithm;
+                descriptor.mix = 1;
+                for (float &control : descriptor.control) control = 0.82f;
+                descriptor.control[2] = 0.999f; // near-maximum signed feedback
+                descriptor.control[3] = 1.0f;   // full cross feedback
+                descriptor.mode[0] = 3;
+                slot.setDescriptor(descriptor);
+                slot.reset();
+                const int frames = static_cast<int>(rate * 0.6);
+                double energy = 0;
+                for (int i = 0; i < frames; ++i) {
+                    const float impulse = i == 0 ? 0.7f : 0.0f;
+                    const auto out = slot.processParallel({impulse, impulse * 0.7f});
+                    spaceDelayStable &= std::isfinite(out.l) && std::isfinite(out.r)
+                                     && std::fabs(out.l) < 20
+                                     && std::fabs(out.r) < 20;
+                    energy += out.l * out.l + out.r * out.r;
+                }
+                spaceDelayStable &= energy > 1.0e-12;
+            }
+        }
+        check(spaceDelayStable,
+              "space and delay algorithms stay audible and bounded from 11–192 kHz");
+
+        const r50::EffectAlgorithm toneAlgorithms[] = {
+            r50::EffectAlgorithm::Equalizer,
+            r50::EffectAlgorithm::Overdrive,
+            r50::EffectAlgorithm::Distortion,
+            r50::EffectAlgorithm::Exciter
+        };
+        bool toneFinite = true, silenceQuiet = true, bypassUnity = true;
+        for (auto algorithm : toneAlgorithms) {
+            for (int mode = 0; mode < 3; ++mode) {
+                r50::EffectSlot slot;
+                slot.setup(kSR);
+                r50::EffectSlotDescriptor descriptor;
+                descriptor.algorithm = algorithm;
+                descriptor.mix = 1;
+                descriptor.mode[0] = mode;
+                for (float &control : descriptor.control) control = 1.0f;
+                slot.setDescriptor(descriptor);
+                slot.reset();
+                for (int i = 0; i < 12000; ++i) {
+                    float input = i < 3000 ? (i & 1 ? -1.5f : 1.5f) : 0.0f;
+                    if (i == 6000) input = std::numeric_limits<float>::infinity();
+                    if (i == 7000) input = std::numeric_limits<float>::quiet_NaN();
+                    const auto output = slot.processParallel({input, -input});
+                    toneFinite &= std::isfinite(output.l) && std::isfinite(output.r)
+                               && std::fabs(output.l) < 50 && std::fabs(output.r) < 50;
+                    if (i > 10000)
+                        silenceQuiet &= std::fabs(output.l) < 1.0e-3f
+                                     && std::fabs(output.r) < 1.0e-3f;
+                }
+                descriptor.mix = 0;
+                slot.setDescriptor(descriptor);
+                for (int i = 0; i < 6000; ++i) {
+                    const float input = 0.3f * std::sin(i * 0.071f);
+                    const auto output = slot.processSerial({input, input});
+                    if (i > 5000)
+                        bypassUnity &= std::fabs(output.l - input) < 2.0e-3f
+                                    && std::fabs(output.r - input) < 2.0e-3f;
+                }
+            }
+        }
+        check(toneFinite,
+              "tone and nonlinear effects reject non-finite input and stay bounded");
+        check(silenceQuiet, "nonlinear effects return to silence without residual DC");
+        check(bypassUnity, "tone effects at zero mix return to unity without a level jump");
+
+        auto cpuStart = std::chrono::steady_clock::now();
+        r50::EffectSlot cpuSlot;
+        cpuSlot.setup(192000.0);
+        r50::EffectSlotDescriptor cpuDescriptor;
+        cpuDescriptor.algorithm = r50::EffectAlgorithm::Distortion;
+        cpuDescriptor.mix = 1;
+        cpuDescriptor.control[0] = 0.8f;
+        cpuSlot.setDescriptor(cpuDescriptor);
+        cpuSlot.reset();
+        for (int i = 0; i < 192000; ++i)
+            (void)cpuSlot.processParallel({0.2f * std::sin(i * 0.03f),
+                                           0.2f * std::cos(i * 0.02f)});
+        const double cpuSeconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - cpuStart).count();
+        printf("       4x stereo distortion at 192 kHz: %.3f x realtime\n", cpuSeconds);
+#if defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+        constexpr double cpuLimit = 3.0; // instrumentation overhead
+#else
+        constexpr double cpuLimit = 1.0;
+#endif
+#else
+        constexpr double cpuLimit = 1.0;
+#endif
+        check(cpuSeconds < cpuLimit,
+              "4x stereo distortion processes 192 kHz faster than realtime");
+
+        // Full-engine budget: eight voices, both Partials, and three
+        // oversampled nonlinear slots. Exercise common host quantum sizes at
+        // every production sample rate and report the slowest realtime ratio.
+        double worstEngineRatio = 0.0;
+        bool engineBudgetFinite = true;
+        for (double rate : {44100.0, 48000.0, 96000.0, 192000.0}) {
+            for (int quantum : {32, 64, 128, 512}) {
+                r50::R50Engine budgetEngine;
+                budgetEngine.setSampleRate(rate);
+                setupSpectralTone(budgetEngine, 0);
+                budgetEngine.setParameter(r50PartialParam(
+                    1, R50FieldEnabled), 1.0f);
+                for (int slot = 0; slot < 3; ++slot) {
+                    budgetEngine.setParameter(r50FxSlotParam(
+                        slot, R50FxFieldAlgorithm),
+                        static_cast<float>(r50::EffectAlgorithm::Distortion));
+                    budgetEngine.setParameter(r50FxSlotParam(
+                        slot, R50FxFieldMix), 0.55f);
+                    budgetEngine.setParameter(r50FxSlotParam(
+                        slot, R50FxFieldControl1), 0.65f);
+                }
+                for (int note = 48; note < 56; ++note)
+                    budgetEngine.noteOn(note, 110);
+                const int framesToRender = static_cast<int>(rate * 0.10);
+                std::vector<float> budgetL(quantum), budgetR(quantum);
+                const auto engineStart = std::chrono::steady_clock::now();
+                for (int offset = 0; offset < framesToRender; offset += quantum) {
+                    const int frames = std::min(quantum, framesToRender - offset);
+                    budgetEngine.render(budgetL.data(), budgetR.data(), frames);
+                    for (int i = 0; i < frames; ++i)
+                        engineBudgetFinite &= std::isfinite(budgetL[i])
+                                           && std::isfinite(budgetR[i]);
+                }
+                const double elapsed = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - engineStart).count();
+                worstEngineRatio = std::max(worstEngineRatio, elapsed / 0.10);
+            }
+        }
+        printf("       max-polyphony / 3x distortion worst: %.3f x realtime\n",
+               worstEngineRatio);
+#if defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+        // ThreadSanitizer serializes and instruments the inner oversampling
+        // loops; this pass is a race/finite check, not a timing measurement.
+        constexpr double engineCpuLimit = 100.0;
+#else
+        constexpr double engineCpuLimit = 1.0;
+#endif
+#else
+        constexpr double engineCpuLimit = 1.0;
+#endif
+        check(engineBudgetFinite && worstEngineRatio < engineCpuLimit,
+              "maximum-polyphony FX budget is finite and faster than realtime");
+
+        // Bypass and topology changes begin from the preceding output sample
+        // and crossfade over 20 ms. Bound the largest discontinuity under a
+        // sustained input well below a full-scale click.
+        r50::ThreeSlotEffectsRack switchingRack;
+        switchingRack.setup(kSR);
+        r50::EffectSlotDescriptor switchingDescriptor;
+        switchingDescriptor.algorithm = r50::EffectAlgorithm::Chorus;
+        switchingDescriptor.mix = 0.8f;
+        switchingRack.setSlot(0, switchingDescriptor);
+        float previous = 0.0f, largestStep = 0.0f;
+        for (int i = 0; i < 6000; ++i) {
+            if (i == 2500) {
+                switchingDescriptor.bypass = true;
+                switchingRack.setSlot(0, switchingDescriptor);
+            }
+            if (i == 4000)
+                switchingRack.setTopology(r50::EffectTopology::Parallel);
+            r50::EffectRackInput in;
+            in.send[0] = {0.35f * std::sin(i * 0.031f),
+                          0.35f * std::sin(i * 0.031f)};
+            const float output = switchingRack.process(in).l;
+            if (i > 100) largestStep = std::max(largestStep, std::fabs(output - previous));
+            previous = output;
+        }
+        check(largestStep < 0.08f,
+              "slot bypass and topology changes are click-free");
+
+        r50::R50Engine stateEngine;
+        bool rackStateRoundTrips = true;
+        stateEngine.setParameter(R50ParamFxTopology, 3.0f);
+        rackStateRoundTrips &=
+            stateEngine.getParameter(R50ParamFxTopology) == 3.0f;
+        for (int partial = 0; partial < 2; ++partial) {
+            for (int offset = 0; offset < 4; ++offset) {
+                const R50PartialField field = static_cast<R50PartialField>(
+                    R50FieldDryLevel + offset);
+                const float value = 0.13f * static_cast<float>(
+                    1 + partial * 4 + offset);
+                stateEngine.setParameter(r50PartialParam(partial, field), value);
+                rackStateRoundTrips &=
+                    stateEngine.getParameter(r50PartialParam(partial, field)) == value;
+            }
+        }
+        for (int slot = 0; slot < r50::kEffectSlotCount; ++slot) {
+            for (int field = 0; field < R50FxSlotFieldCount; ++field) {
+                const R50Param address = r50FxSlotParam(
+                    slot, static_cast<R50FxSlotField>(field));
+                const float value = 0.01f * static_cast<float>(
+                    1 + slot * R50FxSlotFieldCount + field);
+                stateEngine.setParameter(address, value);
+                rackStateRoundTrips &= stateEngine.getParameter(address) == value;
+            }
+        }
+        check(rackStateRoundTrips,
+              "topology, sends and every slot field round-trip by stable address");
+
         // Every effect defaults to silent, so a patch that names none of them
         // must render exactly as it did before the rack existed. This is the
         // gate: a rack that colours the signal at zero mix would change every
         // preset in the instrument.
-        auto renderWith = [](int address, float value) {
+        auto renderWith = [](int algorithm, float mix) {
             r50::R50Engine engine;
             setupSpectralTone(engine, 0);
-            if (address >= 0) engine.setParameter(address, value);
+            if (algorithm >= 0) {
+                engine.setParameter(r50FxSlotParam(
+                    0, R50FxFieldAlgorithm), static_cast<float>(algorithm));
+                engine.setParameter(r50FxSlotParam(
+                    0, R50FxFieldMix), mix);
+            }
             engine.noteOn(60, 100);
             return renderBuffer(engine, 0.4);
         };
         const std::vector<float> dry = renderWith(-1, 0);
         check(!dry.empty(), "dry render produced audio");
 
-        for (int address : {R50ParamFxChorusMix, R50ParamFxDelayMix,
-                            R50ParamFxReverbMix, R50ParamFxCompressor}) {
-            const std::vector<float> zeroed = renderWith(address, 0.0f);
+        for (int algorithm : {
+                static_cast<int>(r50::EffectAlgorithm::Chorus),
+                static_cast<int>(r50::EffectAlgorithm::CrossDelay),
+                static_cast<int>(r50::EffectAlgorithm::HallReverb)}) {
+            const std::vector<float> zeroed = renderWith(algorithm, 0.0f);
             check(zeroed == dry, "effect at zero mix is a true bypass");
         }
 
         // And each one audibly changes the signal when turned up.
         bool allChange = true;
-        for (int address : {R50ParamFxChorusMix, R50ParamFxDelayMix,
-                            R50ParamFxReverbMix}) {
-            const std::vector<float> wet = renderWith(address, 0.8f);
+        for (int algorithm : {
+                static_cast<int>(r50::EffectAlgorithm::Chorus),
+                static_cast<int>(r50::EffectAlgorithm::CrossDelay),
+                static_cast<int>(r50::EffectAlgorithm::HallReverb)}) {
+            const std::vector<float> wet = renderWith(algorithm, 0.8f);
             double difference = 0.0;
             for (size_t n = 0; n < wet.size(); ++n)
                 difference = std::max(difference,
@@ -1346,10 +1861,16 @@ int main() {
         // not decay is the classic way an effects rack ruins a session.
         r50::R50Engine engine;
         setupSpectralTone(engine, 0);
-        engine.setParameter(R50ParamFxDelayMix, 0.7f);
-        engine.setParameter(R50ParamFxDelayFeedback, 0.85f);
-        engine.setParameter(R50ParamFxReverbMix, 0.7f);
-        engine.setParameter(R50ParamFxReverbDecay, 6.0f);
+        engine.setParameter(r50FxSlotParam(
+            0, R50FxFieldAlgorithm),
+            static_cast<float>(r50::EffectAlgorithm::CrossDelay));
+        engine.setParameter(r50FxSlotParam(0, R50FxFieldMix), 0.7f);
+        engine.setParameter(r50FxSlotParam(0, R50FxFieldControl2), 0.90f);
+        engine.setParameter(r50FxSlotParam(
+            1, R50FxFieldAlgorithm),
+            static_cast<float>(r50::EffectAlgorithm::HallReverb));
+        engine.setParameter(r50FxSlotParam(1, R50FxFieldMix), 0.7f);
+        engine.setParameter(r50FxSlotParam(1, R50FxFieldControl2), 0.83f);
         engine.noteOn(60, 110);
         render(engine, 0.5);
         engine.noteOff(60);
@@ -1616,7 +2137,6 @@ int main() {
             engine.setSampleRate(kSR);
             engine.setParameter(R50ParamSlope, slope);
             engine.setParameter(R50ParamResonance, 1.0f);
-            engine.setParameter(R50ParamDrive, 1.0f);
             engine.setParameter(R50ParamCutoff, 40.0f);
             engine.noteOn(36, 127);
             const float low = render(engine, 0.5);
@@ -1772,7 +2292,6 @@ int main() {
             engine.setParameter(R50ParamCutoff, 30.0f);
             engine.setParameter(R50ParamP1Level, 0.0f);
             engine.setParameter(R50ParamAmpAttack, 10.0f);
-            engine.setParameter(R50ParamFxReverbMix, 1.0f);
             engine.requestAudition(looped, 60, 100);
             check(render(engine, 0.3) > 0.02f, "audition ignores the patch");
         }
@@ -2160,7 +2679,6 @@ int main() {
                                 static_cast<float>(instrument));
             engine.setParameter(R50ParamCutoff, 18000);
             engine.setParameter(R50ParamFilterEnvAmount, 0);
-            engine.setParameter(R50ParamFxReverbMix, 0);
             engine.setParameter(R50ParamAmpAttack, 0.001f);
             engine.noteOn(static_cast<uint8_t>(note), 100);
             const std::vector<float> rendered = renderBuffer(engine, 0.3);
@@ -2396,7 +2914,6 @@ int main() {
                                     static_cast<float>(instrument));
                 engine.setParameter(R50ParamCutoff, 18000);
                 engine.setParameter(R50ParamFilterEnvAmount, 0);
-                engine.setParameter(R50ParamFxReverbMix, 0);
                 engine.noteOn(60, 100);
                 return renderBuffer(engine, 0.25);
             };

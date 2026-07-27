@@ -234,11 +234,20 @@ int main() {
 
     // ---- Test I: global stereo effects are finite, wide, and produce tails --
     {
-        GlobalEffects fx;
+        ThreeSlotEffectsRack fx;
         fx.setup(sr);
-        fx.setParams(1.0f, 0.55f, 0.8f,   // chorus: wet, rate, depth
-                     0.35f, 0.05f, 0.65f, // delay: mix, 50 ms, feedback
-                     0.6f, 1.0f);         // tone, ping-pong
+        EffectSlotDescriptor chorus;
+        chorus.algorithm = EffectAlgorithm::Chorus;
+        chorus.mix = 1.0f;
+        chorus.control[0] = 0.55f;
+        chorus.control[1] = 0.8f;
+        fx.setSlot(0, chorus);
+        EffectSlotDescriptor delay;
+        delay.algorithm = EffectAlgorithm::CrossDelay;
+        delay.mix = 0.35f;
+        delay.control[0] = 0.12f;
+        delay.control[1] = 0.69f;
+        fx.setSlot(1, delay);
 
         const int M = static_cast<int>(sr * 0.35);
         std::vector<float> L(M), R(M);
@@ -248,7 +257,9 @@ int main() {
             float input = (n < static_cast<int>(sr * 0.08))
                             ? 0.4f * std::sin(static_cast<float>(kTwoPi * 220.0 * n / sr))
                             : 0.0f;
-            StereoSample y = fx.process(input);
+            EffectRackInput rackInput;
+            rackInput.send[0] = {input, input};
+            StereoSample y = fx.process(rackInput);
             L[n] = y.l; R[n] = y.r;
             finite = finite && std::isfinite(y.l) && std::isfinite(y.r);
             if (n > static_cast<int>(sr * 0.03))
@@ -266,7 +277,7 @@ int main() {
         fx.reset();
         float resetPeak = 0.0f;
         for (int n = 0; n < 4096; ++n) {
-            StereoSample y = fx.process(0.0f);
+            StereoSample y = fx.process({});
             resetPeak = std::max(resetPeak, std::max(std::fabs(y.l), std::fabs(y.r)));
         }
         check(resetPeak < 1e-6f, "I: resetting effects clears delay and chorus memory");
@@ -855,7 +866,7 @@ int main() {
               "Y: WT-frame modulation has equal positive and negative depth");
     }
 
-    // ---- Test Z: matrix WT-frame route replaces its hidden legacy route ----
+    // ---- Test Z: matrix WT-frame route replaces its implicit route ----------
     {
         SynthEngine e; e.setSampleRate(sr);
         e.setParameter(SynthParamOscWaveform, 3.0f);
@@ -878,7 +889,7 @@ int main() {
         const float frame = e.getEffectiveParameter(SynthParamWTFrame);
         printf("Test Z (WT route precedence): frame=%.4f\n", frame);
         check(frame > 0.69f && frame <= 0.701f,
-              "Z: explicit matrix route replaces hidden legacy WT-frame route");
+              "Z: explicit matrix route replaces implicit WT-frame route");
     }
 
     // ---- Test AA: expanded LFO waves, phase and polarity -------------------

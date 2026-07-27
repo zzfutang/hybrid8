@@ -103,6 +103,7 @@
 		0819922753384559AB9FC581 /* R50.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = R50.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0849F4EBC3B7AC32F39479EF /* WavetablePianoData.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = WavetablePianoData.hpp; sourceTree = "<group>"; };
 		084F96412A2DD5355819DB83 /* Hybrid8Wavetable.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Hybrid8Wavetable.hpp; sourceTree = "<group>"; };
+		09F4F7F13D349D5DDEE4C936 /* R50ModulationEffects.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50ModulationEffects.hpp; sourceTree = "<group>"; };
 		0E382714EED6BD5CE5890E88 /* R50-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "R50-Bridging-Header.h"; sourceTree = "<group>"; };
 		112FD104BE725349BC5B06E2 /* R50SampleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50SampleStore.swift; sourceTree = "<group>"; };
 		120104614B6CF8293F99DD17 /* Hybrid8Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Hybrid8Extension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -131,6 +132,7 @@
 		615FA755B8D518F3B8705686 /* R50FactoryFiles.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50FactoryFiles.hpp; sourceTree = "<group>"; };
 		61D2883D0081EEAEB74A495F /* FactoryPresets.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FactoryPresets.json; sourceTree = "<group>"; };
 		67713C77EF118D8CE3CD5898 /* R50Waveshaper.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Waveshaper.hpp; sourceTree = "<group>"; };
+		6AC2745C4231A6BABA35720F /* R50DigitalFilter.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50DigitalFilter.hpp; sourceTree = "<group>"; };
 		772DF3A82502AEDD6C9C552E /* R50ParametersTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50ParametersTree.swift; sourceTree = "<group>"; };
 		7915BC69DA6FDB8EC6117CD2 /* R50Wave.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Wave.hpp; sourceTree = "<group>"; };
 		7B32D6BB2F88D3FA24D09D2A /* MusicalTypingStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicalTypingStateMachine.swift; sourceTree = "<group>"; };
@@ -153,6 +155,7 @@
 		B1F99D67BD35FB874E88A075 /* R50Engine.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Engine.hpp; sourceTree = "<group>"; };
 		B30A4DED415F03CEB35A0CA9 /* Hybrid8EffectsRack.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Hybrid8EffectsRack.hpp; sourceTree = "<group>"; };
 		B3471DE295EF8D41B6BC6B76 /* R50DSPKernelAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = R50DSPKernelAdapter.h; sourceTree = "<group>"; };
+		B42777049755D6B716C7735D /* R50Oversampling.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Oversampling.hpp; sourceTree = "<group>"; };
 		B552FFA0A3EC1055376BC7DF /* R50ParameterModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50ParameterModel.swift; sourceTree = "<group>"; };
 		B969D4EA2487259367B0EEB7 /* SynthDSPKernelAdapter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SynthDSPKernelAdapter.mm; sourceTree = "<group>"; };
 		C1767F6F1334E44D6F16411B /* R50Voice.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Voice.hpp; sourceTree = "<group>"; };
@@ -282,6 +285,7 @@
 		9DB5BC8D930E5764A991C44B /* DSP */ = {
 			isa = PBXGroup;
 			children = (
+				6AC2745C4231A6BABA35720F /* R50DigitalFilter.hpp */,
 				D27CC9F6C457647AEAEAD9D6 /* R50EffectsRack.hpp */,
 				B1F99D67BD35FB874E88A075 /* R50Engine.hpp */,
 				035FA057E8E955E7FAC3B81D /* R50Envelope.hpp */,
@@ -289,7 +293,9 @@
 				FB0ED6821F4DB6BC56D640EC /* R50Json.hpp */,
 				5FF121422DF67029FFE09351 /* R50Levels.hpp */,
 				2C1C0196DB15AA627ECB89AD /* R50Modulation.hpp */,
+				09F4F7F13D349D5DDEE4C936 /* R50ModulationEffects.hpp */,
 				4E1AA536D5BCEFC6B916629C /* R50Noise.hpp */,
+				B42777049755D6B716C7735D /* R50Oversampling.hpp */,
 				8D90BFA8D15AB1DC1692CC68 /* R50Partial.hpp */,
 				9E62C37319F8EDDDC7A80985 /* R50PitchDetect.hpp */,
 				19FA9B3BB4AE406828814F9A /* R50Sample.hpp */,

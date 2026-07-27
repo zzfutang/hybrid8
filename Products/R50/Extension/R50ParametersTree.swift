@@ -51,6 +51,15 @@ enum R50Parameters {
     static let toneStructureNames = [
         "Mix", "Ring", "Atk/Sus", "Vel XF", "Key XF"
     ]
+    static let effectTopologyNames = [
+        "Serial", "Parallel", "1→2 + 3", "(1+2)→3"
+    ]
+    static let effectAlgorithmNames = [
+        "Off", "Hall", "Room", "Plate/Stage", "Early Reflections",
+        "Stereo Delay", "Cross Delay", "Chorus", "Ensemble", "Flanger",
+        "Phaser", "Tremolo/Pan", "Rotary", "Equalizer", "Overdrive",
+        "Distortion", "Exciter"
+    ]
 
     private static let readWrite: AudioUnitParameterOptions =
         [.flag_IsReadable, .flag_IsWritable]
@@ -137,8 +146,6 @@ enum R50Parameters {
                   min: 20, max: 18000, value: 3200, unit: .hertz, log: true),
             Field(field: R50FieldResonance, id: "Resonance", name: "Resonance",
                   min: 0, max: 1, value: 0.15),
-            Field(field: R50FieldDrive, id: "Drive", name: "Drive",
-                  min: 0, max: 1, value: 0),
             Field(field: R50FieldSlope, id: "Slope", name: "Slope",
                   min: 0, max: 1, value: 1, unit: .indexed, strings: slopeNames),
             Field(field: R50FieldKeyTrack, id: "KeyTrack", name: "Key Track",
@@ -172,6 +179,14 @@ enum R50Parameters {
                   min: 0, max: 1, value: 1),
             Field(field: R50FieldPan, id: "Pan", name: "Pan",
                   min: -1, max: 1, value: 0),
+            Field(field: R50FieldDryLevel, id: "DryLevel", name: "Dry Level",
+                  min: 0, max: 1, value: 0),
+            Field(field: R50FieldSend1, id: "Send1", name: "Send 1",
+                  min: 0, max: 1, value: 1),
+            Field(field: R50FieldSend2, id: "Send2", name: "Send 2",
+                  min: 0, max: 1, value: 0),
+            Field(field: R50FieldSend3, id: "Send3", name: "Send 3",
+                  min: 0, max: 1, value: 0),
 
             // Workstation EG: attack to a level, decay to a break point, slope
             // to sustain. Slope at 0 skips the break stage, which is what makes
@@ -255,38 +270,57 @@ enum R50Parameters {
                       min: 0, max: 127, value: 72, unit: .indexed),
             ])
 
-        let effects = AUParameterTree.createGroup(
-            withIdentifier: "fx", name: "Effects", children: [
+        var effectChildren: [AUParameter] = [
                 param(R50ParamFxCompressor, "fxCompressor", "Compressor",
                       min: 0, max: 1, value: 0),
-
-                param(R50ParamFxChorusMix, "fxChorusMix", "Chorus Mix",
-                      min: 0, max: 1, value: 0),
-                param(R50ParamFxChorusRate, "fxChorusRate", "Chorus Rate",
-                      min: 0.05, max: 8, value: 0.6, unit: .hertz, log: true),
-                param(R50ParamFxChorusDepth, "fxChorusDepth", "Chorus Depth",
-                      min: 0, max: 1, value: 0.4),
-
-                param(R50ParamFxDelayMix, "fxDelayMix", "Delay Mix",
-                      min: 0, max: 1, value: 0),
-                param(R50ParamFxDelayTime, "fxDelayTime", "Delay Time",
-                      min: 0.02, max: 2, value: 0.32, unit: .seconds, log: true),
-                param(R50ParamFxDelayFeedback, "fxDelayFeedback", "Delay Feedback",
-                      min: 0, max: 0.95, value: 0.35),
-                param(R50ParamFxDelayTone, "fxDelayTone", "Delay Tone",
-                      min: 0, max: 1, value: 0.5),
-                param(R50ParamFxDelayPingPong, "fxDelayPingPong", "Ping Pong",
+                param(R50ParamFxTopology, "fxTopology", "FX Topology",
+                      min: 0, max: AUValue(effectTopologyNames.count - 1),
+                      value: 0, unit: .indexed, strings: effectTopologyNames),
+            ]
+        for slot in 0..<3 {
+            let number = slot + 1
+            effectChildren += [
+                param(r50FxSlotParam(Int32(slot), R50FxFieldAlgorithm),
+                      "fxSlot\(number)Algorithm", "Slot \(number) Algorithm",
+                      min: 0, max: AUValue(effectAlgorithmNames.count - 1),
+                      value: 0, unit: .indexed, strings: effectAlgorithmNames),
+                param(r50FxSlotParam(Int32(slot), R50FxFieldBypass),
+                      "fxSlot\(number)Bypass", "Slot \(number) Bypass",
+                      min: 0, max: 1, value: 0, unit: .indexed,
+                      strings: onOffNames),
+                param(r50FxSlotParam(Int32(slot), R50FxFieldInputGain),
+                      "fxSlot\(number)InputGain", "Slot \(number) Input Gain",
+                      min: -24, max: 12, value: 0, unit: .decibels),
+                param(r50FxSlotParam(Int32(slot), R50FxFieldOutputGain),
+                      "fxSlot\(number)OutputGain", "Slot \(number) Output Gain",
+                      min: -24, max: 12, value: 0, unit: .decibels),
+                param(r50FxSlotParam(Int32(slot), R50FxFieldMix),
+                      "fxSlot\(number)Mix", "Slot \(number) Mix",
                       min: 0, max: 1, value: 1),
-
-                param(R50ParamFxReverbMix, "fxReverbMix", "Reverb Mix",
-                      min: 0, max: 1, value: 0),
-                param(R50ParamFxReverbSize, "fxReverbSize", "Reverb Size",
-                      min: 0, max: 1, value: 0.55),
-                param(R50ParamFxReverbDecay, "fxReverbDecay", "Reverb Decay",
-                      min: 0.2, max: 12, value: 2.4, unit: .seconds, log: true),
-                param(R50ParamFxReverbTone, "fxReverbTone", "Reverb Tone",
-                      min: 0, max: 1, value: 0.55),
-            ])
+                param(r50FxSlotParam(Int32(slot), R50FxFieldWidth),
+                      "fxSlot\(number)Width", "Slot \(number) Width",
+                      min: 0, max: 2, value: 1),
+            ]
+            for control in 0..<8 {
+                let field = R50FxSlotField(
+                    rawValue: R50FxFieldControl1.rawValue + UInt32(control))
+                effectChildren.append(
+                    param(r50FxSlotParam(Int32(slot), field),
+                          "fxSlot\(number)Control\(control + 1)",
+                          "Slot \(number) Control \(control + 1)",
+                          min: 0, max: 1, value: 0.5))
+            }
+            effectChildren += [
+                param(r50FxSlotParam(Int32(slot), R50FxFieldMode1),
+                      "fxSlot\(number)Mode1", "Slot \(number) Mode 1",
+                      min: 0, max: 15, value: 0, unit: .indexed),
+                param(r50FxSlotParam(Int32(slot), R50FxFieldMode2),
+                      "fxSlot\(number)Mode2", "Slot \(number) Mode 2",
+                      min: 0, max: 15, value: 0, unit: .indexed),
+            ]
+        }
+        let effects = AUParameterTree.createGroup(
+            withIdentifier: "fx", name: "Effects", children: effectChildren)
 
         var lfoChildren: [AUParameter] = []
         for index in 0..<2 {

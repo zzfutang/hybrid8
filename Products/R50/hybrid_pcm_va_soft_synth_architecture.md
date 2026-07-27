@@ -1812,12 +1812,19 @@ AU parameter tree, and per-block smoothing.
 
 ## Phase 6 — Effects
 
-- chorus;
-- stereo delay;
-- reverb;
-- master EQ.
+- three interchangeable global slots;
+- four named serial/parallel routing topologies;
+- independent dry and three-slot sends per Partial;
+- modulation, delay, space, EQ, nonlinear, and exciter algorithms;
+- post-rack compressor.
 
-Built bar the **master EQ**, and with a compressor that was not on the list.
+Built. The original chorus / stereo-delay / reverb / master-EQ target grew into
+the three-slot rack specified in `FX-updated.plan`: every slot can host any of
+16 algorithms, from chorus, rotary, delay, and four space characters through
+EQ, overdrive, distortion, and exciter. Nonlinear slots and the per-Partial
+waveshaper share a 4x oversampling implementation. Slot state, routing, sends,
+presets, automation, UI, hover help, tail handling, and click-free transitions
+are all covered by the R50 regression suite.
 
 ## Phase 7 — Plugin and UI
 
@@ -1849,8 +1856,9 @@ Samples.
 
 **Barely started.** Imports decode on a background queue, but the factory set
 loads synchronously the first time `SampleLibrary::shared()` is touched. None
-of preset migration, asset hashing, missing-sample resolution, SIMD,
-oversampling or signing exists yet.
+of preset migration, asset hashing, missing-sample resolution, SIMD or signing
+exists yet. Targeted 4x oversampling is now built for the nonlinear effects and
+per-Partial waveshaper, but there is no engine-wide oversampling mode.
 
 ---
 
@@ -1873,7 +1881,8 @@ Ship version one with:
 - two LFOs per Tone;
 - modulation matrix;
 - four macros;
-- chorus, delay, and reverb;
+- three-slot effects rack with modulation, delay, space, EQ, nonlinear, and
+  exciter algorithms;
 - VST3, AU, and standalone;
 - versioned presets;
 - background sample loading.

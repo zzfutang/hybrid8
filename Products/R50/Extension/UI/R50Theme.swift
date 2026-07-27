@@ -13,11 +13,17 @@ import SwiftUI
 
 enum R50Layout {
     static let width: CGFloat  = 1180
-    static let height: CGFloat = 545
+    // Header + tallest page + padding. Keeping the old 545-point prototype
+    // height left an empty band below every page.
+    static let height: CGFloat = 470
     /// Every page occupies exactly this much vertical space. Without a fixed
     /// page area the pages have different intrinsic heights, and switching
     /// tabs re-centres the whole fascia — the header and footer visibly jump.
     static let pageHeight: CGFloat = 330
+    /// The FX rack needs one extra control row for algorithms with discrete
+    /// modes. It replaces the global footer on that page rather than drawing
+    /// through it.
+    static let effectsPageHeight: CGFloat = 370
 }
 
 enum R50Palette {
@@ -106,6 +112,7 @@ struct R50Value: View {
     let title: String
     let address: R50Param
     @ObservedObject var model: R50ParameterModel
+    var displayOverride: ((Float) -> String)? = nil
 
     @State private var dragStart: Float?
 
@@ -124,11 +131,11 @@ struct R50Value: View {
                     .foregroundColor(R50Palette.engrave)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                Text(model.displayString(address))
+                Text(displayOverride?(value) ?? model.displayString(address))
                     .font(.system(size: 9, weight: .semibold, design: .monospaced))
                     .foregroundColor(R50Palette.glow)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .truncationMode(.tail)
             }
 
             GeometryReader { geo in
@@ -162,7 +169,9 @@ struct R50Value: View {
                     let start = dragStart ?? value
                     let fine = NSEvent.modifierFlags.contains(.option) ? 0.25 : 1.0
                     let delta = Float(drag.translation.width * fine / 180.0)
-                    param.setValue(denormalized(min(max(normalized(start) + delta, 0), 1)),
+                    let mapped = denormalized(
+                        min(max(normalized(start) + delta, 0), 1))
+                    param.setValue(param.unit == .indexed ? mapped.rounded() : mapped,
                                    originator: nil)
                     model.objectWillChange.send()
                 }
@@ -199,6 +208,63 @@ struct R50Value: View {
             return lo * Float(pow(Double(hi / lo), Double(norm)))
         }
         return lo + norm * (hi - lo)
+    }
+}
+
+/// A normalized AU storage parameter presented in an algorithm-specific
+/// physical domain. The host still automates 0...1, while the musician sees
+/// values such as 350 ms, -40%, 6.5 Hz, or 800 Hz.
+struct R50MappedValue: View {
+    let title: String
+    let address: R50Param
+    @ObservedObject var model: R50ParameterModel
+    let display: (Float) -> String
+
+    @State private var dragStart: Float?
+
+    var body: some View {
+        let value = min(max(model.value(address), 0), 1)
+        VStack(spacing: 3) {
+            HStack(spacing: 6) {
+                Text(title.uppercased())
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .tracking(0.7)
+                    .foregroundColor(R50Palette.engrave)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text(display(value))
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundColor(R50Palette.glow)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(R50Palette.track)
+                    Rectangle().fill(R50Palette.glow)
+                        .frame(width: CGFloat(value) * geo.size.width)
+                }
+            }
+            .frame(height: 5)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { drag in
+                    guard let parameter = model.parameter(address) else { return }
+                    if dragStart == nil { dragStart = value }
+                    let fine = NSEvent.modifierFlags.contains(.option) ? 0.25 : 1.0
+                    let next = min(max((dragStart ?? value)
+                        + Float(drag.translation.width * fine / 180.0), 0), 1)
+                    parameter.setValue(next, originator: nil)
+                    model.objectWillChange.send()
+                }
+                .onEnded { _ in dragStart = nil })
+        .onTapGesture(count: 2) {
+            model.parameter(address)?.setValue(0.5, originator: nil)
+            model.objectWillChange.send()
+        }
     }
 }
 
@@ -340,7 +406,8 @@ struct R50Knob: View {
                         let fine = NSEvent.modifierFlags.contains(.option) ? 0.25 : 1.0
                         let delta = Float(-drag.translation.height * fine / 160.0)
                         let target = normalized(start) + delta
-                        param.setValue(denormalized(min(max(target, 0), 1)),
+                        let mapped = denormalized(min(max(target, 0), 1))
+                        param.setValue(param.unit == .indexed ? mapped.rounded() : mapped,
                                        originator: nil)
                         model.objectWillChange.send()
                     }
@@ -358,7 +425,7 @@ struct R50Knob: View {
                 .font(.system(size: 9, weight: .semibold, design: .monospaced))
                 .foregroundColor(R50Palette.glow)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .truncationMode(.tail)
         }
         .frame(width: 64)
     }

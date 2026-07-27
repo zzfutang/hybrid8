@@ -49,10 +49,14 @@ struct R50View: View {
         GeometryReader { geo in
             let scale = min(geo.size.width / R50Layout.width,
                             geo.size.height / R50Layout.height)
-            fascia
-                .frame(width: R50Layout.width, height: R50Layout.height)
-                .scaleEffect(scale, anchor: .center)
-                .frame(width: geo.size.width, height: geo.size.height)
+            ZStack(alignment: .top) {
+                fascia
+                    .frame(width: R50Layout.width, height: R50Layout.height,
+                           alignment: .top)
+                    .scaleEffect(scale, anchor: .top)
+            }
+            .frame(width: geo.size.width, height: geo.size.height,
+                   alignment: .top)
         }
         .background(R50Palette.chassisLow)
         // Keep the sample browser pointed at the Partial being edited.
@@ -64,10 +68,14 @@ struct R50View: View {
             header
             pageContent
                 .frame(maxWidth: .infinity,
-                       minHeight: R50Layout.pageHeight,
-                       maxHeight: R50Layout.pageHeight,
+                       minHeight: page == .effects
+                           ? R50Layout.effectsPageHeight : R50Layout.pageHeight,
+                       maxHeight: page == .effects
+                           ? R50Layout.effectsPageHeight : R50Layout.pageHeight,
                        alignment: .top)
-            footer
+            if page != .effects {
+                footer
+            }
         }
         .padding(16)
         .background(
@@ -312,7 +320,6 @@ struct R50View: View {
                             options: R50Parameters.slopeNames, model: model)
                 R50Value(title: "Cutoff", address: addr(R50FieldCutoff), model: model)
                 R50Value(title: "Resonance", address: addr(R50FieldResonance), model: model)
-                R50Value(title: "Drive", address: addr(R50FieldDrive), model: model)
                 R50Value(title: "Key Track", address: addr(R50FieldKeyTrack), model: model)
                 R50Value(title: "Env Amount", address: addr(R50FieldFilterEnvAmount),
                          model: model)
@@ -471,6 +478,24 @@ struct R50View: View {
                             R50Value(title: "Pan",
                                      address: r50PartialParam(Int32(index), R50FieldPan),
                                      model: model)
+                            R50Value(title: "Dry",
+                                     address: r50PartialParam(Int32(index),
+                                                               R50FieldDryLevel),
+                                     model: model)
+                            HStack(spacing: 5) {
+                                R50Value(title: "Send 1",
+                                    address: r50PartialParam(Int32(index),
+                                                              R50FieldSend1),
+                                    model: model)
+                                R50Value(title: "Send 2",
+                                    address: r50PartialParam(Int32(index),
+                                                              R50FieldSend2),
+                                    model: model)
+                                R50Value(title: "Send 3",
+                                    address: r50PartialParam(Int32(index),
+                                                              R50FieldSend3),
+                                    model: model)
+                            }
                         }
                     }
                 }
@@ -578,56 +603,316 @@ struct R50View: View {
 
     // MARK: - Effects page
 
-    /// A global stage after the voice sum, which is why nothing here is per
-    /// Partial. Everything defaults to silent, so a patch only has effects if
-    /// it asks for them.
     private var effectsPage: some View {
-        HStack(alignment: .top, spacing: 10) {
-            R50Panel(title: "Chorus") {
-                VStack(alignment: .leading, spacing: 8) {
-                    R50Value(title: "Mix", address: R50ParamFxChorusMix, model: model)
-                    R50Value(title: "Rate", address: R50ParamFxChorusRate, model: model)
-                    R50Value(title: "Depth", address: R50ParamFxChorusDepth, model: model)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                R50Panel(title: "Routing") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        R50Selector(title: "Topology", address: R50ParamFxTopology,
+                                    options: R50Parameters.effectTopologyNames,
+                                    model: model)
+                        topologyDiagram
+                    }
                 }
-            }
-            .frame(width: 262)
-
-            R50Panel(title: "Delay") {
-                VStack(alignment: .leading, spacing: 8) {
-                    R50Value(title: "Mix", address: R50ParamFxDelayMix, model: model)
-                    R50Value(title: "Time", address: R50ParamFxDelayTime, model: model)
-                    R50Value(title: "Feedback", address: R50ParamFxDelayFeedback,
-                             model: model)
-                    R50Value(title: "Tone", address: R50ParamFxDelayTone, model: model)
-                    R50Value(title: "Ping Pong", address: R50ParamFxDelayPingPong,
-                             model: model)
+                .frame(width: 650)
+                R50Panel(title: "Post-Rack Compressor") {
+                    VStack(alignment: .leading, spacing: 7) {
+                        R50Value(title: "Amount", address: R50ParamFxCompressor,
+                                 model: model)
+                        Text("STEREO LINKED • AFTER SLOT 3")
+                            .font(.system(size: 8, weight: .medium,
+                                          design: .monospaced))
+                            .tracking(0.7)
+                            .foregroundColor(R50Palette.engrave)
+                    }
                 }
+                .frame(maxWidth: .infinity)
             }
-            .frame(width: 285)
-
-            R50Panel(title: "Reverb") {
-                VStack(alignment: .leading, spacing: 8) {
-                    R50Value(title: "Mix", address: R50ParamFxReverbMix, model: model)
-                    R50Value(title: "Size", address: R50ParamFxReverbSize, model: model)
-                    R50Value(title: "Decay", address: R50ParamFxReverbDecay, model: model)
-                    R50Value(title: "Tone", address: R50ParamFxReverbTone, model: model)
-                }
+            // Routing needs the selector plus its diagram below the common
+            // panel header. At 118 points it drew outside the proposed row,
+            // below the compressor, and swallowed the inter-row margin.
+            .frame(height: 140)
+            HStack(alignment: .top, spacing: 10) {
+                ForEach(0..<3, id: \.self) { slot in effectSlot(slot) }
             }
-            .frame(width: 285)
-
-            R50Panel(title: "Compressor") {
-                VStack(alignment: .leading, spacing: 8) {
-                    R50Value(title: "Amount", address: R50ParamFxCompressor, model: model)
-                    Text("One control: raising it lowers the threshold, raises the ratio and adds makeup together. Stereo-linked, so it will not pull the image around.")
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .foregroundColor(R50Palette.engrave)
-                        .lineLimit(8)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(width: 236)
+            .frame(maxHeight: .infinity)
         }
         .frame(maxHeight: .infinity)
+    }
+
+    private func fxAddress(_ slot: Int, _ field: R50FxSlotField) -> R50Param {
+        r50FxSlotParam(Int32(slot), field)
+    }
+
+    private func effectSlot(_ slot: Int) -> some View {
+        let algorithm = Int(model.value(
+            fxAddress(slot, R50FxFieldAlgorithm)).rounded())
+        let labels = effectControlLabels(algorithm)
+        return R50Panel(title: "Slot \(slot + 1)") {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(alignment: .top, spacing: 8) {
+                    R50NameSelector(title: "Algorithm",
+                        address: fxAddress(slot, R50FxFieldAlgorithm),
+                        names: R50Parameters.effectAlgorithmNames, model: model)
+                        .frame(maxWidth: .infinity)
+                    R50Selector(title: "Bypass",
+                        address: fxAddress(slot, R50FxFieldBypass),
+                        options: R50Parameters.onOffNames, model: model)
+                        .frame(width: 132)
+                }
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        R50Value(title: "Input",
+                            address: fxAddress(slot, R50FxFieldInputGain), model: model)
+                        R50Value(title: "Output",
+                            address: fxAddress(slot, R50FxFieldOutputGain), model: model)
+                        R50MappedValue(title: "Mix / Return",
+                            address: fxAddress(slot, R50FxFieldMix), model: model,
+                            display: percent)
+                        R50Value(title: "Width",
+                            address: fxAddress(slot, R50FxFieldWidth), model: model,
+                            displayOverride: { String(format: "%.0f%%", $0 * 100) })
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(alignment: .top, spacing: 8) {
+                            ForEach(0..<2, id: \.self) { column in
+                                VStack(alignment: .leading, spacing: 5) {
+                                    ForEach(Array(labels.enumerated()).filter {
+                                        $0.offset % 2 == column && !$0.element.isEmpty
+                                    }, id: \.offset) { index, label in
+                                        R50MappedValue(title: label,
+                                            address: fxAddress(slot, R50FxSlotField(
+                                                rawValue: R50FxFieldControl1.rawValue
+                                                    + UInt32(index))),
+                                            model: model,
+                                            display: { effectControlDisplay(
+                                                algorithm, index: index, value: $0) })
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                        effectModeControls(slot, algorithm: algorithm)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .help(effectHelp(algorithm))
+    }
+
+    private func effectHelp(_ algorithm: Int) -> String {
+        switch algorithm {
+        case 0: return "Off passes audio unchanged in a serial path and returns silence in a parallel path."
+        case 1: return "Hall: a broad, smooth global reverb for long spaces and pads."
+        case 2: return "Room: a shorter global reverb with a compact, audible room boundary."
+        case 3: return "Plate/Stage: bright plate density or a darker, tighter stage character."
+        case 4: return "Early Reflections: discrete ambience patterns without a long late-reverb tail."
+        case 5: return "Stereo Delay: independent left and right delay times with filtered feedback."
+        case 6: return "Cross Delay: stereo delay whose feedback can cross between channels."
+        case 7: return "Chorus: a single modulated delay pair for pitch motion and stereo width."
+        case 8: return "Ensemble: multiple drifting voices for a denser string-machine modulation."
+        case 9: return "Flanger: a very short modulated delay with bipolar feedback."
+        case 10: return "Phaser: six or twelve swept all-pass stages with stereo phase offset."
+        case 11: return "Tremolo/Pan: amplitude modulation, stereo tremolo, or automatic panning."
+        case 12: return "Rotary: accelerating horn and drum rotors with Doppler and amplitude motion."
+        case 13: return "Equalizer: global low shelf, mid bell, and high shelf tone shaping."
+        case 14: return "Overdrive: oversampled soft saturation with selectable digital character."
+        case 15: return "Distortion: oversampled hard, cubic, or fuzz transfer functions."
+        case 16: return "Exciter: filtered high-frequency harmonics blended with the direct signal."
+        default: return "Global effect slot."
+        }
+    }
+
+    private func effectControlLabels(_ algorithm: Int) -> [String] {
+        switch algorithm {
+        case 8: return ["Rate", "Depth", "Spread", "Drift", "Tone", "Low Cut"]
+        case 9: return ["Rate", "Depth", "Manual", "Feedback",
+                        "Stereo Phase", "Tone"]
+        case 10: return ["Rate", "Depth", "Center", "Spread",
+                         "Feedback", "", "", "Stereo Phase"]
+        case 11: return ["Rate", "Depth", "Shape", "Stereo Phase", "Bias"]
+        case 12: return ["Slow", "Fast", "Rotor Ratio", "Accel",
+                         "Doppler", "AM Depth", "Xover"]
+        case 13: return ["Low Gain", "Low Freq", "Mid Gain", "", "",
+                         "High Gain", "High Freq"]
+        case 14: return ["Drive", "", "Asymmetry", "", "", "Level"]
+        case 15: return ["Drive", "", "Bias", "", "", "Level"]
+        case 16: return ["Frequency", "Drive", "Harmonics", "Amount"]
+        case 7: return ["Rate", "Depth"]
+        case 5: return ["Left Time", "Right Time", "Feedback", "",
+                        "Low Cut", "High Cut", "Saturation"]
+        case 6: return ["Left Time", "Right Time", "Feedback", "Cross",
+                        "Low Cut", "High Cut", "Saturation"]
+        case 1, 2, 3:
+            return ["Pre-delay", "Decay", "Size", "Damping"]
+        case 4:
+            return ["Pre-delay", "Length", "Density", "Decay Shape",
+                    "Tone", "Spread"]
+        case 0: return []
+        default: return ["Control 1", "Control 2", "Control 3", "Control 4"]
+        }
+    }
+
+    private func percent(_ value: Float) -> String {
+        String(format: "%.0f%%", value * 100)
+    }
+
+    private func signedPercent(_ value: Float) -> String {
+        String(format: "%+.0f%%", (value * 2 - 1) * 95)
+    }
+
+    private func frequency(_ hz: Float) -> String {
+        hz >= 1000 ? String(format: "%.1f kHz", hz / 1000)
+                   : String(format: "%.0f Hz", hz)
+    }
+
+    private func duration(_ seconds: Float) -> String {
+        seconds >= 1 ? String(format: "%.2f s", seconds)
+                     : String(format: "%.0f ms", seconds * 1000)
+    }
+
+    /// Must mirror EffectSlot::setDescriptor. Storage remains normalized so
+    /// automation addresses and saved states stay stable.
+    private func effectControlDisplay(_ algorithm: Int, index: Int,
+                                      value: Float) -> String {
+        switch (algorithm, index) {
+        case (1, 0), (3, 0): return duration(value * 0.2)
+        case (2, 0): return duration(value * 0.08)
+        case (1, 1): return duration(0.4 * pow(30, value))
+        case (2, 1): return duration(0.15 * pow(26.6667, value))
+        case (3, 1): return duration(0.3 * pow(40, value))
+        case (1...3, 2): return percent(value)
+        case (1...3, 3): return frequency(1000 * pow(20, value))
+        case (1...3, 4): return String(format: "%.2f×", 0.25 + 1.75 * value)
+        case (1...3, 5...7): return percent(value)
+        case (4, 0): return duration(value * 0.2)
+        case (4, 1): return duration(0.03 * pow(26.6667, value))
+        case (4, 2): return percent(value)
+        case (4, 3): return String(format: "%+.0f%%", (value * 2 - 1) * 100)
+        case (4, 4): return frequency(500 * pow(40, value))
+        case (4, 5): return String(format: "%.0f%%", value * 200)
+        case (5...6, 0), (5...6, 1):
+            return duration(0.001 * pow(2000, value))
+        case (5...6, 2): return signedPercent(value)
+        case (6, 3): return percent(value)
+        case (5...6, 4): return frequency(20 * pow(100, value))
+        case (5...6, 5): return frequency(500 * pow(40, value))
+        case (5...6, 6): return percent(value)
+        case (7, 0): return String(format: "%.2f Hz", 0.05 * pow(160, value))
+        case (7, 1): return percent(value)
+        case (8, 0): return String(format: "%.2f Hz", 0.03 * pow(100, value))
+        case (8, 1), (8, 2), (8, 3): return percent(value)
+        case (8, 4): return frequency(1000 * pow(20, value))
+        case (8, 5): return frequency(20 * pow(25, value))
+        case (9, 0), (10, 0):
+            return String(format: "%.2f Hz", 0.03 * pow(333.333, value))
+        case (9, 1), (10, 1): return percent(value)
+        case (9, 2): return duration(0.0001 * pow(150, value))
+        case (9, 3): return signedPercent(value)
+        case (9, 4), (10, 7): return String(format: "%.0f°", value * 180)
+        case (9, 5): return frequency(1000 * pow(20, value))
+        case (10, 2): return frequency(80 * pow(50, value))
+        case (10, 3): return String(format: "%.1f oct", 0.5 + 5.5 * value)
+        case (10, 4): return signedPercent(value)
+        case (11, 0): return String(format: "%.2f Hz", 0.03 * pow(666.667, value))
+        case (11, 1): return percent(value)
+        case (11, 2), (11, 4):
+            return String(format: "%+.0f%%", (value * 2 - 1) * 100)
+        case (11, 3): return String(format: "%.0f°", value * 180)
+        case (12, 0): return String(format: "%.2f Hz", 0.2 * pow(7.5, value))
+        case (12, 1): return String(format: "%.2f Hz", 3 * pow(3.333333, value))
+        case (12, 2): return String(format: "%.2f×", 0.5 * pow(4, value))
+        case (12, 3): return duration(0.2 * pow(40, value))
+        case (12, 4), (12, 5): return percent(value)
+        case (12, 6): return frequency(400 * pow(5, value))
+        case (13, 0), (13, 2), (13, 5):
+            return String(format: "%+.1f dB", value * 36 - 18)
+        case (13, 1): return frequency(40 * pow(25, value))
+        case (13, 3): return frequency(100 * pow(100, value))
+        case (13, 4): return String(format: "%.2f", 0.2 * pow(40, value))
+        case (13, 6): return frequency(1000 * pow(16, value))
+        case (14, 0): return String(format: "%.1f dB", value * 36)
+        case (15, 0): return String(format: "%.1f dB", value * 48)
+        case (14...15, 1): return frequency(500 * pow(32, value))
+        case (14, 2): return percent(value)
+        case (15, 2): return String(format: "%+.0f%%", (value * 2 - 1) * 100)
+        case (14, 3): return String(format: "%+.1f dB", value * 24 - 12)
+        case (15, 3): return frequency(20 * pow(50, value))
+        case (14, 5): return String(format: "%+.1f dB", value * 36 - 24)
+        case (15, 5): return String(format: "%+.1f dB", value * 42 - 30)
+        case (16, 0): return frequency(1000 * pow(10, value))
+        case (16, 1): return String(format: "%.1f dB", value * 36)
+        case (16, 2), (16, 3): return percent(value)
+        case (16, 4): return frequency(4000 * pow(5, value))
+        case (16, 5): return String(format: "%+.1f dB", value * 24 - 12)
+        default: return String(format: "%.2f", value)
+        }
+    }
+
+    @ViewBuilder
+    private func effectModeControls(_ slot: Int, algorithm: Int) -> some View {
+        switch algorithm {
+        case 3:
+            R50Selector(title: "Character",
+                        address: fxAddress(slot, R50FxFieldMode1),
+                        options: ["Plate", "Stage"], model: model)
+        case 4:
+            R50Selector(title: "Pattern",
+                        address: fxAddress(slot, R50FxFieldMode1),
+                        options: ["Room", "Hall", "Gated", "Reverse"], model: model)
+        case 9:
+            HStack(spacing: 8) {
+                R50Selector(title: "Feedback", address: fxAddress(slot, R50FxFieldMode1),
+                            options: ["Same", "Cross"], model: model)
+                R50Selector(title: "Wave", address: fxAddress(slot, R50FxFieldMode2),
+                            options: ["Sine", "Triangle"], model: model)
+            }
+        case 10:
+            HStack(spacing: 8) {
+                R50Selector(title: "Stages", address: fxAddress(slot, R50FxFieldMode1),
+                            options: ["6", "12"], model: model)
+                R50Selector(title: "Wave", address: fxAddress(slot, R50FxFieldMode2),
+                            options: ["Sine", "Triangle"], model: model)
+            }
+        case 11:
+            R50Selector(title: "Mode", address: fxAddress(slot, R50FxFieldMode1),
+                        options: ["Tremolo", "Stereo", "Auto-Pan"], model: model)
+        case 12:
+            R50Selector(title: "Speed", address: fxAddress(slot, R50FxFieldMode1),
+                        options: ["Stop", "Slow", "Fast"], model: model)
+        case 14:
+            R50Selector(title: "Character",
+                        address: fxAddress(slot, R50FxFieldMode1),
+                        options: ["Soft", "Warm", "Bright"], model: model)
+        case 15:
+            R50Selector(title: "Mode",
+                        address: fxAddress(slot, R50FxFieldMode1),
+                        options: ["Hard", "Cubic", "Fuzz"], model: model)
+        default:
+            EmptyView()
+        }
+    }
+
+    private var topologyDiagram: some View {
+        let topology = Int(model.value(R50ParamFxTopology).rounded())
+        let text: String
+        switch topology {
+        case 1: text = "DRY ─────────► OUT    ① + ② + ③ ─────────► OUT"
+        case 2: text = "DRY ─► OUT    ① ─► ② ─┐    ③ ─────────┴► OUT"
+        case 3: text = "DRY ─► OUT    ① ─┐    ② ─┴─► ③ ───────► OUT"
+        default: text = "DRY ─► OUT    SEND ─► ① ─► ② ─► ③ ───► OUT"
+        }
+        return Text(text)
+            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+            .foregroundColor(R50Palette.glow)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(R50Palette.track)
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color(white: 0.32), lineWidth: 1))
+            .help("Dry is always summed directly. Sends feed the three global slots; topology determines whether those slots run in series or parallel.")
     }
 
     // MARK: - Samples page

@@ -32,7 +32,8 @@ public final class R50AudioUnit: AUAudioUnit {
 
         // Host -> DSP: apply parameter changes made outside the render thread.
         tree.implementorValueObserver = { [kernel] param, value in
-            kernel.setParameter(param.address, value: value)
+            let stored = param.unit == .indexed ? value.rounded() : value
+            kernel.setParameter(param.address, value: stored)
         }
         // DSP -> host: report current value (e.g. for the generic view).
         tree.implementorValueProvider = { [kernel] param in
@@ -45,6 +46,9 @@ public final class R50AudioUnit: AUAudioUnit {
                 let idx = Int(value.rounded())
                 if idx >= 0 && idx < strings.count { return strings[idx] }
             }
+            if param.unit == .indexed {
+                return String(Int(value.rounded()))
+            }
             if param.unit == .hertz {
                 return value >= 1000 ? String(format: "%.2f kHz", value / 1000)
                                      : String(format: "%.0f Hz", value)
@@ -52,6 +56,9 @@ public final class R50AudioUnit: AUAudioUnit {
             if param.unit == .seconds {
                 return value >= 1 ? String(format: "%.2f s", value)
                                   : String(format: "%.0f ms", value * 1000)
+            }
+            if param.unit == .decibels {
+                return String(format: "%+.1f dB", value)
             }
             return String(format: "%.2f", value)
         }
