@@ -71,6 +71,11 @@ private struct SampleManifestEntry: Codable {
     let loopMode: Int
     /// Optional so a library.json written before retuning existed still decodes.
     var tuneCents: Float?
+    /// Likewise optional, and likewise for compatibility. Nil means the whole
+    /// file loops, which is what every entry written before the importer read
+    /// `smpl` chunks meant by "loop".
+    var loopStart: Int?
+    var loopEnd: Int?
 }
 
 final class R50SampleStore: ObservableObject {
@@ -205,33 +210,49 @@ final class R50SampleStore: ObservableObject {
         do {
             let decoded = try Self.decodeMono(sourceURL)
             let name = sourceURL.deletingPathExtension().lastPathComponent
-            // Anything under half a second is treated as a one-shot transient;
-            // longer material loops over its whole length until the sample page
-            // can edit loop points.
-            let seconds = Double(decoded.samples.count) / decoded.sampleRate
-            let loopMode = seconds < 0.5 ? 0 : 1
 
             let fileName = UUID().uuidString + "." +
                 (sourceURL.pathExtension.isEmpty ? "wav" : sourceURL.pathExtension)
             try FileManager.default.copyItem(
                 at: sourceURL, to: samplesDirectory.appendingPathComponent(fileName))
 
-            // Detected rather than assumed. A hardcoded middle C is wrong for
-            // every sample that was not recorded at middle C, which is most of
-            // them, and it puts the error across the whole keyboard.
-            let detected = Self.detectPitch(decoded.samples,
-                                            sampleRate: decoded.sampleRate,
-                                            audioUnit: audioUnit)
-            let confident = (detected?.confidence ?? 0) > 0.5
-            let manifest = SampleManifestEntry(
-                name: name, fileName: fileName,
-                rootKey: confident ? detected!.rootKey : 60,
-                loopMode: loopMode,
-                // Negated: the detector says how sharp the recording is, and
-                // what gets stored is the correction that cancels it.
-                tuneCents: confident ? -detected!.centsSharp : 0)
-            if !confident {
-                errorMessage = "\(name): no clear pitch found — root key left at C4."
+            // What the file says about itself wins. A WAV with a smpl chunk is
+            // stating its root and its loop, and that is worth more than
+            // anything inferred here: the detector guesses, and the duration
+            // rule below is a rule of thumb rather than a fact about the audio.
+            // The factory loader has always honoured smpl; this path used to
+            // ignore it, so the same file behaved differently depending on
+            // whether it arrived through IMPORT or through the Samples folder.
+            let stated = audioUnit?.metadata(ofFileAtPath: sourceURL.path)
+
+            let manifest: SampleManifestEntry
+            if let stated {
+                manifest = SampleManifestEntry(
+                    name: name, fileName: fileName,
+                    rootKey: stated.rootKey,
+                    loopMode: stated.hasLoop ? (stated.pingPong ? 2 : 1) : 0,
+                    tuneCents: 0,
+                    loopStart: stated.hasLoop ? stated.loopStart : nil,
+                    loopEnd: stated.hasLoop ? stated.loopEnd : nil)
+            } else {
+                // Nothing stated, so fall back: detect the pitch, and treat
+                // anything under half a second as a one-shot transient.
+                let seconds = Double(decoded.samples.count) / decoded.sampleRate
+                let detected = Self.detectPitch(decoded.samples,
+                                                sampleRate: decoded.sampleRate,
+                                                audioUnit: audioUnit)
+                let confident = (detected?.confidence ?? 0) > 0.5
+                manifest = SampleManifestEntry(
+                    name: name, fileName: fileName,
+                    rootKey: confident ? detected!.rootKey : 60,
+                    loopMode: seconds < 0.5 ? 0 : 1,
+                    // Negated: the detector says how sharp the recording is,
+                    // and what gets stored is the correction that cancels it.
+                    tuneCents: confident ? -detected!.centsSharp : 0)
+                if !confident {
+                    errorMessage =
+                        "\(name): no clear pitch found — root key left at C4."
+                }
             }
             manifests.append(manifest)
             saveManifest()
@@ -359,7 +380,8 @@ final class R50SampleStore: ObservableObject {
             guard let self, let audioUnit = self.audioUnit else { return }
             let index = audioUnit.installSample(
                 name: manifest.name, samples: samples, sampleRate: sampleRate,
-                rootKey: manifest.rootKey, loopMode: manifest.loopMode)
+                rootKey: manifest.rootKey, loopMode: manifest.loopMode,
+                loopStart: manifest.loopStart, loopEnd: manifest.loopEnd)
             if index >= 0 {
                 audioUnit.setRoot(instrument: index, key: manifest.rootKey,
                                   cents: manifest.tuneCents ?? 0)

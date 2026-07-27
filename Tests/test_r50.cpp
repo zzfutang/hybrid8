@@ -2300,6 +2300,26 @@ int main() {
             r50::encodeWav(source.data(), static_cast<int>(source.size()),
                            kSR, 60, 0, 1000, false);
         check(!parse(oneShot).hasLoop, "a one-shot exports without a loop");
+        // But it still states its root: the smpl chunk is the only place a root
+        // key travels, and writing it only for looped audio meant every
+        // exported transient came back pitchless.
+        {
+            const r50::LoadedWav shot = r50::decodeWav(oneShot);
+            check(shot.ok && shot.hasRoot && shot.rootKey == 60 && !shot.hasLoop,
+                  "a one-shot still exports its root key");
+        }
+        {
+            const r50::LoadedWav pp = r50::decodeWav(
+                r50::encodeWav(source.data(), static_cast<int>(source.size()),
+                               kSR, 60, 100, 900, true, true));
+            check(pp.ok && pp.hasLoop && pp.pingPong,
+                  "a ping-pong loop survives the round trip as ping-pong");
+            const r50::LoadedWav fwd = r50::decodeWav(
+                r50::encodeWav(source.data(), static_cast<int>(source.size()),
+                               kSR, 60, 100, 900, true, false));
+            check(fwd.hasLoop && !fwd.pingPong,
+                  "a forward loop is not read back as ping-pong");
+        }
 
         const std::vector<uint8_t> odd =
             r50::encodeWav(source.data(), 999, kSR, 60, 100, 900, true);
@@ -2441,9 +2461,22 @@ int main() {
         r50::writeWholeFile(directory + "/a_oneshot.wav",
             r50::encodeWav(shortTone.data(), static_cast<int>(shortTone.size()),
                            kSR, 60, 0, 0, false));
-        r50::writeWholeFile(directory + "/c_detect.wav",
-            r50::encodeWav(longTone.data(), static_cast<int>(longTone.size()),
-                           kSR, 60, 0, 0, false));
+        // c_detect must genuinely carry no smpl chunk, which encodeWav no
+        // longer produces — it now always states a root. Renaming the tag
+        // leaves the chunk sizes valid, so the reader walks past it exactly as
+        // it would walk past a chunk written by some other tool.
+        {
+            std::vector<uint8_t> stripped =
+                r50::encodeWav(longTone.data(), static_cast<int>(longTone.size()),
+                               kSR, 60, 0, 0, false);
+            for (size_t at = 12; at + 4 <= stripped.size(); ++at) {
+                if (std::memcmp(&stripped[at], "smpl", 4) == 0) {
+                    std::memcpy(&stripped[at], "junk", 4);
+                    break;
+                }
+            }
+            r50::writeWholeFile(directory + "/c_detect.wav", stripped);
+        }
         // Deliberately a *valid* WAV under a non-audio extension. A two-byte
         // file would be rejected by the decoder regardless, which would prove
         // nothing about the extension filter.
@@ -2482,6 +2515,12 @@ int main() {
         // No chunk to trust, so the root has to come from the audio itself.
         check(library.instrument(before + 2)->regions[0].rootKey == 57,
               "a file without a smpl chunk has its pitch detected");
+
+        // The other half of that: a one-shot that *does* state a root is taken
+        // at its word rather than re-guessed. a_oneshot is 440 Hz declared as
+        // 60, so detection would say 69 and the stated root says otherwise.
+        check(library.instrument(before)->regions[0].rootKey == 60,
+              "a stated root wins over detection even with no loop");
 
         check(library.instrument(before)->regions[0].lowKey == 0
            && library.instrument(before)->regions[0].highKey == 127,
@@ -2636,6 +2675,53 @@ int main() {
                   "a zone without tuneCents is left untuned");
             check(tuned.instrument(2)->regions[0].tuneCents == 100.0f,
                   "tuneCents past a semitone clamps rather than transposing");
+        }
+
+        // A root key outside the keyboard fails the whole manifest. Clamping it
+        // would publish an instrument that plays at the wrong pitch on every
+        // key, which is exactly the silent failure the manifest exists to stop.
+        {
+            for (const char *bad : {"128", "-1", "600"}) {
+                r50::SampleLibrary rejected{r50::SampleLibrary::Empty{}};
+                writeManifest(std::string(R"({"instruments": [
+                    {"name": "Bad", "zones": [{"file": "low.wav", "rootKey": )")
+                              + bad + "}]}]}");
+                check(!r50::loadFactoryManifest(rejected, directory),
+                      "a root key outside 0..127 fails the manifest");
+                check(rejected.instrumentCount() == 0,
+                      "and publishes nothing");
+            }
+            r50::SampleLibrary edges{r50::SampleLibrary::Empty{}};
+            writeManifest(R"({"instruments": [
+                {"name": "Low",  "zones": [{"file": "low.wav", "rootKey": 0}]},
+                {"name": "High", "zones": [{"file": "low.wav", "rootKey": 127}]}]})");
+            check(r50::loadFactoryManifest(edges, directory),
+                  "the ends of the keyboard are still valid roots");
+        }
+
+        // loopMode reaches the asset, and an unrecognised one fails the
+        // manifest rather than quietly playing the other direction.
+        {
+            r50::SampleLibrary modes{r50::SampleLibrary::Empty{}};
+            writeManifest(R"({"instruments": [
+                {"name": "Ping", "zones": [{"file": "low.wav",
+                                            "loopMode": "pingpong"}]},
+                {"name": "Fwd",  "zones": [{"file": "low.wav"}]}]})");
+            check(r50::loadFactoryManifest(modes, directory),
+                  "a manifest naming a loop mode loads");
+            check(modes.sample(modes.instrument(0)->regions[0].slot)->loopMode
+                      == r50::LoopMode::PingPong,
+                  "loopMode pingpong reaches the asset");
+            check(modes.sample(modes.instrument(1)->regions[0].slot)->loopMode
+                      == r50::LoopMode::Forward,
+                  "a zone with no loopMode stays forward");
+
+            r50::SampleLibrary bogus{r50::SampleLibrary::Empty{}};
+            writeManifest(R"({"instruments": [
+                {"name": "Odd", "zones": [{"file": "low.wav",
+                                           "loopMode": "sideways"}]}]})");
+            check(!r50::loadFactoryManifest(bogus, directory),
+                  "an unrecognised loopMode fails the manifest");
         }
 
         // A manifest naming a file that is not there must leave the library

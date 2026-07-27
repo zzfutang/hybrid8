@@ -130,12 +130,17 @@ public final class R50AudioUnit: AUAudioUnit {
     // MARK: - Sample library
 
     /// Offline install — call from a loader queue, never from the render thread.
+    /// `loopStart`/`loopEnd` nil means the whole file loops, which is what an
+    /// import with nothing stated in its `smpl` chunk gets.
     func installSample(name: String, samples: [Float], sampleRate: Double,
-                       rootKey: Int, loopMode: Int) -> Int {
+                       rootKey: Int, loopMode: Int,
+                       loopStart: Int? = nil, loopEnd: Int? = nil) -> Int {
         let data = samples.withUnsafeBytes { Data($0) }
         return kernel.installSampleNamed(name, samples: data,
                                          sampleRate: sampleRate,
-                                         rootKey: rootKey, loopMode: loopMode)
+                                         rootKey: rootKey, loopMode: loopMode,
+                                         loopStart: loopStart ?? 0,
+                                         loopEnd: loopEnd ?? 0)
     }
 
     var instrumentCount: Int { kernel.instrumentCount() }
@@ -154,6 +159,28 @@ public final class R50AudioUnit: AUAudioUnit {
     /// One zone's audio and metadata, for writing out.
     func zone(instrument: Int, zone: Int) -> [String: Any]? {
         kernel.zone(ofInstrument: instrument, zone: zone)
+    }
+
+    /// Root key and loop as stated by a file's own `smpl` chunk. Nil when the
+    /// file is not a WAV or carries no chunk, which is the caller's cue to fall
+    /// back to detection.
+    struct StatedMetadata {
+        let rootKey: Int
+        let hasLoop: Bool
+        let pingPong: Bool
+        let loopStart: Int
+        let loopEnd: Int
+    }
+
+    func metadata(ofFileAtPath path: String) -> StatedMetadata? {
+        guard let info = kernel.metadataOfFile(atPath: path),
+              let rootKey = info["rootKey"] as? Int else { return nil }
+        return StatedMetadata(
+            rootKey: rootKey,
+            hasLoop: info["hasLoop"] as? Bool ?? false,
+            pingPong: info["pingPong"] as? Bool ?? false,
+            loopStart: info["loopStart"] as? Int ?? 0,
+            loopEnd: info["loopEnd"] as? Int ?? 0)
     }
 
     /// Estimate a buffer's pitch. Nil when the material is not pitched.

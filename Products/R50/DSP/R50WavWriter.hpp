@@ -58,7 +58,7 @@ inline void appendTag(std::vector<uint8_t> &out, const char *tag) {
 inline std::vector<uint8_t> encodeWav(const float *samples, int count,
                                       double sampleRate, int rootKey,
                                       uint32_t loopStart, uint32_t loopEnd,
-                                      bool looped) {
+                                      bool looped, bool pingPong = false) {
     std::vector<uint8_t> out;
     if (samples == nullptr || count <= 0) return out;
 
@@ -66,14 +66,18 @@ inline std::vector<uint8_t> encodeWav(const float *samples, int count,
     const uint32_t dataBytes = static_cast<uint32_t>(count) * 4u;
     const bool writeLoop = looped && loopEnd > loopStart + 1
                         && loopEnd <= static_cast<uint32_t>(count);
-    const uint32_t smplBytes = writeLoop ? 60u : 0u;
+    // The chunk goes out even with no loop in it, because it is also the only
+    // place the root key travels. Writing it only for looped audio meant every
+    // one-shot exported with no pitch at all, and a sample re-imported from the
+    // drop-in directory had its root guessed by the pitch detector — on a 40 ms
+    // transient, which is where detection is least able to help.
+    const uint32_t smplBytes = writeLoop ? 60u : 36u;
 
     out.reserve(dataBytes + smplBytes + 64);
     detail::appendTag(out, "RIFF");
     // 4 ("WAVE") + fmt (8 + 16) + data (8 + n) + smpl (8 + 60 when present)
     // 4 bytes per sample, so the data chunk is always even and needs no pad.
-    detail::appendU32(out, 4 + 24 + 8 + dataBytes
-                           + (writeLoop ? 8 + smplBytes : 0));
+    detail::appendU32(out, 4 + 24 + 8 + dataBytes + 8 + smplBytes);
     detail::appendTag(out, "WAVE");
 
     detail::appendTag(out, "fmt ");
@@ -94,25 +98,25 @@ inline std::vector<uint8_t> encodeWav(const float *samples, int count,
         detail::appendU32(out, bits);
     }
 
+    detail::appendTag(out, "smpl");
+    detail::appendU32(out, smplBytes);
+    detail::appendU32(out, 0);               // manufacturer
+    detail::appendU32(out, 0);               // product
+    detail::appendU32(out, static_cast<uint32_t>(
+        std::lround(1.0e9 / std::max(1.0, sampleRate))));  // ns per frame
+    detail::appendU32(out, static_cast<uint32_t>(rootKey));
+    detail::appendU32(out, 0);               // pitch fraction
+    detail::appendU32(out, 0);               // SMPTE format
+    detail::appendU32(out, 0);               // SMPTE offset
+    detail::appendU32(out, writeLoop ? 1u : 0u);   // loop count
+    detail::appendU32(out, 0);               // sampler-specific bytes
     if (writeLoop) {
-        detail::appendTag(out, "smpl");
-        detail::appendU32(out, smplBytes);
-        detail::appendU32(out, 0);               // manufacturer
-        detail::appendU32(out, 0);               // product
-        detail::appendU32(out, static_cast<uint32_t>(
-            std::lround(1.0e9 / std::max(1.0, sampleRate))));  // ns per frame
-        detail::appendU32(out, static_cast<uint32_t>(rootKey));
-        detail::appendU32(out, 0);               // pitch fraction
-        detail::appendU32(out, 0);               // SMPTE format
-        detail::appendU32(out, 0);               // SMPTE offset
-        detail::appendU32(out, 1);               // one loop
-        detail::appendU32(out, 0);               // sampler-specific bytes
-        detail::appendU32(out, 0);               // cue id
-        detail::appendU32(out, 0);               // forward
+        detail::appendU32(out, 0);                       // cue id
+        detail::appendU32(out, pingPong ? 1u : 0u);      // 0 fwd, 1 alternating
         detail::appendU32(out, loopStart);
-        detail::appendU32(out, loopEnd - 1);     // inclusive, see above
-        detail::appendU32(out, 0);               // fraction
-        detail::appendU32(out, 0);               // play count: infinite
+        detail::appendU32(out, loopEnd - 1);             // inclusive, see above
+        detail::appendU32(out, 0);                       // fraction
+        detail::appendU32(out, 0);                       // play count: infinite
     }
     return out;
 }

@@ -39,7 +39,12 @@ struct LoadedWav {
     std::vector<float> samples;
     double             sampleRate = 44100.0;
     int                rootKey    = 60;
+    /// Whether the root above was stated by the file or is just the default.
+    /// A one-shot now carries a `smpl` chunk with no loop in it, so "has a
+    /// root" and "has a loop" are no longer the same question.
+    bool               hasRoot    = false;
     bool               hasLoop    = false;
+    bool               pingPong   = false;
     uint32_t           loopStart  = 0;
     uint32_t           loopEnd    = 0;   // exclusive, as everywhere else in R50
 };
@@ -122,10 +127,14 @@ inline LoadedWav decodeWav(const std::vector<uint8_t> &bytes) {
                 out.samples[f] = static_cast<float>(sum / channels);
             }
             haveData = true;
-        } else if (detail::tagAt(bytes, at, "smpl") && size >= 60) {
+        } else if (detail::tagAt(bytes, at, "smpl") && size >= 36) {
+            // 36 is the chunk without any loop record, which is how a one-shot
+            // states its root key. Requiring 60 threw those away entirely.
             out.rootKey = static_cast<int>(detail::readU32(bytes, body + 12));
-            if (detail::readU32(bytes, body + 28) >= 1) {
+            out.hasRoot = true;
+            if (detail::readU32(bytes, body + 28) >= 1 && size >= 60) {
                 out.hasLoop   = true;
+                out.pingPong  = detail::readU32(bytes, body + 40) == 1;
                 out.loopStart = detail::readU32(bytes, body + 44);
                 // smpl stores the last played frame; R50's loopEnd is exclusive.
                 out.loopEnd   = detail::readU32(bytes, body + 48) + 1;
@@ -223,12 +232,20 @@ inline int loadSampleDirectory(SampleLibrary &library, const std::string &direct
             data.rootKey   = wav.rootKey;
             data.loopStart = wav.loopStart;
             data.loopEnd   = wav.loopEnd;
-            data.loopMode  = LoopMode::Forward;
+            data.loopMode  = wav.pingPong ? LoopMode::PingPong
+                                          : LoopMode::Forward;
         } else {
-            const DetectedPitch found = detectPitch(
-                data.samples.data(), data.length(), data.sourceSampleRate);
-            data.rootKey = (found.valid && found.confidence > 0.5f)
-                ? found.rootKey : 60;
+            // A stated root beats a detected one even when there is no loop:
+            // the file is telling us what it is, and detection on a short
+            // transient is a guess dressed as an answer.
+            if (wav.hasRoot) {
+                data.rootKey = wav.rootKey;
+            } else {
+                const DetectedPitch found = detectPitch(
+                    data.samples.data(), data.length(), data.sourceSampleRate);
+                data.rootKey = (found.valid && found.confidence > 0.5f)
+                    ? found.rootKey : 60;
+            }
             const double seconds = data.length() / data.sourceSampleRate;
             data.loopStart = 0;
             data.loopEnd   = static_cast<uint32_t>(data.length());
@@ -272,6 +289,8 @@ inline int loadSampleDirectory(SampleLibrary &library, const std::string &direct
 /// `loop` is optional and overrides the file when present: true sustains, false
 /// makes a one-shot of audio that carries a loop. Omit it and the WAV's `smpl`
 /// chunk decides, which is what every zone did before the key existed.
+/// `loopMode` is "forward" (the default) or "pingpong"; an unrecognised value
+/// fails the manifest rather than quietly playing the other one.
 ///
 /// The override exists because a WAV dropped in from anywhere else usually has
 /// no `smpl` chunk at all, and the strict rule — no chunk, no loop — turned
@@ -327,6 +346,14 @@ inline bool loadFactoryManifest(SampleLibrary &library, const std::string &direc
 
             PendingZone out;
             out.rootKey = zone["rootKey"].intOr(wav.rootKey);
+            // Rejected, not clamped — unlike the loop points above. A root key
+            // is a stated fact about what the recording *is*, so one outside
+            // the keyboard is a typo, and clamping it would publish an
+            // instrument that plays at the wrong pitch across every key with
+            // nothing said. A loop end past the end of the file is the same
+            // manifest describing audio that has since been re-edited, which is
+            // worth surviving; this is not.
+            if (out.rootKey < 0 || out.rootKey > 127) return false;
             // Clamped to a semitone either way: past that the root key is
             // simply wrong, and a manifest that says so is describing a
             // different note rather than detuning this one.
@@ -358,9 +385,19 @@ inline bool loadFactoryManifest(SampleLibrary &library, const std::string &direc
             if (end > frames) end = frames;
             if (end <= start + 1) { start = 0; end = frames; }
 
+            // "pingpong" reverses at each end instead of jumping back, which
+            // doubles the effective period and hides a join that does not
+            // quite meet — worth having on the short loops, where a forward
+            // jump repeats often enough to be heard as a pitch of its own.
+            const std::string mode = zone["loopMode"].stringOr(
+                wavLoops && wav.pingPong ? "pingpong" : "forward");
+            if (mode != "forward" && mode != "pingpong") return false;
+
             out.data.loopStart = looped ? start : 0;
             out.data.loopEnd   = looped ? end : frames;
-            out.data.loopMode  = looped ? LoopMode::Forward : LoopMode::None;
+            out.data.loopMode  = !looped ? LoopMode::None
+                               : mode == "pingpong" ? LoopMode::PingPong
+                                                    : LoopMode::Forward;
             instrument.zones.push_back(std::move(out));
         }
         pending.push_back(std::move(instrument));

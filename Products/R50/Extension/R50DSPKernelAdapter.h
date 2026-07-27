@@ -31,11 +31,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// called from the render thread. Adds the asset plus a single-region
 /// instrument covering the whole keyboard, and returns the new instrument
 /// index, or -1 if the library is full.
+/// `loopEnd` of 0 means the whole buffer, which is what a caller with no loop
+/// points to offer should pass.
 - (NSInteger)installSampleNamed:(NSString *)name
                         samples:(NSData *)samples
                      sampleRate:(double)sampleRate
                         rootKey:(NSInteger)rootKey
-                       loopMode:(NSInteger)loopMode;
+                       loopMode:(NSInteger)loopMode
+                      loopStart:(NSInteger)loopStart
+                        loopEnd:(NSInteger)loopEnd;
 
 /// Catalog for the editor's sample browser.
 - (NSInteger)instrumentCount;
@@ -56,6 +60,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// which is the most valuable part of a generated sustain. UI thread only.
 - (nullable NSDictionary<NSString *, id> *)zoneOfInstrument:(NSInteger)index
                                                        zone:(NSInteger)zone;
+
+/// What a file says about itself: root key and loop, read from its `smpl`
+/// chunk by the same parser the factory loader uses. Returns nil for anything
+/// that is not a WAV, or a WAV with no `smpl` chunk — which is the caller's cue
+/// to fall back to detecting the pitch.
+///
+/// Only the metadata is read here. The audio still goes through AVAudioFile,
+/// which handles the formats this parser does not.
+- (nullable NSDictionary<NSString *, id> *)metadataOfFileAtPath:(NSString *)path;
 
 /// Estimate the pitch of a decoded mono buffer. Returns nil when the material
 /// has no period worth trusting — a noise burst has no root key, and inventing

@@ -81,18 +81,26 @@
                         samples:(NSData *)samples
                      sampleRate:(double)sampleRate
                         rootKey:(NSInteger)rootKey
-                       loopMode:(NSInteger)loopMode {
+                       loopMode:(NSInteger)loopMode
+                      loopStart:(NSInteger)loopStart
+                        loopEnd:(NSInteger)loopEnd {
     if (samples.length == 0 || samples.length % sizeof(float) != 0) return -1;
 
     const float *values = (const float *)samples.bytes;
     const int count = (int)(samples.length / sizeof(float));
 
+    // Points outside the audio fall back to the whole buffer rather than
+    // rejecting the import: a loop that is too long is a worse sample, but no
+    // sample at all is a worse outcome.
+    NSInteger start = loopStart, end = loopEnd;
+    if (end <= 0 || end > count || end <= start + 1) { start = 0; end = count; }
+
     r50::SampleData data;
     data.samples.assign(values, values + count);
     data.sourceSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
     data.rootKey   = (int)rootKey;
-    data.loopStart = 0;
-    data.loopEnd   = (uint32_t)count;
+    data.loopStart = (uint32_t)start;
+    data.loopEnd   = (uint32_t)end;
     data.loopMode  = (r50::LoopMode)loopMode;
 
     r50::SampleLibrary &library = r50::SampleLibrary::shared();
@@ -133,7 +141,8 @@
         r50::encodeWav(data->samples.data(), data->length(),
                        data->sourceSampleRate, region.rootKey,
                        data->loopStart, data->loopEnd,
-                       data->loopMode != r50::LoopMode::None);
+                       data->loopMode != r50::LoopMode::None,
+                       data->loopMode == r50::LoopMode::PingPong);
 
     return @{
         @"name":       [NSString stringWithUTF8String:instrument->name],
@@ -145,6 +154,21 @@
         @"loopStart":  @(data->loopStart),
         @"loopEnd":    @(data->loopEnd),
         @"loopMode":   @((int)data->loopMode),
+    };
+}
+
+- (NSDictionary<NSString *, id> *)metadataOfFileAtPath:(NSString *)path {
+    std::vector<uint8_t> bytes;
+    if (!r50::readWholeFile(path.UTF8String, bytes)) return nil;
+    const r50::LoadedWav wav = r50::decodeWav(bytes);
+    if (!wav.ok || !wav.hasRoot) return nil;
+
+    return @{
+        @"rootKey":   @(wav.rootKey),
+        @"hasLoop":   @(wav.hasLoop),
+        @"pingPong":  @(wav.pingPong),
+        @"loopStart": @(wav.loopStart),
+        @"loopEnd":   @(wav.loopEnd),
     };
 }
 
