@@ -34,6 +34,34 @@ enum R50Palette {
     static let track       = Color(white: 0.09)
 }
 
+enum R50Type {
+    /// The badge face. Monospaced faces slash the zero — a terminal convention
+    /// that reads as a code listing, not as a fascia. Instrument panels of the
+    /// period were badged in tight grotesques with an unslashed, near-circular
+    /// zero, so the wordmark and its strapline are set in Helvetica Neue
+    /// Condensed, falling back through the plain cut to the system font on any
+    /// machine that lacks it.
+    static func wordmark(size: CGFloat) -> Font {
+        face(["HelveticaNeue-CondensedBlack", "HelveticaNeue-Bold"], size: size)
+            ?? .system(size: size, weight: .heavy)
+    }
+
+    static func strapline(size: CGFloat) -> Font {
+        face(["HelveticaNeue-CondensedBold", "HelveticaNeue-Medium"], size: size)
+            ?? .system(size: size, weight: .medium)
+    }
+
+    private static func face(_ names: [String], size: CGFloat) -> Font? {
+        for name in names where NSFont(name: name, size: size) != nil {
+            // fixedSize, not size: the fascia is laid out at fixed dimensions
+            // and scaled as a whole, so the badge must not also follow the
+            // host's text-size setting.
+            return .custom(name, fixedSize: size)
+        }
+        return nil
+    }
+}
+
 // MARK: - Chrome
 
 /// Titled panel with a hairline border and an engraved header rule.

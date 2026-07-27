@@ -93,12 +93,12 @@ struct R50View: View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 0) {
                 Text("R50")
-                    .font(.system(size: 30, weight: .heavy, design: .monospaced))
-                    .tracking(4)
+                    .font(R50Type.wordmark(size: 34))
+                    .tracking(3)
                     .foregroundColor(R50Palette.legend)
                 Text("Rytell · monotimbral 8-voice")
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    .tracking(1.2)
+                    .font(R50Type.strapline(size: 9))
+                    .tracking(1.4)
                     .foregroundColor(R50Palette.engrave)
             }
 
