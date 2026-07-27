@@ -73,11 +73,18 @@ typedef enum R50Param : unsigned long long {
     R50ParamP1ShaperType,
     R50ParamP1ShaperDrive,
     R50ParamP1ShaperPosition,
+    R50ParamP1PitchKeyFollow,
 
     // Partial 2: the full field set in R50PartialField order. Address it with
     // r50PartialParam() rather than by name.
+    //
+    // The block is sized well above R50PartialFieldCount on purpose. It used to
+    // end exactly at the last field, which meant every new Partial field shifted
+    // the tone, effects, LFO, macro and matrix addresses that follow — the one
+    // thing the append-only rule above exists to prevent. Reserving the space
+    // costs four bytes of `store_` per unused slot and buys silence.
     R50ParamP2Base,
-    R50ParamP2Last = R50ParamP2Base + 41,
+    R50ParamP2Last = R50ParamP2Base + 63,
 
     // --- Tone structure -----------------------------------------------------
     R50ParamToneStructure,       // 0..4, see ToneStructure in R50Voice.hpp
@@ -178,6 +185,7 @@ typedef enum R50PartialField {
     R50FieldShaperType,
     R50FieldShaperDrive,
     R50FieldShaperPosition,
+    R50FieldPitchKeyFollow,
 
     R50PartialFieldCount
 } R50PartialField;
@@ -250,6 +258,7 @@ static inline R50Param r50PartialParam(int partial, R50PartialField field) {
         case R50FieldShaperType:       return R50ParamP1ShaperType;
         case R50FieldShaperDrive:      return R50ParamP1ShaperDrive;
         case R50FieldShaperPosition:   return R50ParamP1ShaperPosition;
+        case R50FieldPitchKeyFollow:   return R50ParamP1PitchKeyFollow;
         default:                       return R50ParamCount;
     }
 }

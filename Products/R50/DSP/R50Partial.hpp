@@ -70,6 +70,19 @@ struct PartialParams {
     float filterBreak = 1.0f, filterSlope = 0.0f, filterSustain = 0.3f,
           filterRelease = 0.3f;
 
+    /// How much of the key's distance from middle C reaches this Partial's
+    /// pitch. 1 is normal tracking; 0 holds one pitch across the keyboard; 2
+    /// gives two octaves per octave played.
+    ///
+    /// This is the D-50's answer to a single sample stretched over the whole
+    /// keyboard, and the reason it is worth having: transposition is
+    /// destructive, and below 1 the extremes are simply asked to travel less
+    /// far. It applies to the wave oscillator as well as the sample, because
+    /// the control belongs to the Partial's pitch rather than to one source —
+    /// and a key-follow of 0 on a VA Partial is a fixed-pitch drone, which
+    /// nothing else here can do.
+    float pitchKeyFollow = 1.0f;
+
     // Pitch envelope: a rise and fall applied to this Partial's pitch.
     float pitchAmount = 0.0f;      // semitones, bipolar
     float pitchAttack = 0.001f;
@@ -197,7 +210,11 @@ public:
                             + p.fineCents / 100.0 + pitchBendSemitones
                             + p.pitchAmount * pitchLevel_
                             + mod.pitchSemitones;
-        const double noteHz = synth::noteToHz(note_ + detune);
+        // Key follow pivots on middle C rather than on note zero, so turning it
+        // down pulls the keyboard in around the middle of its range instead of
+        // collapsing it onto the bottom note.
+        const double tracked = 60.0 + (note_ - 60.0) * p.pitchKeyFollow;
+        const double noteHz = synth::noteToHz(tracked + detune);
         osc_.setFrequency(noteHz);
         noise_.updateBlock(p.noiseSpectrum, p.noiseTone, p.noiseRateHz,
                            p.noisePitchTrack, noteHz);
@@ -206,7 +223,7 @@ public:
         // relative to the region's root key rather than to concert pitch.
         sourceType_ = p.sourceType;
         if (sample_.isActive()) {
-            const double semitones = (note_ - sampleRootKey_) + detune
+            const double semitones = (tracked - sampleRootKey_) + detune
                                    + sampleTuneCents_ / 100.0;
             sample_.setPlaybackRatio(std::pow(2.0, semitones / 12.0), sampleRate_);
         }

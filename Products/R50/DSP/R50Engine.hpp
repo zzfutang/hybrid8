@@ -357,6 +357,7 @@ private:
             setPartial(partial, R50FieldFilterAttackLevel, 1.0f);
             setPartial(partial, R50FieldFilterBreak,       1.0f);
             setPartial(partial, R50FieldFilterSlope,       0.0f);
+            setPartial(partial, R50FieldPitchKeyFollow,    1.0f);
             setPartial(partial, R50FieldPitchAmount,       0.0f);
             setPartial(partial, R50FieldPitchAttack,       0.001f);
             setPartial(partial, R50FieldPitchDecay,        0.2f);
@@ -468,6 +469,7 @@ private:
         out.filterBreak       = synth::clampf(field(R50FieldFilterBreak), 0.0f, 1.0f);
         out.filterSlope       = std::max(0.0f, field(R50FieldFilterSlope));
 
+        out.pitchKeyFollow = synth::clampf(field(R50FieldPitchKeyFollow), 0.0f, 2.0f);
         out.pitchAmount = synth::clampf(field(R50FieldPitchAmount), -24.0f, 24.0f);
         out.pitchAttack = std::max(0.0005f, field(R50FieldPitchAttack));
         out.pitchDecay  = std::max(0.0005f, field(R50FieldPitchDecay));

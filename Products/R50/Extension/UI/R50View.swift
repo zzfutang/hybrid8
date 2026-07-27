@@ -96,7 +96,7 @@ struct R50View: View {
                     .font(R50Type.wordmark(size: 34))
                     .tracking(3)
                     .foregroundColor(R50Palette.legend)
-                Text("Rytell · monotimbral 8-voice")
+                Text("DIGITAL SYNTHESIZER")
                     .font(R50Type.strapline(size: 9))
                     .tracking(1.4)
                     .foregroundColor(R50Palette.engrave)
@@ -283,6 +283,8 @@ struct R50View: View {
                 R50Value(title: "Octave", address: addr(R50FieldOctave), model: model)
                 R50Value(title: "Semitone", address: addr(R50FieldSemitone), model: model)
                 R50Value(title: "Fine", address: addr(R50FieldFine), model: model)
+                R50Value(title: "Key Follow",
+                         address: addr(R50FieldPitchKeyFollow), model: model)
             }
         }
     }

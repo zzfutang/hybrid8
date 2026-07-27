@@ -2552,6 +2552,55 @@ int main() {
         }
     }
 
+    // --- Pitch key follow ---------------------------------------------------
+    {
+        // Key follow scales the key's distance from middle C. At 0.5 an octave
+        // played is a tritone heard; at 0 the keyboard is one pitch. Measured
+        // off the rendered tone rather than off the parameter, because the
+        // whole point is that it reaches the oscillator.
+        auto fundamentalOf = [](float keyFollow, int note) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 3);         // a sine, so one peak only
+            engine.setParameter(
+                r50PartialParam(0, R50FieldPitchKeyFollow), keyFollow);
+            engine.noteOn(static_cast<uint8_t>(note), 100);
+            const std::vector<float> buffer = renderBuffer(engine, 0.4);
+            const int from = static_cast<int>(buffer.size()) - kAnalysisLength;
+
+            double best = 0.0, at = 0.0;
+            for (double f = 40.0; f < 4000.0; f += 0.5) {
+                const double m = magAt(buffer, f, kSR, from);
+                if (m > best) { best = m; at = f; }
+            }
+            return at;
+        };
+
+        const double full = fundamentalOf(1.0f, 72);
+        check(std::fabs(full - midiToHz(72)) < 3.0,
+              "key follow of 1 tracks the keyboard exactly");
+        const double half = fundamentalOf(0.5f, 72);
+        check(std::fabs(half - midiToHz(66)) < 3.0,
+              "key follow of 0.5 moves a half a semitone per semitone");
+        const double none = fundamentalOf(0.0f, 72);
+        check(std::fabs(none - midiToHz(60)) < 3.0,
+              "key follow of 0 holds middle C across the keyboard");
+        // Below the pivot it has to open out the other way, or the control is
+        // only half a control.
+        r50::R50Engine below;
+        setupSpectralTone(below, 3);
+        below.setParameter(r50PartialParam(0, R50FieldPitchKeyFollow), 0.5f);
+        below.noteOn(48, 100);
+        const std::vector<float> low = renderBuffer(below, 0.4);
+        const int lowFrom = static_cast<int>(low.size()) - kAnalysisLength;
+        double bestLow = 0.0, atLow = 0.0;
+        for (double f = 40.0; f < 4000.0; f += 0.5) {
+            const double m = magAt(low, f, kSR, lowFrom);
+            if (m > bestLow) { bestLow = m; atLow = f; }
+        }
+        check(std::fabs(atLow - midiToHz(54)) < 3.0,
+              "key follow pivots on middle C in both directions");
+    }
+
     // --- Factory manifest ---------------------------------------------------
     {
         const std::string directory = "/tmp/r50_manifest_test";

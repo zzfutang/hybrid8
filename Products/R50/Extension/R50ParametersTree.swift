@@ -189,6 +189,9 @@ enum R50Parameters {
             Field(field: R50FieldFilterSlope, id: "FilterSlope",
                   name: "Filter Slope", min: 0, max: 8, value: 0, unit: .seconds),
 
+            Field(field: R50FieldPitchKeyFollow, id: "PitchKeyFollow",
+                  name: "Key Follow", min: 0, max: 2, value: 1),
+
             Field(field: R50FieldPitchAmount, id: "PitchAmount",
                   name: "Pitch Env Amount", min: -24, max: 24, value: 0),
             Field(field: R50FieldPitchAttack, id: "PitchAttack",
