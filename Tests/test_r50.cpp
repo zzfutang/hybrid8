@@ -275,11 +275,11 @@ int main() {
         }
         check(decreasing, "mip levels hold monotonically fewer harmonics");
 
-        // One level per octave, starting at 20 Hz.
+        // One level per semitone, starting at 20 Hz.
         check(std::fabs(r50::waveLevelForFreq(20.0) - 0.0f) < 1e-4f
-           && std::fabs(r50::waveLevelForFreq(40.0) - 1.0f) < 1e-4f
-           && std::fabs(r50::waveLevelForFreq(320.0) - 4.0f) < 1e-4f,
-              "fractional mip level tracks octaves above 20 Hz");
+           && std::fabs(r50::waveLevelForFreq(40.0) - 12.0f) < 1e-4f
+           && std::fabs(r50::waveLevelForFreq(320.0) - 48.0f) < 1e-4f,
+              "fractional mip level tracks semitones above 20 Hz");
 
         // Crossfading the two adjacent levels must be continuous across a
         // level boundary — a step here is audible as a click during glide.
@@ -287,8 +287,8 @@ int main() {
         float maxJump = 0.0f;
         for (int i = 0; i < 512; ++i) {
             const double phase = i / 512.0;
-            const float below = r50::waveSample(saw, 2.999f, phase);
-            const float above = r50::waveSample(saw, 3.001f, phase);
+            const float below = r50::waveSample(saw, 35.999f, phase);
+            const float above = r50::waveSample(saw, 36.001f, phase);
             maxJump = std::max(maxJump, std::fabs(above - below));
         }
         check(maxJump < 0.02f, "mip crossfade is continuous across a boundary");
@@ -380,7 +380,7 @@ int main() {
                 allGood = false;
             }
         }
-        check(allGood, "all 11 waves are audible and bounded");
+        check(allGood, "all 17 waves are audible and bounded");
     }
 
     // --- Every wave has a fundamental ---------------------------------------
@@ -457,8 +457,9 @@ int main() {
               "noise colours are ordered by spectral tilt");
     }
     {
-        // Band-passed noise tracking the note must put its energy near the
-        // note, not at a fixed frequency.
+        // Breath noise must retain the same colour across the keyboard. The
+        // old tracked Q=4 band created a different resonant peak for every
+        // held note, which read as digital artifacts in reed chords.
         auto peakNear = [](double centre, int note) {
             r50::R50Engine engine;
             setupSpectralTone(engine, 0);
@@ -471,11 +472,12 @@ int main() {
             const int from = static_cast<int>(buffer.size()) - kAnalysisLength;
             return magAt(buffer, centre, kSR, from);
         };
-        // Tone 0.25 -> centre = f0 * 2.0.
-        const double lowNote  = peakNear(midiToHz(48) * 2.0, 48);
-        const double highNote = peakNear(midiToHz(48) * 2.0, 72);
-        check(lowNote > highNote * 3.0,
-              "band-passed noise follows the note when tracking is on");
+        const double centre = 500.0 * std::pow(2.0, 0.25 * 4.2);
+        const double lowNote  = peakNear(centre, 48);
+        const double highNote = peakNear(centre, 72);
+        const double ratio = lowNote / std::max(highNote, 1.0e-12);
+        check(ratio > 0.5 && ratio < 2.0,
+              "breath-noise colour does not follow the played key");
     }
     {
         // Mix is a crossfade: 0 is the oscillator alone, 1 the noise alone.
@@ -922,6 +924,20 @@ int main() {
             }
         }
         check(blockOk, "Partial 2 occupies its own contiguous block");
+
+        bool patchBlocksOk = true;
+        for (int partial = 2; partial < 4; ++partial) {
+            const R50Param base =
+                partial == 2 ? R50ParamP3Base : R50ParamP4Base;
+            for (int f = 0; f < R50PartialFieldCount; ++f) {
+                if (r50PartialParam(partial,
+                        static_cast<R50PartialField>(f)) != base + f) {
+                    patchBlocksOk = false;
+                }
+            }
+        }
+        check(patchBlocksOk,
+              "Tone B Partials occupy independent contiguous blocks");
     }
 
     // --- Partial 2 disabled reproduces the single-Partial engine ------------
@@ -1017,6 +1033,45 @@ int main() {
         printf("       ringmod: f1=%.4f sum=%.4f diff=%.4f\n", carrier, sum, diff);
         check(sum > carrier * 0.02 && diff > carrier * 0.02,
               "ring modulation produces sum and difference frequencies");
+
+        auto ringOutputPeak = [](float pan, float dry) {
+            r50::R50Engine routed;
+            setupSpectralTone(routed, 11); // sine makes the product unambiguous
+            routed.setParameter(r50PartialParam(0, R50FieldLevel), 0.0f);
+            routed.setParameter(r50PartialParam(0, R50FieldDryLevel), 0.0f);
+            routed.setParameter(r50PartialParam(1, R50FieldEnabled), 1.0f);
+            routed.setParameter(r50PartialParam(1, R50FieldOscWave), 11.0f);
+            routed.setParameter(r50PartialParam(1, R50FieldSemitone), 7.0f);
+            routed.setParameter(r50PartialParam(1, R50FieldCutoff), 18000.0f);
+            routed.setParameter(r50PartialParam(1, R50FieldFilterEnvAmount), 0.0f);
+            routed.setParameter(r50PartialParam(1, R50FieldAmpSustain), 1.0f);
+            routed.setParameter(r50PartialParam(1, R50FieldLevel), 0.0f);
+            routed.setParameter(r50PartialParam(1, R50FieldDryLevel), 0.0f);
+            routed.setParameter(R50ParamToneStructure, 1.0f);
+            routed.setParameter(R50ParamToneRingLevel, 2.0f);
+            routed.setParameter(R50ParamToneRingPan, pan);
+            routed.setParameter(R50ParamToneRingDry, dry);
+            routed.noteOn(48, 100);
+            std::vector<float> left(8192), right(8192);
+            routed.render(left.data(), right.data(), static_cast<int>(left.size()));
+            float peakL = 0.0f, peakR = 0.0f;
+            // Routing is deliberately smoothed over 10 ms; measure after that
+            // transition rather than treating its click-prevention tail as
+            // leaked steady-state signal.
+            for (size_t i = 6000; i < left.size(); ++i) {
+                peakL = std::max(peakL, std::fabs(left[i]));
+                peakR = std::max(peakR, std::fabs(right[i]));
+            }
+            return std::pair<float, float>{peakL, peakR};
+        };
+        const auto mutedRing = ringOutputPeak(0.0f, 0.0f);
+        const auto leftRing = ringOutputPeak(-1.0f, 1.0f);
+        printf("       ring route: muted=(%.5f, %.5f) left=(%.5f, %.5f)\n",
+               mutedRing.first, mutedRing.second, leftRing.first, leftRing.second);
+        check(mutedRing.first < 1e-5f && mutedRing.second < 1e-5f,
+              "ring dry is independent of both Partial dry buses");
+        check(leftRing.first > 0.01f && leftRing.second < leftRing.first * 0.01f,
+              "ring output has independent constant-power pan");
     }
     {
         // How much does ring modulation alias? The multiply doubles bandwidth
@@ -1089,6 +1144,93 @@ int main() {
         const float late  = peakBetween(0.35, 0.55);
         printf("       attack/sustain handover: early=%.4f late=%.4f\n", early, late);
         check(late > early * 3.0f, "AttackSustain hands over to Partial 2");
+    }
+
+    // --- Patch structures --------------------------------------------------
+    {
+        auto toneBPeak = [](int structure, int note, float velocity,
+                            float vector) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(r50PartialParam(0, R50FieldEnabled), 0.0f);
+            engine.setParameter(r50PartialParam(2, R50FieldEnabled), 1.0f);
+            engine.setParameter(r50PartialParam(2, R50FieldOscWave), 0.0f);
+            engine.setParameter(r50PartialParam(2, R50FieldCutoff), 18000.0f);
+            engine.setParameter(r50PartialParam(2, R50FieldFilterEnvAmount), 0.0f);
+            engine.setParameter(r50PartialParam(2, R50FieldKeyTrack), 0.0f);
+            engine.setParameter(r50PartialParam(2, R50FieldAmpAttack), 0.001f);
+            engine.setParameter(r50PartialParam(2, R50FieldAmpSustain), 1.0f);
+            engine.setParameter(R50ParamPatchStructure,
+                                static_cast<float>(structure));
+            engine.setParameter(R50ParamPatchSplitPoint, 60.0f);
+            engine.setParameter(R50ParamPatchVelocitySplit, 0.5f);
+            engine.setParameter(R50ParamPatchVectorMix, vector);
+            engine.noteOn(static_cast<uint8_t>(note),
+                          static_cast<uint8_t>(velocity * 127.0f));
+            return render(engine, 0.25, 0.08);
+        };
+
+        check(toneBPeak(0, 60, 0.8f, 0.0f) > 0.02f,
+              "Layer renders Tone B");
+        check(toneBPeak(1, 48, 0.8f, 0.0f) < 0.001f
+              && toneBPeak(1, 72, 0.8f, 0.0f) > 0.02f,
+              "key split selects one Tone at the split point");
+        check(toneBPeak(2, 60, 0.2f, 0.0f) < 0.001f
+              && toneBPeak(2, 60, 0.9f, 0.0f) > 0.02f,
+              "velocity split selects one Tone");
+        check(toneBPeak(3, 60, 0.9f, 0.0f)
+              > toneBPeak(3, 60, 0.1f, 0.0f) * 3.0f,
+              "velocity crossfade moves from Tone A to Tone B");
+        check(toneBPeak(4, 60, 0.8f, 1.0f) > 0.02f
+              && toneBPeak(4, 60, 0.8f, 0.0f) < 0.001f,
+              "vector mix reaches both Tone endpoints");
+    }
+    {
+        auto modulatedVectorPeak = [](bool dedicatedLfo) {
+            r50::R50Engine engine;
+            setupSpectralTone(engine, 0);
+            engine.setParameter(r50PartialParam(0, R50FieldEnabled), 0.0f);
+            engine.setParameter(r50PartialParam(2, R50FieldEnabled), 1.0f);
+            engine.setParameter(r50PartialParam(2, R50FieldCutoff), 18000.0f);
+            engine.setParameter(r50PartialParam(2, R50FieldAmpAttack), 0.001f);
+            engine.setParameter(r50PartialParam(2, R50FieldAmpSustain), 1.0f);
+            engine.setParameter(R50ParamPatchStructure, 4.0f);
+            engine.setParameter(R50ParamPatchVectorMix, 0.0f);
+            if (dedicatedLfo) {
+                engine.setParameter(R50ParamVectorLfoRate, 0.01f);
+                engine.setParameter(R50ParamVectorLfoDepth, 1.0f);
+                engine.setParameter(R50ParamVectorLfoRetrigger, 1.0f);
+                engine.setParameter(R50ParamVectorLfoPhase, 0.25f);
+            } else {
+                engine.setParameter(
+                    r50ModSlotParam(0, R50ModFieldSource), 8.0f); // Mod Wheel
+                engine.setParameter(
+                    r50ModSlotParam(0, R50ModFieldDestination), 12.0f); // Vector
+                engine.setParameter(
+                    r50ModSlotParam(0, R50ModFieldAmount), 1.0f);
+                engine.modWheel(1.0f);
+            }
+            engine.noteOn(60, 100);
+            return render(engine, 0.2, 0.05);
+        };
+        check(modulatedVectorPeak(false) > 0.02f,
+              "modulation matrix reaches the Patch vector");
+        check(modulatedVectorPeak(true) > 0.02f,
+              "dedicated Vector LFO moves the Patch vector");
+    }
+    {
+        r50::R50Engine engine;
+        setupSpectralTone(engine, 0);
+        engine.setParameter(r50PartialParam(0, R50FieldEnabled), 0.0f);
+        for (int partial = 2; partial < 4; ++partial) {
+            engine.setParameter(r50PartialParam(partial, R50FieldEnabled), 1.0f);
+            engine.setParameter(r50PartialParam(partial, R50FieldCutoff), 18000.0f);
+            engine.setParameter(r50PartialParam(partial, R50FieldAmpSustain), 1.0f);
+        }
+        engine.setParameter(R50ParamToneBStructure, 0.0f);
+        engine.noteOn(60, 100);
+        check(render(engine, 0.25, 0.08) > 0.03f,
+              "Tone B combines Partials 3 and 4 with its own structure");
     }
 
     // --- Panning ------------------------------------------------------------

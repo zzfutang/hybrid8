@@ -34,6 +34,14 @@ public:
         width_ = synth::clampf(width, 0.02f, 0.98f);
     }
 
+    /// Move mip selection upward without changing pitch. Nonlinear processors
+    /// use this to reserve ultrasonic headroom for the harmonics they create;
+    /// the clean oscillator keeps a bias of zero and therefore full bandwidth.
+    void setMipBias(float levels) {
+        mipBias_ = std::max(0.0f, levels);
+        setFrequency(frequency_);
+    }
+
     void setFrequency(double hz) {
         frequency_ = hz;
         phaseInc_  = hz / sampleRate_;
@@ -41,7 +49,9 @@ public:
         if (phaseInc_ < -0.49) phaseInc_ = -0.49;
         // Mip selection follows the fundamental, not the phase increment, so a
         // negative increment (reverse playback) still picks the right band.
-        levelF_ = waveLevelForFreq(hz < 0.0 ? -hz : hz);
+        levelF_ = std::min(
+            waveLevelForFreq(hz < 0.0 ? -hz : hz) + mipBias_,
+            static_cast<float>(kWaveNumLevels - 1));
     }
 
     /// One sample, nominally in [-1, 1].
@@ -93,6 +103,7 @@ private:
     double phaseInc_   = 0.0;
     double phase_      = 0.0;
     float  levelF_     = 0.0f;
+    float  mipBias_    = 0.0f;
     float  width_      = 0.5f;
     int    waveIndex_  = 0;
     bool   wrapped_    = false;

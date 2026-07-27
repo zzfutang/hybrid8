@@ -68,15 +68,14 @@ public:
         noteHz_     = noteHz;
 
         if (spectrum_ == NoiseSpectrum::Filtered) {
-            // Tracking puts the band on a harmonic of the note, which is what
-            // makes filtered noise read as breath belonging to the tone rather
-            // than as a separate hiss layer.
-            double centre = pitchTrack_
-                ? noteHz_ * (0.5 + tone_ * 6.0)
-                : 100.0 * std::pow(2.0, tone_ * 7.0);
+            // Breath belongs to the player/instrument, not to the key. The old
+            // tracked Q=4 resonator produced one narrow moving noise peak per
+            // note; chords made those peaks sound like digital partials inside
+            // the oscillator. Keep a broad band fixed across the keyboard.
+            double centre = 500.0 * std::pow(2.0, tone_ * 4.2);
             centre = synth::clampf(static_cast<float>(centre), 30.0f,
                                    static_cast<float>(sampleRate_ * 0.45));
-            bandpass_.setCoefficients(centre, 4.0, 0.0f, 0.0f);
+            bandpass_.setCoefficients(centre, 0.72, 0.0f, 0.0f);
         }
         updateStepRate();
     }

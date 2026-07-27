@@ -9,8 +9,9 @@
 //  it two octaves up folds everything above the 250th back down as inharmonic
 //  aliasing. The fix is a mip pyramid — one table per octave, each holding only
 //  the harmonics that still fit below 20 kHz at that octave — with the two
-//  adjacent levels crossfaded so pitch movement across an octave boundary does
-//  not step audibly.
+//  adjacent levels crossfaded so pitch movement does not step audibly. Levels
+//  are now one semitone apart: octave spacing was alias-safe but faded useful
+//  upper harmonics too early.
 //
 //  The mip machinery follows Hybrid8Wavetable.hpp, which has this working
 //  already; the frame/variant/liveness/import machinery it also carries is not
@@ -41,7 +42,8 @@ namespace r50 {
 
 static constexpr int    kWaveBaseLen    = 1024;    // richest level (<=511 harmonics)
 static constexpr int    kWaveMinLen     = 64;
-static constexpr int    kWaveNumLevels  = 10;      // one per octave from 20 Hz
+static constexpr int    kWaveLevelsPerOctave = 12;
+static constexpr int    kWaveNumLevels  = 121;     // semitones from 20 Hz
 static constexpr double kWaveFMin       = 20.0;
 static constexpr double kWaveAudibleMax = 20000.0;
 static constexpr int    kWaveMaxHarm    = kWaveBaseLen / 2 - 1;
@@ -56,19 +58,21 @@ struct WavePyramid {
     std::array<WaveMip, kWaveNumLevels> levels;
 };
 
-/// Highest harmonic that still lands below 20 kHz when a fundamental at the
-/// top of this level's octave is played.
+/// Highest harmonic that still lands below 20 kHz when a fundamental reaches
+/// the top of this level's semitone-wide interval.
 inline int waveMaxHarmonic(int level) {
-    const double fTop = kWaveFMin * std::pow(2.0, level + 1);
+    const double fTop = kWaveFMin * std::pow(
+        2.0, (level + 1.0) / kWaveLevelsPerOctave);
     const int k = static_cast<int>(std::floor(kWaveAudibleMax / fTop));
     return std::max(1, std::min(k, kWaveMaxHarm));
 }
 
-/// Fractional mip level for a fundamental. Each level spans one octave; the
+/// Fractional mip level for a fundamental. Each level spans one semitone; the
 /// fraction drives the crossfade between adjacent levels.
 inline float waveLevelForFreq(double f0) {
     if (f0 <= kWaveFMin) return 0.0f;
-    float level = static_cast<float>(std::log2(f0 / kWaveFMin));
+    float level = static_cast<float>(
+        std::log2(f0 / kWaveFMin) * kWaveLevelsPerOctave);
     if (level < 0.0f) level = 0.0f;
     if (level > static_cast<float>(kWaveNumLevels - 1))
         level = static_cast<float>(kWaveNumLevels - 1);
@@ -325,6 +329,69 @@ inline WaveSpectrum waveSpectrumVocalAh() {
     return s;
 }
 
+struct FormantPeak {
+    double hz, bandwidth, gain;
+};
+
+/// Harmonic glottal source shaped by three vocal-tract resonances. The small
+/// source floor is deliberate: a vowel still needs an audible fundamental
+/// when its first formant is several harmonics above the played note.
+inline WaveSpectrum waveSpectrumFormant(const FormantPeak (&peaks)[3],
+                                        double sourceFloor = 0.14) {
+    WaveSpectrum s;
+    const double nominalF0 = 130.81; // tables voiced around C3
+    for (int k = 1; k <= 96; ++k) {
+        const double hz = k * nominalF0;
+        double envelope = sourceFloor;
+        for (const FormantPeak &peak : peaks) {
+            const double x = (hz - peak.hz) / peak.bandwidth;
+            envelope += peak.gain * std::exp(-0.5 * x * x);
+        }
+        // A slightly steeper-than-saw glottal tilt prevents the upper formants
+        // from turning into brittle single-cycle buzz.
+        s.mag[k] = static_cast<float>(
+            envelope / std::pow(static_cast<double>(k), 1.16));
+        s.phase[k] = kSinePhase;
+    }
+    return s;
+}
+
+inline WaveSpectrum waveSpectrumVocalE() {
+    static const FormantPeak p[3] = {
+        {500.0, 95.0, 1.00}, {1750.0, 180.0, 0.72}, {2450.0, 260.0, 0.38}
+    };
+    return waveSpectrumFormant(p);
+}
+
+inline WaveSpectrum waveSpectrumVocalI() {
+    static const FormantPeak p[3] = {
+        {300.0, 75.0, 1.00}, {2200.0, 190.0, 0.78}, {3000.0, 280.0, 0.34}
+    };
+    return waveSpectrumFormant(p);
+}
+
+inline WaveSpectrum waveSpectrumVocalO() {
+    static const FormantPeak p[3] = {
+        {470.0, 90.0, 1.00}, {850.0, 120.0, 0.78}, {2700.0, 300.0, 0.25}
+    };
+    return waveSpectrumFormant(p);
+}
+
+inline WaveSpectrum waveSpectrumVocalU() {
+    static const FormantPeak p[3] = {
+        {330.0, 80.0, 1.00}, {700.0, 105.0, 0.74}, {2400.0, 280.0, 0.20}
+    };
+    return waveSpectrumFormant(p);
+}
+
+inline WaveSpectrum waveSpectrumVocalNasal() {
+    static const FormantPeak p[3] = {
+        {280.0, 65.0, 1.00}, {1050.0, 105.0, 0.62}, {2500.0, 230.0, 0.32}
+    };
+    // A little more source floor gives the nasal vowel its solid, reedy core.
+    return waveSpectrumFormant(p, 0.19);
+}
+
 /// Metallic: sparse, weighted towards partials that are not simple octaves, with
 /// scattered phases. A single-cycle table can only hold harmonic partials, so
 /// this approximates an inharmonic bell by choosing an uneven harmonic subset
@@ -343,6 +410,16 @@ inline WaveSpectrum waveSpectrumBell() {
     return s;
 }
 
+/// Pure fundamental. Kept as a table-backed oscillator like every other
+/// selectable waveform so phase, tuning and modulation follow exactly the same
+/// signal path. Appended to the public waveform list to preserve patch indices.
+inline WaveSpectrum waveSpectrumSine() {
+    WaveSpectrum s;
+    s.mag[1]   = 1.0f;
+    s.phase[1] = kSinePhase;
+    return s;
+}
+
 // ---- Library --------------------------------------------------------------
 
 enum WavePyramidId {
@@ -354,6 +431,12 @@ enum WavePyramidId {
     kPyramidStrings,
     kPyramidVocalAh,
     kPyramidBell,
+    kPyramidSine,
+    kPyramidVocalE,
+    kPyramidVocalI,
+    kPyramidVocalO,
+    kPyramidVocalU,
+    kPyramidVocalNasal,
     kPyramidCount
 };
 
@@ -369,7 +452,7 @@ struct WaveDescriptor {
     float         fixedWidth;   // < 0 -> follow the width parameter
 };
 
-static constexpr int kWaveCount = 11;
+static constexpr int kWaveCount = 17;
 
 inline const WaveDescriptor *waveDescriptors() {
     static const WaveDescriptor descriptors[kWaveCount] = {
@@ -384,6 +467,12 @@ inline const WaveDescriptor *waveDescriptors() {
         { kPyramidStrings,  WaveRead::Single,     -1.0f },  //  8 Strings
         { kPyramidVocalAh,  WaveRead::Single,     -1.0f },  //  9 Vocal Ah
         { kPyramidBell,     WaveRead::Single,     -1.0f },  // 10 Bell
+        { kPyramidSine,     WaveRead::Single,     -1.0f },  // 11 Sine
+        { kPyramidVocalE,   WaveRead::Single,     -1.0f },  // 12 Vocal E
+        { kPyramidVocalI,   WaveRead::Single,     -1.0f },  // 13 Vocal I
+        { kPyramidVocalO,   WaveRead::Single,     -1.0f },  // 14 Vocal O
+        { kPyramidVocalU,   WaveRead::Single,     -1.0f },  // 15 Vocal U
+        { kPyramidVocalNasal, WaveRead::Single,   -1.0f },  // 16 Vocal Nasal
     };
     return descriptors;
 }
@@ -402,6 +491,13 @@ inline WaveLibrary waveBuildLibrary() {
     library.pyramids[kPyramidStrings]  = waveBuildPyramid(waveSpectrumStrings());
     library.pyramids[kPyramidVocalAh]  = waveBuildPyramid(waveSpectrumVocalAh());
     library.pyramids[kPyramidBell]     = waveBuildPyramid(waveSpectrumBell());
+    library.pyramids[kPyramidSine]     = waveBuildPyramid(waveSpectrumSine());
+    library.pyramids[kPyramidVocalE]   = waveBuildPyramid(waveSpectrumVocalE());
+    library.pyramids[kPyramidVocalI]   = waveBuildPyramid(waveSpectrumVocalI());
+    library.pyramids[kPyramidVocalO]   = waveBuildPyramid(waveSpectrumVocalO());
+    library.pyramids[kPyramidVocalU]   = waveBuildPyramid(waveSpectrumVocalU());
+    library.pyramids[kPyramidVocalNasal] =
+        waveBuildPyramid(waveSpectrumVocalNasal());
     return library;
 }
 

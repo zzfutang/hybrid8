@@ -18,9 +18,10 @@ enum BrowserFileAction {
 }
 
 enum R50Page: String, CaseIterable {
+    case patch     = "Patch"
+    case tone      = "Tone"
     case partial   = "Partial"
     case envelopes = "Envelopes"
-    case tone      = "Tone"
     case modulation = "Mod"
     case effects   = "FX"
     case samples   = "Samples"
@@ -29,7 +30,7 @@ enum R50Page: String, CaseIterable {
 struct R50View: View {
     @ObservedObject var model: R50ParameterModel
     @ObservedObject var samples: R50SampleStore
-    @State private var page: R50Page = .partial
+    @State private var page: R50Page = .patch
     /// One file panel, not two. SwiftUI honours a single presentation modifier
     /// of each kind per view, so a second .fileImporter silently shadows the
     /// first — which is exactly what stopped IMPORT opening anything once
@@ -37,8 +38,13 @@ struct R50View: View {
     @State private var showingFilePanel = false
     @State private var fileAction: BrowserFileAction = .importAudio
     @State private var showingPresets = false
+    @State private var showingSavePatch = false
+    @State private var newPatchName = ""
+    @State private var patchSaveError = ""
+    @State private var showingPatchSaveError = false
     /// Which Partial the Partial and Envelopes pages are editing.
     @State private var partial = 0
+    @State private var tone = 0
     @State private var auditionKey = 60
 
     private func addr(_ field: R50PartialField) -> R50Param {
@@ -72,7 +78,7 @@ struct R50View: View {
                            ? R50Layout.effectsPageHeight : R50Layout.pageHeight,
                        maxHeight: page == .effects
                            ? R50Layout.effectsPageHeight : R50Layout.pageHeight,
-                       alignment: .top)
+                       alignment: .topLeading)
             if page != .effects {
                 footer
             }
@@ -89,6 +95,7 @@ struct R50View: View {
         case .partial:   partialPage
         case .envelopes: envelopePage
         case .tone:      tonePage
+        case .patch:     patchPage
         case .modulation: modPage
         case .effects:   effectsPage
         case .samples:   samplePage
@@ -148,7 +155,7 @@ struct R50View: View {
 
             Button { showingPresets.toggle() } label: {
                 HStack(spacing: 4) {
-                    Text(R50FactoryPresets.all[safe: model.presetIndex]?.name ?? "Init")
+                    Text(model.presetName)
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
                         .foregroundColor(R50Palette.glow)
                         .lineLimit(1)
@@ -170,12 +177,54 @@ struct R50View: View {
             }
 
             stepButton("▶") { step(1) }
+
+            Button {
+                newPatchName = model.presetIndex < 0 ? model.presetName : ""
+                showingSavePatch = true
+            } label: {
+                Text("SAVE")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundColor(R50Palette.legend)
+                    .frame(width: 46, height: 24)
+                    .background(Color(white: 0.15))
+                    .overlay(RoundedRectangle(cornerRadius: 2)
+                        .stroke(Color(white: 0.30), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+        .alert("Save Patch", isPresented: $showingSavePatch) {
+            TextField("Patch name", text: $newPatchName)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                do {
+                    try model.saveUserPreset(named: newPatchName)
+                } catch {
+                    patchSaveError = error.localizedDescription
+                    DispatchQueue.main.async { showingPatchSaveError = true }
+                }
+            }
+            .disabled(newPatchName.trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty)
+        } message: {
+            Text("Saves the complete current R50 state as a user patch. An existing patch with the same name is replaced.")
+        }
+        .alert("Patch Could Not Be Saved", isPresented: $showingPatchSaveError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(patchSaveError)
         }
     }
 
     private var presetList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 1) {
+                Text("FACTORY")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .tracking(1.0)
+                    .foregroundColor(R50Palette.engrave)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 5)
                 ForEach(Array(R50FactoryPresets.all.enumerated()), id: \.offset) {
                     index, preset in
                     let selected = index == model.presetIndex
@@ -192,11 +241,39 @@ struct R50View: View {
                             showingPresets = false
                         }
                 }
+                if !model.userPresets.isEmpty {
+                    Text("USER")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .tracking(1.0)
+                        .foregroundColor(R50Palette.engrave)
+                        .padding(.horizontal, 10)
+                        .padding(.top, 8)
+                    ForEach(model.userPresets,
+                            id: \.number) { preset in
+                        let selected = model.presetIndex < 0
+                            && preset.name == model.presetName
+                        Text(preset.name)
+                            .font(.system(size: 11, weight: .medium,
+                                          design: .monospaced))
+                            .foregroundColor(selected ? Color.black
+                                                      : R50Palette.legend)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(selected ? R50Palette.glow : Color.clear)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                model.applyUserPreset(preset)
+                                showingPresets = false
+                            }
+                    }
+                }
             }
             .padding(4)
         }
         .frame(width: 230,
-               height: min(CGFloat(R50FactoryPresets.all.count) * 26 + 12, 420))
+               height: min(CGFloat(R50FactoryPresets.all.count
+                                   + model.userPresets.count) * 26 + 52, 420))
         .background(Color(white: 0.13))
     }
 
@@ -220,32 +297,54 @@ struct R50View: View {
 
     /// Which Partial the page below edits, and whether it sounds at all.
     private var partialStrip: some View {
-        HStack(spacing: 10) {
+        HStack {
             HStack(spacing: 2) {
-                ForEach(0..<2, id: \.self) { index in
+                ForEach(0..<4, id: \.self) { index in
                     let selected = index == partial
-                    let on = model.value(r50PartialParam(Int32(index),
-                                                         R50FieldEnabled)) >= 0.5
-                    Text("PARTIAL \(index + 1)")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .tracking(1.0)
-                        .foregroundColor(selected ? Color.black
-                                                  : (on ? R50Palette.legend
-                                                        : Color(white: 0.42)))
-                        .padding(.horizontal, 12)
+                    let enabledAddress = r50PartialParam(Int32(index),
+                                                         R50FieldEnabled)
+                    let on = model.value(enabledAddress) >= 0.5
+                    HStack(spacing: 7) {
+                        Text("PARTIAL \(index + 1)")
+                            .font(.system(size: 9, weight: .semibold,
+                                          design: .monospaced))
+                            .tracking(1.0)
+                            .foregroundColor(selected ? Color.black
+                                                      : (on ? R50Palette.legend
+                                                            : Color(white: 0.42)))
+                            .contentShape(Rectangle())
+                            .onTapGesture { partial = index }
+
+                        Button {
+                            model.binding(enabledAddress).wrappedValue = on ? 0 : 1
+                        } label: {
+                            Text(on ? "ON" : "OFF")
+                                .font(.system(size: 6.5, weight: .bold,
+                                              design: .monospaced))
+                                .foregroundColor(on ? Color.black
+                                                    : R50Palette.legend)
+                                .frame(width: 25, height: 13)
+                                .background(on ? R50Palette.glowDim
+                                               : Color(white: 0.22))
+                                .overlay(RoundedRectangle(cornerRadius: 2)
+                                    .stroke(selected ? Color.black.opacity(0.35)
+                                                     : Color(white: 0.38),
+                                            lineWidth: 0.75))
+                        }
+                        .buttonStyle(.plain)
+                        .help(on ? "Disable Partial \(index + 1)"
+                                 : "Enable Partial \(index + 1)")
+                    }
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                         .background(selected ? R50Palette.glow : Color(white: 0.14))
                         .contentShape(Rectangle())
-                        .onTapGesture { partial = index }
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 2))
             .overlay(RoundedRectangle(cornerRadius: 2)
                 .stroke(Color(white: 0.32), lineWidth: 1))
 
-            R50Selector(title: "", address: addr(R50FieldEnabled),
-                        options: R50Parameters.onOffNames, model: model)
-                .frame(width: 96)
             Spacer()
         }
     }
@@ -261,7 +360,8 @@ struct R50View: View {
                 filter.frame(width: 300)
                 shaper.frame(width: 236)
             }
-            .frame(maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity,
+                   alignment: .topLeading)
         }
     }
 
@@ -270,6 +370,8 @@ struct R50View: View {
     /// is a dozen waves plus however many samples have been imported.
     private var source: some View {
         let isSample = model.value(addr(R50FieldSourceType)) >= 0.5
+        let usesPulseWidth =
+            Int(model.value(addr(R50FieldOscWave)).rounded()) == 4
         return R50Panel(title: "Source") {
             VStack(alignment: .leading, spacing: 8) {
                 R50Selector(title: "Type", address: addr(R50FieldSourceType),
@@ -287,6 +389,8 @@ struct R50View: View {
                 } else {
                     R50Value(title: "Pulse Width",
                              address: addr(R50FieldPulseWidth), model: model)
+                        .disabled(!usesPulseWidth)
+                        .opacity(usesPulseWidth ? 1 : 0.32)
                 }
                 R50Value(title: "Octave", address: addr(R50FieldOctave), model: model)
                 R50Value(title: "Semitone", address: addr(R50FieldSemitone), model: model)
@@ -298,7 +402,9 @@ struct R50View: View {
     }
 
     private var noise: some View {
-        R50Panel(title: "Noise") {
+        let isSampleAndHold =
+            Int(model.value(addr(R50FieldNoiseSpectrum)).rounded()) == 6
+        return R50Panel(title: "Noise") {
             VStack(alignment: .leading, spacing: 8) {
                 R50WaveGrid(title: "Spectrum", address: addr(R50FieldNoiseSpectrum),
                             options: R50Parameters.noiseSpectrumNames,
@@ -306,9 +412,13 @@ struct R50View: View {
                 R50Value(title: "Mix", address: addr(R50FieldNoiseMix), model: model)
                 R50Value(title: "Tone", address: addr(R50FieldNoiseTone), model: model)
                 R50Value(title: "Rate", address: addr(R50FieldNoiseRate), model: model)
-                R50Selector(title: "Tone / Rate Source",
+                    .disabled(!isSampleAndHold)
+                    .opacity(isSampleAndHold ? 1 : 0.32)
+                R50Selector(title: "S&H Rate Source",
                             address: addr(R50FieldNoisePitchTrack),
                             options: R50Parameters.trackNames, model: model)
+                    .disabled(!isSampleAndHold)
+                    .opacity(isSampleAndHold ? 1 : 0.32)
             }
         }
     }
@@ -328,13 +438,18 @@ struct R50View: View {
     }
 
     private var shaper: some View {
-        R50Panel(title: "Waveshaper") {
+        let isActive = model.value(addr(R50FieldShaperType)) >= 0.5
+        return R50Panel(title: "Waveshaper") {
             VStack(alignment: .leading, spacing: 8) {
                 R50Selector(title: "Type", address: addr(R50FieldShaperType),
                             options: R50Parameters.shaperTypeNames, model: model)
                 R50Value(title: "Drive", address: addr(R50FieldShaperDrive), model: model)
+                    .disabled(!isActive)
+                    .opacity(isActive ? 1 : 0.32)
                 R50Selector(title: "Position", address: addr(R50FieldShaperPosition),
                             options: R50Parameters.shaperPositionNames, model: model)
+                    .disabled(!isActive)
+                    .opacity(isActive ? 1 : 0.32)
                 Text("PRE lets the filter tame what shaping adds. POST puts it on top of the filtered signal.")
                     .font(.system(size: 8, weight: .medium, design: .monospaced))
                     .foregroundColor(R50Palette.engrave)
@@ -370,7 +485,8 @@ struct R50View: View {
                     .frame(width: 372)
                 pitchEnvelope.frame(width: 316)
             }
-            .frame(maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity,
+                   alignment: .topLeading)
         }
     }
 
@@ -433,11 +549,30 @@ struct R50View: View {
     // MARK: - Tone page
 
     private var tonePage: some View {
+        let structure = Int(model.value(
+            toneParam(R50ParamToneStructure, R50ParamToneBStructure)).rounded())
+        return VStack(spacing: 8) {
+            HStack(spacing: 2) {
+                ForEach(0..<2, id: \.self) { index in
+                    Text("TONE \(index == 0 ? "A" : "B")")
+                        .font(.system(size: 9, weight: .semibold,
+                                      design: .monospaced))
+                        .foregroundColor(index == tone ? .black : R50Palette.legend)
+                        .padding(.horizontal, 18).padding(.vertical, 5)
+                        .background(index == tone ? R50Palette.glow
+                                                  : Color(white: 0.14))
+                        .contentShape(Rectangle())
+                        .onTapGesture { tone = index }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+
         HStack(alignment: .top, spacing: 10) {
             R50Panel(title: "Structure") {
                 VStack(alignment: .leading, spacing: 12) {
                     R50WaveGrid(title: "Tone Structure",
-                                address: R50ParamToneStructure,
+                                address: toneParam(R50ParamToneStructure,
+                                                   R50ParamToneBStructure),
                                 options: R50Parameters.toneStructureNames,
                                 columns: 3, model: model)
                     Text(structureHelp)
@@ -451,21 +586,66 @@ struct R50View: View {
 
             R50Panel(title: "Structure Controls") {
                 VStack(alignment: .leading, spacing: 8) {
-                    R50Value(title: "Ring Level", address: R50ParamToneRingLevel,
+                    R50Value(title: "Ring Level",
+                             address: toneParam(R50ParamToneRingLevel,
+                                                R50ParamToneBRingLevel),
                              model: model)
-                    R50Value(title: "Blend Time", address: R50ParamToneBlendTime,
+                        .disabled(structure != 1)
+                        .opacity(structure == 1 ? 1 : 0.32)
+                    R50Value(title: "Ring Pan",
+                             address: toneParam(R50ParamToneRingPan,
+                                                R50ParamToneBRingPan),
                              model: model)
-                    R50Value(title: "XF Low", address: R50ParamToneCrossfadeLow,
+                        .disabled(structure != 1)
+                        .opacity(structure == 1 ? 1 : 0.32)
+                    R50Value(title: "Ring Dry",
+                             address: toneParam(R50ParamToneRingDry,
+                                                R50ParamToneBRingDry),
                              model: model)
-                    R50Value(title: "XF High", address: R50ParamToneCrossfadeHigh,
+                        .disabled(structure != 1)
+                        .opacity(structure == 1 ? 1 : 0.32)
+                    HStack(spacing: 5) {
+                        R50Value(title: "Ring S1",
+                            address: toneParam(R50ParamToneRingSend1,
+                                               R50ParamToneBRingSend1),
+                            model: model)
+                        R50Value(title: "Ring S2",
+                            address: toneParam(R50ParamToneRingSend2,
+                                               R50ParamToneBRingSend2),
+                            model: model)
+                        R50Value(title: "Ring S3",
+                            address: toneParam(R50ParamToneRingSend3,
+                                               R50ParamToneBRingSend3),
+                            model: model)
+                    }
+                    .disabled(structure != 1)
+                    .opacity(structure == 1 ? 1 : 0.32)
+                    R50Value(title: "Blend Time",
+                             address: toneParam(R50ParamToneBlendTime,
+                                                R50ParamToneBBlendTime),
                              model: model)
+                        .disabled(structure != 2)
+                        .opacity(structure == 2 ? 1 : 0.32)
+                    R50Value(title: "XF Low",
+                             address: toneParam(R50ParamToneCrossfadeLow,
+                                                R50ParamToneBCrossfadeLow),
+                             model: model)
+                        .disabled(structure != 4)
+                        .opacity(structure == 4 ? 1 : 0.32)
+                    R50Value(title: "XF High",
+                             address: toneParam(R50ParamToneCrossfadeHigh,
+                                                R50ParamToneBCrossfadeHigh),
+                             model: model)
+                        .disabled(structure != 4)
+                        .opacity(structure == 4 ? 1 : 0.32)
                 }
             }
             .frame(width: 300)
 
             R50Panel(title: "Partial Mix") {
                 VStack(alignment: .leading, spacing: 12) {
-                    ForEach(0..<2, id: \.self) { index in
+                    ForEach(0..<2, id: \.self) { localIndex in
+                        let index = tone * 2 + localIndex
                         VStack(alignment: .leading, spacing: 2) {
                             Text("PARTIAL \(index + 1)")
                                 .font(.system(size: 8, weight: .bold,
@@ -502,16 +682,118 @@ struct R50View: View {
             }
             .frame(width: 300)
         }
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity,
+               alignment: .topLeading)
+        }
+    }
+
+    private func toneParam(_ a: R50Param, _ b: R50Param) -> R50Param {
+        tone == 0 ? a : b
     }
 
     private var structureHelp: String {
-        switch Int(model.value(R50ParamToneStructure).rounded()) {
+        switch Int(model.value(toneParam(R50ParamToneStructure,
+                                         R50ParamToneBStructure)).rounded()) {
         case 1:  return "Ring: the product of both Partials. Level is each dry amount, Ring the product — it needs gain well past 1."
         case 2:  return "Atk/Sus: Partial 1 hands over to Partial 2 across Blend seconds."
         case 3:  return "Vel XF: soft notes favour Partial 1, hard notes Partial 2."
         case 4:  return "Key XF: fades from Partial 1 to Partial 2 between XF Low and XF High."
         default: return "Mix: both Partials sum, balanced by their Levels."
+        }
+    }
+
+    private var patchPage: some View {
+        let structure = Int(model.value(R50ParamPatchStructure).rounded())
+        return HStack(alignment: .top, spacing: 10) {
+            R50Panel(title: "Patch Structure") {
+                VStack(alignment: .leading, spacing: 12) {
+                    R50WaveGrid(title: "Tone Routing",
+                                address: R50ParamPatchStructure,
+                                options: R50Parameters.patchStructureNames,
+                                columns: 3, model: model)
+                    Text(patchHelp)
+                        .font(.system(size: 8, weight: .medium,
+                                      design: .monospaced))
+                        .foregroundColor(R50Palette.engrave)
+                }
+            }
+            .frame(width: 330)
+
+            R50Panel(title: "Split / Vector") {
+                VStack(alignment: .leading, spacing: 8) {
+                    R50Value(title: "Split Point",
+                             address: R50ParamPatchSplitPoint, model: model)
+                        .disabled(structure != 1)
+                        .opacity(structure == 1 ? 1 : 0.32)
+                    R50Value(title: "Velocity Split",
+                             address: R50ParamPatchVelocitySplit, model: model)
+                        .disabled(structure != 2)
+                        .opacity(structure == 2 ? 1 : 0.32)
+                    R50Value(title: "Vector Mix",
+                             address: R50ParamPatchVectorMix, model: model)
+                        .disabled(structure != 4)
+                        .opacity(structure == 4 ? 1 : 0.32)
+                    HStack {
+                        Text("A")
+                        Spacer()
+                        Text("BASE POSITION")
+                        Spacer()
+                        Text("B")
+                    }
+                    .font(.system(size: 7, weight: .bold, design: .monospaced))
+                    .foregroundColor(R50Palette.engrave)
+                }
+            }
+            .frame(width: 230)
+
+            R50Panel(title: "Tone / Output") {
+                VStack(alignment: .leading, spacing: 8) {
+                    R50Value(title: "Tone A",
+                             address: R50ParamToneALevel, model: model)
+                    R50Value(title: "Tone B",
+                             address: R50ParamToneBLevel, model: model)
+                    R50Value(title: "Master",
+                             address: R50ParamMasterGain, model: model)
+                    R50Value(title: "Bend Range",
+                             address: R50ParamPitchBendRange, model: model)
+                }
+            }
+            .frame(width: 210)
+
+            R50Panel(title: "Vector LFO") {
+                VStack(alignment: .leading, spacing: 8) {
+                    R50Selector(title: "Wave", address: R50ParamVectorLfoWave,
+                                options: R50Parameters.lfoWaveNames, model: model)
+                    R50Value(title: "Rate", address: R50ParamVectorLfoRate,
+                             model: model)
+                    R50Value(title: "Depth", address: R50ParamVectorLfoDepth,
+                             model: model)
+                    R50Selector(title: "Run", address: R50ParamVectorLfoRetrigger,
+                                options: ["Free", "Note"], model: model)
+                    R50Value(title: "Phase", address: R50ParamVectorLfoPhase,
+                             model: model)
+                    Text("Adds movement around the base Vector position. The matrix can also target Vector Mix from macros, wheel, pressure, envelopes, or LFO 1/2.")
+                        .font(.system(size: 7, weight: .medium,
+                                      design: .monospaced))
+                        .foregroundColor(R50Palette.engrave)
+                        .lineLimit(4)
+                }
+            }
+            .frame(width: 250)
+            .disabled(structure != 4)
+            .opacity(structure == 4 ? 1 : 0.32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity,
+               alignment: .topLeading)
+    }
+
+    private var patchHelp: String {
+        switch Int(model.value(R50ParamPatchStructure).rounded()) {
+        case 1: return "Key Split: Tone A below Split Point, Tone B at and above it."
+        case 2: return "Velocity Split: soft notes play Tone A; harder notes play Tone B."
+        case 3: return "Velocity XF: velocity continuously crossfades from Tone A to Tone B."
+        case 4: return "Vector Mix: the Vector control continuously crossfades both Tones."
+        default: return "Layer: both Tones sound together at their independent levels."
         }
     }
 
@@ -545,7 +827,8 @@ struct R50View: View {
             }
             .frame(width: 218)
         }
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity,
+               alignment: .topLeading)
     }
 
     private func lfoControls(_ index: Int) -> some View {
@@ -575,20 +858,37 @@ struct R50View: View {
             Rectangle().fill(R50Palette.panelEdge).frame(height: 1)
 
             ForEach(0..<6, id: \.self) { slot in
+                let destination = r50ModSlotParam(
+                    Int32(slot), R50ModFieldDestination)
+                let patchTarget =
+                    Int(model.value(destination).rounded()) == 12
                 HStack(spacing: 4) {
                     R50NameSelector(
                         title: "",
                         address: r50ModSlotParam(Int32(slot), R50ModFieldSource),
                         names: R50Parameters.modSourceNames, model: model)
                         .frame(width: 126)
+                    if patchTarget {
+                        Text("PATCH")
+                            .font(.system(size: 8, weight: .bold,
+                                          design: .monospaced))
+                            .tracking(0.6)
+                            .foregroundColor(R50Palette.glow)
+                            .frame(width: 66, height: 22)
+                            .background(R50Palette.track)
+                            .overlay(RoundedRectangle(cornerRadius: 2)
+                                .stroke(R50Palette.glowDim, lineWidth: 1))
+                    } else {
+                        R50NameSelector(
+                            title: "",
+                            address: r50ModSlotParam(Int32(slot),
+                                                     R50ModFieldTarget),
+                            names: R50Parameters.modTargetNames, model: model)
+                            .frame(width: 66)
+                    }
                     R50NameSelector(
                         title: "",
-                        address: r50ModSlotParam(Int32(slot), R50ModFieldTarget),
-                        names: R50Parameters.modTargetNames, model: model)
-                        .frame(width: 66)
-                    R50NameSelector(
-                        title: "",
-                        address: r50ModSlotParam(Int32(slot), R50ModFieldDestination),
+                        address: destination,
                         names: R50Parameters.modDestinationNames, model: model)
                         .frame(width: 126)
                     R50Value(title: "",
@@ -988,7 +1288,8 @@ struct R50View: View {
             }
             .frame(width: 330)
         }
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity,
+               alignment: .topLeading)
         // Export picks a folder, not a file: a generated multisample is five
         // zones and they are only useful together. `fileAction` is deliberately
         // not cleared by the binding — the completion handler needs to still
@@ -1172,13 +1473,9 @@ struct R50View: View {
     // MARK: - Footer
 
     private var footer: some View {
-        HStack(spacing: 18) {
-            R50Value(title: "Master", address: R50ParamMasterGain, model: model)
-                .frame(width: 190)
-            R50Value(title: "Bend Range", address: R50ParamPitchBendRange, model: model)
-                .frame(width: 190)
+        HStack {
             Spacer()
-            Text("8-VOICE · 2 PARTIALS · BAND-LIMITED PCM + NOISE · ZDF LADDER")
+            Text("8-VOICE · 2 TONES · 4 PARTIALS · BAND-LIMITED PCM + NOISE")
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
                 .tracking(1.4)
                 .foregroundColor(R50Palette.glowDim)

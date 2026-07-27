@@ -11,7 +11,7 @@
 // Fixed underlying type so the values match AUParameterAddress (UInt64) and
 // import cleanly into Swift as a proper enum.
 typedef enum R50Param : unsigned long long {
-    R50ParamOscWave = 0,         // 0..10, see waveDescriptors() in R50Wave.hpp
+    R50ParamOscWave = 0,         // 0..16, see waveDescriptors() in R50Wave.hpp
     R50ParamPulseWidth,          // 0.02 .. 0.98 (variable-pulse wave only)
     R50ParamOctave,              // -2 .. +2 (integer)
 
@@ -132,6 +132,45 @@ typedef enum R50Param : unsigned long long {
     R50ParamFxSlotBase,
     R50ParamFxSlotLast = R50ParamFxSlotBase + 47,
 
+    // --- Patch engine -------------------------------------------------------
+    // Two more fixed-capacity Partial blocks complete Tone B. Existing
+    // addresses above remain untouched.
+    R50ParamP3Base,
+    R50ParamP3Last = R50ParamP3Base + 63,
+    R50ParamP4Base,
+    R50ParamP4Last = R50ParamP4Base + 63,
+
+    R50ParamToneBStructure,
+    R50ParamToneBRingLevel,
+    R50ParamToneBBlendTime,
+    R50ParamToneBCrossfadeLow,
+    R50ParamToneBCrossfadeHigh,
+
+    R50ParamPatchStructure,      // 0..4, see PatchStructure
+    R50ParamPatchSplitPoint,     // MIDI note
+    R50ParamPatchVelocitySplit,  // 0..1
+    R50ParamPatchVectorMix,      // 0 = Tone A, 1 = Tone B
+    R50ParamToneALevel,          // 0..1
+    R50ParamToneBLevel,          // 0..1
+    R50ParamVectorLfoWave,       // 0..4, synth::LFOWave
+    R50ParamVectorLfoRate,       // Hz
+    R50ParamVectorLfoDepth,      // 0..1
+    R50ParamVectorLfoRetrigger,  // 0 = free-running, 1 = note retrigger
+    R50ParamVectorLfoPhase,      // 0..1
+
+    // Independent Tone-level outputs for the product created by Ring
+    // structure. Appended so every earlier address remains stable.
+    R50ParamToneRingPan,
+    R50ParamToneRingDry,
+    R50ParamToneRingSend1,
+    R50ParamToneRingSend2,
+    R50ParamToneRingSend3,
+    R50ParamToneBRingPan,
+    R50ParamToneBRingDry,
+    R50ParamToneBRingSend1,
+    R50ParamToneBRingSend2,
+    R50ParamToneBRingSend3,
+
     R50ParamCount
 } R50Param;
 
@@ -238,8 +277,16 @@ static inline R50Param r50ModSlotParam(int slot, R50ModSlotField field) {
 /// the original scattered addresses so saved state keeps its meaning; Partial 2
 /// reads straight out of its block.
 static inline R50Param r50PartialParam(int partial, R50PartialField field) {
-    if (partial > 0) {
+    if (partial == 1) {
         return (R50Param)((unsigned long long)R50ParamP2Base
+                        + (unsigned long long)field);
+    }
+    if (partial == 2) {
+        return (R50Param)((unsigned long long)R50ParamP3Base
+                        + (unsigned long long)field);
+    }
+    if (partial == 3) {
+        return (R50Param)((unsigned long long)R50ParamP4Base
                         + (unsigned long long)field);
     }
     switch (field) {

@@ -31,6 +31,11 @@ public:
             for (int slot = 0; slot < kEffectSlotCount; ++slot)
                 sendLevel_[partial][slot] = sendLevelTarget_[partial][slot];
         }
+        for (int tone = 0; tone < kTonesPerVoice; ++tone) {
+            ringDryLevel_[tone] = ringDryLevelTarget_[tone];
+            for (int slot = 0; slot < kEffectSlotCount; ++slot)
+                ringSendLevel_[tone][slot] = ringSendLevelTarget_[tone][slot];
+        }
         // Force the generated libraries to build here, on whatever thread
         // constructs the engine — never lazily from the render thread.
         (void)waveLibrary();
@@ -94,7 +99,8 @@ public:
         if (voice == nullptr) voice = allocateVoice();
         voice->noteOn(note, velocity / 127.0f, params_,
                       static_cast<float>(sharedLfoPhase_[0]),
-                      modWheel_, aftertouch_);
+                      modWheel_, aftertouch_,
+                      static_cast<float>(sharedVectorPhase_));
     }
 
     void noteOff(uint8_t note) {
@@ -237,6 +243,9 @@ public:
                                     * kControlBlock / sampleRate_;
                 sharedLfoPhase_[i] -= std::floor(sharedLfoPhase_[i]);
             }
+            sharedVectorPhase_ += params_.vectorLfo.rateHz
+                                * kControlBlock / sampleRate_;
+            sharedVectorPhase_ -= std::floor(sharedVectorPhase_);
 
             serviceAudition();
 
@@ -263,6 +272,17 @@ public:
                             * routingSmoothCoef_;
                     }
                 }
+                for (int tone = 0; tone < kTonesPerVoice; ++tone) {
+                    ringDryLevel_[tone] = ringDryLevelTarget_[tone]
+                        + (ringDryLevel_[tone] - ringDryLevelTarget_[tone])
+                        * routingSmoothCoef_;
+                    for (int slot = 0; slot < kEffectSlotCount; ++slot) {
+                        ringSendLevel_[tone][slot] = ringSendLevelTarget_[tone][slot]
+                            + (ringSendLevel_[tone][slot]
+                               - ringSendLevelTarget_[tone][slot])
+                            * routingSmoothCoef_;
+                    }
+                }
                 for (auto &voice : voices_) {
                     VoiceOutput voiceOutput;
                     voice.processPartials(voiceOutput);
@@ -276,6 +296,18 @@ public:
                                 left * sendLevel_[partial][slot];
                             rackInput.send[slot].r +=
                                 right * sendLevel_[partial][slot];
+                        }
+                    }
+                    for (int tone = 0; tone < kTonesPerVoice; ++tone) {
+                        const float left = voiceOutput.ring[tone].l;
+                        const float right = voiceOutput.ring[tone].r;
+                        rackInput.dry.l += left * ringDryLevel_[tone];
+                        rackInput.dry.r += right * ringDryLevel_[tone];
+                        for (int slot = 0; slot < kEffectSlotCount; ++slot) {
+                            rackInput.send[slot].l +=
+                                left * ringSendLevel_[tone][slot];
+                            rackInput.send[slot].r +=
+                                right * ringSendLevel_[tone][slot];
                         }
                     }
                 }
@@ -374,35 +406,41 @@ private:
         set(R50ParamP1Fine,     0.0f);
 
         PartialParams defaults;
-        setPartial(1, R50FieldEnabled,         0.0f);
-        setPartial(1, R50FieldSourceType,      0.0f);
-        setPartial(1, R50FieldSampleInstrument,0.0f);
-        setPartial(1, R50FieldSampleStart,     0.0f);
-        setPartial(1, R50FieldOscWave,         0.0f);
-        setPartial(1, R50FieldPulseWidth,      defaults.pulseWidth);
-        setPartial(1, R50FieldOctave,          0.0f);
-        setPartial(1, R50FieldSemitone,        0.0f);
-        setPartial(1, R50FieldFine,            0.0f);
-        setPartial(1, R50FieldNoiseMix,        0.0f);
-        setPartial(1, R50FieldNoiseSpectrum,   0.0f);
-        setPartial(1, R50FieldNoiseTone,       0.5f);
-        setPartial(1, R50FieldNoiseRate,       4000.0f);
-        setPartial(1, R50FieldNoisePitchTrack, 0.0f);
-        setPartial(1, R50FieldCutoff,          3200.0f);
-        setPartial(1, R50FieldResonance,       0.15f);
-        setPartial(1, R50FieldSlope,           1.0f);
-        setPartial(1, R50FieldKeyTrack,        0.5f);
-        setPartial(1, R50FieldFilterEnvAmount, 0.45f);
-        setPartial(1, R50FieldAmpAttack,       0.004f);
-        setPartial(1, R50FieldAmpDecay,        0.25f);
-        setPartial(1, R50FieldAmpSustain,      0.75f);
-        setPartial(1, R50FieldAmpRelease,      0.30f);
-        setPartial(1, R50FieldFilterAttack,    0.004f);
-        setPartial(1, R50FieldFilterDecay,     0.45f);
-        setPartial(1, R50FieldFilterSustain,   0.30f);
-        setPartial(1, R50FieldFilterRelease,   0.30f);
-        setPartial(1, R50FieldLevel,           1.0f);
-        setPartial(1, R50FieldPan,             0.0f);
+        for (int partial = 1; partial < kPartialsPerVoice; ++partial) {
+            setPartial(partial, R50FieldEnabled,          0.0f);
+            setPartial(partial, R50FieldSourceType,       0.0f);
+            setPartial(partial, R50FieldSampleInstrument, 0.0f);
+            setPartial(partial, R50FieldSampleStart,      0.0f);
+            setPartial(partial, R50FieldOscWave,          0.0f);
+            setPartial(partial, R50FieldPulseWidth,       defaults.pulseWidth);
+            setPartial(partial, R50FieldOctave,           0.0f);
+            setPartial(partial, R50FieldSemitone,         0.0f);
+            setPartial(partial, R50FieldFine,             0.0f);
+            setPartial(partial, R50FieldNoiseMix,         0.0f);
+            setPartial(partial, R50FieldNoiseSpectrum,    0.0f);
+            setPartial(partial, R50FieldNoiseTone,        0.5f);
+            setPartial(partial, R50FieldNoiseRate,        4000.0f);
+            setPartial(partial, R50FieldNoisePitchTrack,  0.0f);
+            setPartial(partial, R50FieldCutoff,           3200.0f);
+            setPartial(partial, R50FieldResonance,        0.15f);
+            setPartial(partial, R50FieldSlope,            1.0f);
+            setPartial(partial, R50FieldKeyTrack,         0.5f);
+            setPartial(partial, R50FieldFilterEnvAmount,  0.45f);
+            setPartial(partial, R50FieldAmpAttack,        0.004f);
+            setPartial(partial, R50FieldAmpDecay,         0.25f);
+            setPartial(partial, R50FieldAmpSustain,       0.75f);
+            setPartial(partial, R50FieldAmpRelease,       0.30f);
+            setPartial(partial, R50FieldFilterAttack,     0.004f);
+            setPartial(partial, R50FieldFilterDecay,      0.45f);
+            setPartial(partial, R50FieldFilterSustain,    0.30f);
+            setPartial(partial, R50FieldFilterRelease,    0.30f);
+            setPartial(partial, R50FieldLevel,            1.0f);
+            setPartial(partial, R50FieldPan,              0.0f);
+            setPartial(partial, R50FieldDryLevel,         1.0f);
+            setPartial(partial, R50FieldSend1,            0.0f);
+            setPartial(partial, R50FieldSend2,            0.0f);
+            setPartial(partial, R50FieldSend3,            0.0f);
+        }
 
         // Defaults that reduce the EG to the plain ADSR it replaces: full
         // attack level, and a slope time at the minimum so the break stage is
@@ -428,6 +466,33 @@ private:
         set(R50ParamToneBlendTime,     0.25f);
         set(R50ParamToneCrossfadeLow,  48.0f);
         set(R50ParamToneCrossfadeHigh, 72.0f);
+
+        set(R50ParamToneBStructure,     0.0f);
+        set(R50ParamToneBRingLevel,     1.0f);
+        set(R50ParamToneBBlendTime,     0.25f);
+        set(R50ParamToneBCrossfadeLow,  48.0f);
+        set(R50ParamToneBCrossfadeHigh, 72.0f);
+        set(R50ParamPatchStructure,     0.0f);
+        set(R50ParamPatchSplitPoint,    60.0f);
+        set(R50ParamPatchVelocitySplit, 0.5f);
+        set(R50ParamPatchVectorMix,     0.0f);
+        set(R50ParamToneALevel,         1.0f);
+        set(R50ParamToneBLevel,         1.0f);
+        set(R50ParamVectorLfoWave,       0.0f);
+        set(R50ParamVectorLfoRate,       0.25f);
+        set(R50ParamVectorLfoDepth,      0.0f);
+        set(R50ParamVectorLfoRetrigger,  0.0f);
+        set(R50ParamVectorLfoPhase,      0.0f);
+        set(R50ParamToneRingPan,         0.0f);
+        set(R50ParamToneRingDry,         1.0f);
+        set(R50ParamToneRingSend1,       0.0f);
+        set(R50ParamToneRingSend2,       0.0f);
+        set(R50ParamToneRingSend3,       0.0f);
+        set(R50ParamToneBRingPan,        0.0f);
+        set(R50ParamToneBRingDry,        1.0f);
+        set(R50ParamToneBRingSend1,      0.0f);
+        set(R50ParamToneBRingSend2,      0.0f);
+        set(R50ParamToneBRingSend3,      0.0f);
 
         // The compressor is the sole processor outside the three-slot rack.
         set(R50ParamFxCompressor,    0.0f);
@@ -578,11 +643,75 @@ private:
                           : (structure >= kToneStructureCount
                                  ? kToneStructureCount - 1 : structure));
         params_.ringLevel = synth::clampf(get(R50ParamToneRingLevel), 0.0f, 8.0f);
+        params_.ringPan = synth::clampf(get(R50ParamToneRingPan), -1.0f, 1.0f);
         params_.blendTime = std::max(0.001f, get(R50ParamToneBlendTime));
         params_.crossfadeLow =
             static_cast<int>(std::lround(get(R50ParamToneCrossfadeLow)));
         params_.crossfadeHigh =
             static_cast<int>(std::lround(get(R50ParamToneCrossfadeHigh)));
+
+        const int structureB =
+            static_cast<int>(get(R50ParamToneBStructure) + 0.5f);
+        params_.toneB.structure = static_cast<ToneStructure>(
+            structureB < 0 ? 0
+                           : (structureB >= kToneStructureCount
+                                  ? kToneStructureCount - 1 : structureB));
+        params_.toneB.ringLevel =
+            synth::clampf(get(R50ParamToneBRingLevel), 0.0f, 8.0f);
+        params_.toneB.ringPan =
+            synth::clampf(get(R50ParamToneBRingPan), -1.0f, 1.0f);
+        params_.toneB.blendTime =
+            std::max(0.001f, get(R50ParamToneBBlendTime));
+        params_.toneB.crossfadeLow =
+            static_cast<int>(std::lround(get(R50ParamToneBCrossfadeLow)));
+        params_.toneB.crossfadeHigh =
+            static_cast<int>(std::lround(get(R50ParamToneBCrossfadeHigh)));
+
+        const R50Param ringDry[kTonesPerVoice] = {
+            R50ParamToneRingDry, R50ParamToneBRingDry
+        };
+        const R50Param ringSend[kTonesPerVoice][kEffectSlotCount] = {
+            {R50ParamToneRingSend1, R50ParamToneRingSend2, R50ParamToneRingSend3},
+            {R50ParamToneBRingSend1, R50ParamToneBRingSend2, R50ParamToneBRingSend3}
+        };
+        for (int tone = 0; tone < kTonesPerVoice; ++tone) {
+            ringDryLevelTarget_[tone] =
+                synth::clampf(get(ringDry[tone]), 0.0f, 1.0f);
+            for (int slot = 0; slot < kEffectSlotCount; ++slot) {
+                ringSendLevelTarget_[tone][slot] =
+                    synth::clampf(get(ringSend[tone][slot]), 0.0f, 1.0f);
+            }
+        }
+
+        const int patch =
+            static_cast<int>(get(R50ParamPatchStructure) + 0.5f);
+        params_.patchStructure = static_cast<PatchStructure>(
+            patch < 0 ? 0 : (patch >= kPatchStructureCount
+                ? kPatchStructureCount - 1 : patch));
+        params_.patchSplitPoint =
+            static_cast<int>(std::lround(get(R50ParamPatchSplitPoint)));
+        params_.patchVelocitySplit =
+            synth::clampf(get(R50ParamPatchVelocitySplit), 0.0f, 1.0f);
+        params_.patchVectorMix =
+            synth::clampf(get(R50ParamPatchVectorMix), 0.0f, 1.0f);
+        params_.toneLevel[0] =
+            synth::clampf(get(R50ParamToneALevel), 0.0f, 1.0f);
+        params_.toneLevel[1] =
+            synth::clampf(get(R50ParamToneBLevel), 0.0f, 1.0f);
+        const int vectorWave =
+            static_cast<int>(get(R50ParamVectorLfoWave) + 0.5f);
+        params_.vectorLfo.wave = static_cast<synth::LFOWave>(
+            vectorWave < 0 ? 0 : (vectorWave > 4 ? 4 : vectorWave));
+        params_.vectorLfo.rateHz =
+            std::max(0.01f, get(R50ParamVectorLfoRate));
+        params_.vectorLfo.delaySeconds = 0.0f;
+        params_.vectorLfo.fadeSeconds = 0.0f;
+        params_.vectorLfo.retrigger =
+            get(R50ParamVectorLfoRetrigger) >= 0.5f;
+        params_.vectorLfo.phase =
+            synth::clampf(get(R50ParamVectorLfoPhase), 0.0f, 1.0f);
+        params_.vectorLfoDepth =
+            synth::clampf(get(R50ParamVectorLfoDepth), 0.0f, 1.0f);
 
         snapshotModulation();
         compressorAmount_ = synth::clampf(get(R50ParamFxCompressor), 0.0f, 1.0f);
@@ -665,6 +794,8 @@ private:
         p.ampSustain        = 1.0f;
         p.ampRelease        = 0.35f;
         auditionParams_.partial[1].enabled = false;
+        auditionParams_.partial[2].enabled = false;
+        auditionParams_.partial[3].enabled = false;
 
         // Held for a fixed time rather than by the mouse: a looped sustain
         // would otherwise drone until the user thought to stop it, and a
@@ -702,6 +833,7 @@ private:
     float  modWheel_   = 0.0f;
     float  aftertouch_ = 0.0f;
     double sharedLfoPhase_[kLfoCount] = {0.0, 0.0};
+    double sharedVectorPhase_ = 0.0;
     bool   sustain_    = false;
     /// Physical key state, independent of the CC64 gate hold.
     bool   keyDown_[128] = {false};
@@ -724,6 +856,10 @@ private:
     float dryLevelTarget_[kPartialsPerVoice] = {1.0f, 1.0f};
     float sendLevel_[kPartialsPerVoice][kEffectSlotCount] = {};
     float sendLevelTarget_[kPartialsPerVoice][kEffectSlotCount] = {};
+    float ringDryLevel_[kTonesPerVoice] = {1.0f, 1.0f};
+    float ringDryLevelTarget_[kTonesPerVoice] = {1.0f, 1.0f};
+    float ringSendLevel_[kTonesPerVoice][kEffectSlotCount] = {};
+    float ringSendLevelTarget_[kTonesPerVoice][kEffectSlotCount] = {};
     float routingSmoothCoef_ = 0.0f;
     synth::OnePoleSmoother gainSmoother_;
     std::atomic<float>     meter_{0.0f};

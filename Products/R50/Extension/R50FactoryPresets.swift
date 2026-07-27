@@ -1,7 +1,8 @@
 //
 //  R50FactoryPresets.swift
-//  A small set of built-in patches, defined in code. Each preset lists only the
-//  parameters it overrides; everything else falls back to the tree's Init value.
+//  One hundred production patches for the R50. The bank is generated from
+//  compact musical recipes so related sounds share a family resemblance while
+//  every entry still has its own oscillator, envelope, structure and FX setup.
 //
 
 import AudioToolbox
@@ -13,718 +14,507 @@ struct R50FactoryPreset {
 
 enum R50FactoryPresets {
 
-    private static let instrumentPresets: [R50FactoryPreset] = [
-        R50FactoryPreset(name: "Init Saw", values: [:]),
-
-        R50FactoryPreset(name: "Bright Poly", values: [
-            addr(R50ParamOscWave): 0,
-            addr(R50ParamCutoff): 6500,
-            addr(R50ParamResonance): 0.25,
-            addr(R50ParamFilterEnvAmount): 0.35,
-            addr(R50ParamAmpAttack): 0.01,
-            addr(R50ParamAmpRelease): 0.6,
-            addr(R50ParamFilterDecay): 0.9,
-        ]),
-
-        R50FactoryPreset(name: "Rubber Bass", values: [
-            addr(R50ParamOscWave): 0,
-            addr(R50ParamOctave): -1,
-            addr(R50ParamCutoff): 320,
-            addr(R50ParamResonance): 0.55,
-            addr(R50ParamSlope): 1,
-            addr(R50ParamKeyTrack): 0.35,
-            addr(R50ParamFilterEnvAmount): 0.6,
-            addr(R50ParamAmpSustain): 0.55,
-            addr(R50ParamAmpRelease): 0.12,
-            addr(R50ParamFilterDecay): 0.22,
-            addr(R50ParamFilterSustain): 0.05,
-        ]),
-
-        R50FactoryPreset(name: "Hollow Pulse Pad", values: [
-            addr(R50ParamOscWave): 4,        // variable pulse
-            addr(R50ParamPulseWidth): 0.22,
-            addr(R50ParamCutoff): 1400,
-            addr(R50ParamResonance): 0.2,
-            addr(R50ParamFilterEnvAmount): 0.3,
-            addr(R50ParamAmpAttack): 0.6,
-            addr(R50ParamAmpRelease): 1.6,
-            addr(R50ParamFilterAttack): 0.9,
-            addr(R50ParamFilterSustain): 0.5,
-        ]),
-
-        R50FactoryPreset(name: "Drawbar Organ", values: [
-            addr(R50ParamOscWave): 5,
-            addr(R50ParamCutoff): 9000,
-            addr(R50ParamKeyTrack): 0.25,
-            addr(R50ParamFilterEnvAmount): 0.0,
-            addr(R50ParamAmpAttack): 0.002,
-            addr(R50ParamAmpDecay): 0.05,
-            addr(R50ParamAmpSustain): 1.0,
-            addr(R50ParamAmpRelease): 0.05,
-        ]),
-
-        R50FactoryPreset(name: "Tine Electric", values: [
-            slot(0, R50FxFieldAlgorithm): 7,
-            slot(0, R50FxFieldMix): 0.35,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.18,
-            addr(R50ParamOscWave): 6,
-            addr(R50ParamCutoff): 4200,
-            addr(R50ParamKeyTrack): 0.7,
-            addr(R50ParamFilterEnvAmount): 0.5,
-            addr(R50ParamAmpDecay): 1.8,
-            addr(R50ParamAmpSustain): 0.25,
-            addr(R50ParamAmpRelease): 0.5,
-            addr(R50ParamFilterDecay): 0.7,
-            addr(R50ParamFilterSustain): 0.1,
-        ]),
-
-        R50FactoryPreset(name: "Reed Solo", values: [
-            addr(R50ParamOscWave): 7,        // clarinet
-            addr(R50ParamCutoff): 5200,
-            addr(R50ParamResonance): 0.1,
-            addr(R50ParamKeyTrack): 0.5,
-            addr(R50ParamAmpAttack): 0.05,
-            addr(R50ParamAmpSustain): 0.9,
-            addr(R50ParamAmpRelease): 0.18,
-        ]),
-
-        R50FactoryPreset(name: "String Machine", values: [
-            slot(0, R50FxFieldAlgorithm): 7,
-            slot(0, R50FxFieldMix): 0.45,
-            slot(0, R50FxFieldControl1): chorusRate(0.4),
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.30,
-            slot(2, R50FxFieldControl2): reverbDecay(3.2),
-            addr(R50ParamOscWave): 8,
-            addr(R50ParamCutoff): 3400,
-            addr(R50ParamResonance): 0.12,
-            addr(R50ParamFilterEnvAmount): 0.25,
-            addr(R50ParamAmpAttack): 0.35,
-            addr(R50ParamAmpRelease): 0.9,
-            addr(R50ParamFilterAttack): 0.5,
-            addr(R50ParamFilterSustain): 0.55,
-        ]),
-
-        R50FactoryPreset(name: "Choir Ah", values: [
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.42,
-            slot(2, R50FxFieldControl2): reverbDecay(4.0),
-            slot(2, R50FxFieldControl3): 0.7,
-            addr(R50ParamOscWave): 9,
-            addr(R50ParamCutoff): 6000,
-            addr(R50ParamKeyTrack): 0.3,
-            addr(R50ParamAmpAttack): 0.28,
-            addr(R50ParamAmpSustain): 0.9,
-            addr(R50ParamAmpRelease): 0.7,
-        ]),
-
-        R50FactoryPreset(name: "Breathy Flute", values: [
-            addr(R50ParamOscWave): 7,        // clarinet
-            addr(R50ParamNoiseMix): 0.35,
-            addr(R50ParamNoiseSpectrum): 5,  // band-passed
-            addr(R50ParamNoiseTone): 0.3,
-            addr(R50ParamNoisePitchTrack): 1,
-            addr(R50ParamCutoff): 4800,
-            addr(R50ParamKeyTrack): 0.6,
-            addr(R50ParamAmpAttack): 0.09,
-            addr(R50ParamAmpSustain): 0.85,
-            addr(R50ParamAmpRelease): 0.2,
-        ]),
-
-        R50FactoryPreset(name: "Wind Bed", values: [
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.55,
-            slot(2, R50FxFieldControl2): reverbDecay(7.0),
-            slot(2, R50FxFieldControl3): 0.85,
-            addr(R50ParamNoiseMix): 1.0,     // noise only
-            addr(R50ParamNoiseSpectrum): 1,  // pink
-            addr(R50ParamCutoff): 900,
-            addr(R50ParamResonance): 0.35,
-            addr(R50ParamKeyTrack): 1.0,
-            addr(R50ParamFilterEnvAmount): 0.3,
-            addr(R50ParamAmpAttack): 1.2,
-            addr(R50ParamAmpSustain): 1.0,
-            addr(R50ParamAmpRelease): 1.8,
-            addr(R50ParamFilterAttack): 1.5,
-            addr(R50ParamFilterSustain): 0.7,
-        ]),
-
-        R50FactoryPreset(name: "Digital Grit", values: [
-            addr(R50ParamOscWave): 3,        // 10% pulse
-            addr(R50ParamNoiseMix): 0.45,
-            addr(R50ParamNoiseSpectrum): 6,  // sample & hold
-            addr(R50ParamNoiseTone): 0.35,
-            addr(R50ParamNoisePitchTrack): 1,
-            addr(R50ParamCutoff): 3000,
-            addr(R50ParamResonance): 0.3,
-            addr(R50ParamAmpDecay): 0.4,
-            addr(R50ParamAmpSustain): 0.5,
-            addr(R50ParamAmpRelease): 0.2,
-        ]),
-
-        // ---- Two-Partial patches -------------------------------------------
-        // Each of these exists to demonstrate one structure or feature. The
-        // patches above are single-Partial and stay that way.
-
-        // The structure the instrument is built around: a sampled transient
-        // handing over to a sustaining source.
-        R50FactoryPreset(name: "◆ Mallet Choir", values: [
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.32,
-            slot(2, R50FxFieldControl2): reverbDecay(3.0),
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.10,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.mallet),
-            p1(R50FieldCutoff): 9000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.3,
-            p1(R50FieldAmpSustain): 0,
-            p1(R50FieldAmpRelease): 0.2,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.choir),
-            p2(R50FieldCutoff): 5000,
-            p2(R50FieldKeyTrack): 0.4,
-            p2(R50FieldFilterEnvAmount): 0.2,
-            p2(R50FieldAmpAttack): 0.06,
-            p2(R50FieldAmpSustain): 0.9,
-            p2(R50FieldAmpRelease): 0.8,
-        ]),
-
-        R50FactoryPreset(name: "◆ Struck Glass", values: [
-            slot(1, R50FxFieldAlgorithm): 6,
-            slot(1, R50FxFieldMix): 0.24,
-            slot(1, R50FxFieldControl1): delayTime(0.28),
-            slot(1, R50FxFieldControl3): delayFeedback(0.30),
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.35,
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.06,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.tineStrike),
-            p1(R50FieldCutoff): 12000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.25,
-            p1(R50FieldAmpSustain): 0,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.glassPad),
-            p2(R50FieldCutoff): 7000,
-            p2(R50FieldKeyTrack): 0.7,
-            p2(R50FieldAmpAttack): 0.02,
-            p2(R50FieldAmpDecay): 3.0,
-            p2(R50FieldAmpSustain): 0.35,
-            p2(R50FieldAmpRelease): 1.5,
-        ]),
-
-        // Ring modulation: a bell against a fifth above it.
-        R50FactoryPreset(name: "◆ Ring Bells", values: [
-            slot(1, R50FxFieldAlgorithm): 6,
-            slot(1, R50FxFieldMix): 0.30,
-            slot(1, R50FxFieldControl1): delayTime(0.24),
-            slot(1, R50FxFieldControl3): delayFeedback(0.42),
-            addr(R50ParamToneStructure): AUValue(Structure.ring),
-            addr(R50ParamToneRingLevel): 2.2,
-
-            p1(R50FieldOscWave): 10,          // Bell
-            p1(R50FieldCutoff): 9000,
-            p1(R50FieldKeyTrack): 0.6,
-            p1(R50FieldLevel): 0.18,
-            p1(R50FieldAmpDecay): 2.0,
-            p1(R50FieldAmpSustain): 0.2,
-            p1(R50FieldAmpRelease): 1.2,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldOscWave): 0,           // Saw
-            p2(R50FieldSemitone): 7,
-            p2(R50FieldCutoff): 6000,
-            p2(R50FieldLevel): 0.18,
-            p2(R50FieldFilterEnvAmount): 0,
-            p2(R50FieldAmpSustain): 0.6,
-            p2(R50FieldAmpRelease): 1.2,
-        ]),
-
-        // Velocity decides which Partial you hear: soft is a tine, hard is reed.
-        R50FactoryPreset(name: "◆ Velocity Keys", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.velocityCrossfade),
-
-            p1(R50FieldOscWave): 6,           // Tine
-            p1(R50FieldCutoff): 3400,
-            p1(R50FieldKeyTrack): 0.6,
-            p1(R50FieldAmpDecay): 1.6,
-            p1(R50FieldAmpSustain): 0.3,
-            p1(R50FieldAmpRelease): 0.5,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldOscWave): 7,           // Clarinet
-            p2(R50FieldCutoff): 7000,
-            p2(R50FieldKeyTrack): 0.6,
-            p2(R50FieldAmpDecay): 1.6,
-            p2(R50FieldAmpSustain): 0.45,
-            p2(R50FieldAmpRelease): 0.5,
-        ]),
-
-        // The keyboard fades from a pad in the bass to voices up top.
-        R50FactoryPreset(name: "◆ Key Split Pad", values: [
-            slot(0, R50FxFieldAlgorithm): 7,
-            slot(0, R50FxFieldMix): 0.30,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.40,
-            slot(2, R50FxFieldControl2): reverbDecay(4.5),
-            addr(R50ParamToneStructure): AUValue(Structure.keyCrossfade),
-            addr(R50ParamToneCrossfadeLow): 48,
-            addr(R50ParamToneCrossfadeHigh): 72,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.warmPad),
-            p1(R50FieldCutoff): 2600,
-            p1(R50FieldAmpAttack): 0.15,
-            p1(R50FieldAmpSustain): 1.0,
-            p1(R50FieldAmpRelease): 0.9,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldOscWave): 9,           // Vocal Ah
-            p2(R50FieldCutoff): 6500,
-            p2(R50FieldKeyTrack): 0.3,
-            p2(R50FieldAmpAttack): 0.2,
-            p2(R50FieldAmpSustain): 0.95,
-            p2(R50FieldAmpRelease): 0.9,
-        ]),
-
-        // Two detuned Partials panned apart — width from the stereo field
-        // rather than from an effect.
-        R50FactoryPreset(name: "◆ Wide Strings", values: [
-            slot(0, R50FxFieldAlgorithm): 7,
-            slot(0, R50FxFieldMix): 0.25,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.35,
-            addr(R50ParamToneStructure): AUValue(Structure.mix),
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.strings),
-            p1(R50FieldPan): -0.7,
-            p1(R50FieldFine): -7,
-            p1(R50FieldLevel): 0.55,
-            p1(R50FieldCutoff): 4200,
-            p1(R50FieldAmpAttack): 0.25,
-            p1(R50FieldAmpSustain): 1.0,
-            p1(R50FieldAmpRelease): 0.8,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldOscWave): 8,           // Strings wave
-            p2(R50FieldPan): 0.7,
-            p2(R50FieldFine): 7,
-            p2(R50FieldLevel): 0.55,
-            p2(R50FieldCutoff): 3600,
-            p2(R50FieldAmpAttack): 0.3,
-            p2(R50FieldAmpSustain): 1.0,
-            p2(R50FieldAmpRelease): 0.9,
-        ]),
-
-        // Sampled choir with a tracked band of noise breathing underneath it.
-        R50FactoryPreset(name: "◆ Breath Choir", values: [
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.45,
-            slot(2, R50FxFieldControl2): reverbDecay(4.5),
-            slot(2, R50FxFieldControl3): 0.75,
-            addr(R50ParamToneStructure): AUValue(Structure.mix),
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.choir),
-            p1(R50FieldCutoff): 5200,
-            p1(R50FieldLevel): 0.8,
-            p1(R50FieldAmpAttack): 0.12,
-            p1(R50FieldAmpSustain): 1.0,
-            p1(R50FieldAmpRelease): 0.7,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldNoiseMix): 1.0,
-            p2(R50FieldNoiseSpectrum): 5,     // band-passed
-            p2(R50FieldNoiseTone): 0.28,
-            p2(R50FieldNoisePitchTrack): 1,
-            p2(R50FieldLevel): 0.3,
-            p2(R50FieldCutoff): 9000,
-            p2(R50FieldFilterEnvAmount): 0,
-            p2(R50FieldAmpAttack): 0.2,
-            p2(R50FieldAmpSustain): 0.9,
-            p2(R50FieldAmpRelease): 0.6,
-        ]),
-
-        // Octave stack: a sampled pad under a bright wave an octave up.
-        R50FactoryPreset(name: "◆ Hybrid Stack", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.mix),
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.glassPad),
-            p1(R50FieldOctave): -1,
-            p1(R50FieldLevel): 0.7,
-            p1(R50FieldCutoff): 3000,
-            p1(R50FieldAmpAttack): 0.02,
-            p1(R50FieldAmpSustain): 0.9,
-            p1(R50FieldAmpRelease): 0.6,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldOscWave): 4,           // variable pulse
-            p2(R50FieldPulseWidth): 0.3,
-            p2(R50FieldLevel): 0.45,
-            p2(R50FieldCutoff): 4800,
-            p2(R50FieldResonance): 0.25,
-            p2(R50FieldFilterEnvAmount): 0.4,
-            p2(R50FieldAmpDecay): 0.8,
-            p2(R50FieldAmpSustain): 0.5,
-            p2(R50FieldAmpRelease): 0.5,
-        ]),
-
-        // ---- Transient-led patches -----------------------------------------
-        // The point of an attack library: the same sustain reads as a
-        // different instrument depending on what strikes it.
-
-        R50FactoryPreset(name: "◆ Marimba Pad", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.09,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.28,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.marimba),
-            p1(R50FieldCutoff): 9000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.5,
-            p1(R50FieldAmpSustain): 0,
-            p1(R50FieldAmpRelease): 0.3,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.warmPad),
-            p2(R50FieldLevel): 0.6,
-            p2(R50FieldCutoff): 3200,
-            p2(R50FieldAmpAttack): 0.05,
-            p2(R50FieldAmpSustain): 0.8,
-            p2(R50FieldAmpRelease): 0.7,
-        ]),
-
-        R50FactoryPreset(name: "◆ Vibes & Air", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.mix),
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.40,
-            slot(2, R50FxFieldControl2): reverbDecay(3.5),
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.vibraphone),
-            p1(R50FieldCutoff): 8000,
-            p1(R50FieldKeyTrack): 0.6,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 1.2,
-            p1(R50FieldAmpSustain): 0,
-            p1(R50FieldAmpRelease): 0.6,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.breath),
-            p2(R50FieldLevel): 0.3,
-            p2(R50FieldCutoff): 6000,
-            p2(R50FieldAmpAttack): 0.02,
-            p2(R50FieldAmpDecay): 0.6,
-            p2(R50FieldAmpSustain): 0,
-            p2(R50FieldAmpRelease): 0.4,
-        ]),
-
-        R50FactoryPreset(name: "◆ Slap Stack", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.05,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.slapBass),
-            p1(R50FieldCutoff): 10000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.25,
-            p1(R50FieldAmpSustain): 0,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldOscWave): 0,
-            p2(R50FieldOctave): -1,
-            p2(R50FieldCutoff): 700,
-            p2(R50FieldResonance): 0.35,
-            p2(R50FieldKeyTrack): 0.4,
-            p2(R50FieldFilterEnvAmount): 0.5,
-            p2(R50FieldAmpDecay): 0.5,
-            p2(R50FieldAmpSustain): 0.4,
-            p2(R50FieldAmpRelease): 0.15,
-            p2(R50FieldFilterDecay): 0.25,
-            p2(R50FieldFilterSustain): 0.1,
-        ]),
-
-        R50FactoryPreset(name: "◆ Taiko Choir", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.14,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.45,
-            slot(2, R50FxFieldControl2): reverbDecay(5.0),
-            slot(2, R50FxFieldControl3): 0.8,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.taikoDrum),
-            p1(R50FieldCutoff): 4000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.6,
-            p1(R50FieldAmpSustain): 0,
-            p1(R50FieldAmpRelease): 0.3,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.choir),
-            p2(R50FieldLevel): 0.7,
-            p2(R50FieldCutoff): 3600,
-            p2(R50FieldAmpAttack): 0.1,
-            p2(R50FieldAmpSustain): 0.85,
-            p2(R50FieldAmpRelease): 1.0,
-        ]),
-
-        R50FactoryPreset(name: "◆ Breath Flute", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.13,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.30,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.breath),
-            p1(R50FieldCutoff): 7000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.35,
-            p1(R50FieldAmpSustain): 0,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.flute),
-            p2(R50FieldCutoff): 5200,
-            p2(R50FieldKeyTrack): 0.5,
-            p2(R50FieldAmpAttack): 0.05,
-            p2(R50FieldAmpSustain): 0.9,
-            p2(R50FieldAmpRelease): 0.25,
-        ]),
-
-        R50FactoryPreset(name: "◆ Brass Section", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.08,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.24,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.lipBuzz),
-            p1(R50FieldCutoff): 6000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.3,
-            p1(R50FieldAmpSustain): 0,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.trumpet),
-            p2(R50FieldCutoff): 4800,
-            p2(R50FieldKeyTrack): 0.5,
-            p2(R50FieldFilterEnvAmount): 0.3,
-            p2(R50FieldAmpAttack): 0.04,
-            p2(R50FieldAmpSustain): 0.9,
-            p2(R50FieldAmpRelease): 0.2,
-            p2(R50FieldFilterDecay): 0.3,
-            p2(R50FieldFilterSustain): 0.6,
-        ]),
-
-        R50FactoryPreset(name: "◆ Gong Bath", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.20,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.55,
-            slot(2, R50FxFieldControl2): reverbDecay(8.0),
-            slot(2, R50FxFieldControl3): 0.9,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.anvil),
-            p1(R50FieldCutoff): 9000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.8,
-            p1(R50FieldAmpSustain): 0,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.gong),
-            p2(R50FieldLevel): 0.7,
-            p2(R50FieldCutoff): 4000,
-            p2(R50FieldKeyTrack): 0.7,
-            p2(R50FieldAmpAttack): 0.15,
-            p2(R50FieldAmpDecay): 4.0,
-            p2(R50FieldAmpSustain): 0.3,
-            p2(R50FieldAmpRelease): 2.5,
-        ]),
-
-        R50FactoryPreset(name: "◆ Nylon Pluck", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.04,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.22,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.pick),
-            p1(R50FieldCutoff): 11000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.15,
-            p1(R50FieldAmpSustain): 0,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.nylonGuitar),
-            p2(R50FieldCutoff): 4200,
-            p2(R50FieldKeyTrack): 0.6,
-            p2(R50FieldFilterEnvAmount): 0.35,
-            p2(R50FieldAmpDecay): 1.6,
-            p2(R50FieldAmpSustain): 0.15,
-            p2(R50FieldAmpRelease): 0.5,
-            p2(R50FieldFilterDecay): 0.8,
-            p2(R50FieldFilterSustain): 0.15,
-        ]),
-
-        R50FactoryPreset(name: "◆ Pizzagogo", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.05,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.34,
-            slot(2, R50FxFieldControl3): 0.7,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.pizzicato),
-            p1(R50FieldCutoff): 9000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.4,
-            p1(R50FieldAmpSustain): 0,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.strings),
-            p2(R50FieldLevel): 0.55,
-            p2(R50FieldCutoff): 3600,
-            p2(R50FieldKeyTrack): 0.5,
-            p2(R50FieldAmpAttack): 0.02,
-            p2(R50FieldAmpDecay): 1.2,
-            p2(R50FieldAmpSustain): 0.1,
-            p2(R50FieldAmpRelease): 0.4,
-        ]),
-
-        R50FactoryPreset(name: "◆ Spectrum Bell", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.attackSustain),
-            addr(R50ParamToneBlendTime): 0.06,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.40,
-            slot(2, R50FxFieldControl2): reverbDecay(5.0),
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.tineStrike),
-            p1(R50FieldCutoff): 12000,
-            p1(R50FieldFilterEnvAmount): 0,
-            p1(R50FieldAmpDecay): 0.3,
-            p1(R50FieldAmpSustain): 0,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.spectrum4),
-            p2(R50FieldCutoff): 7000,
-            p2(R50FieldKeyTrack): 0.6,
-            p2(R50FieldAmpDecay): 2.5,
-            p2(R50FieldAmpSustain): 0.2,
-            p2(R50FieldAmpRelease): 1.2,
-        ]),
-
-        R50FactoryPreset(name: "◆ Spectral Glass", values: [
-            addr(R50ParamToneStructure): AUValue(Structure.mix),
-            slot(0, R50FxFieldAlgorithm): 7,
-            slot(0, R50FxFieldMix): 0.30,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.45,
-            slot(2, R50FxFieldControl3): 0.8,
-
-            p1(R50FieldSourceType): 1,
-            p1(R50FieldSampleInstrument): AUValue(Instrument.spectrum3),
-            p1(R50FieldCutoff): 8000,
-            p1(R50FieldKeyTrack): 0.5,
-            p1(R50FieldAmpAttack): 0.3,
-            p1(R50FieldAmpSustain): 0.85,
-            p1(R50FieldAmpRelease): 1.4,
-
-            p2(R50FieldEnabled): 1,
-            p2(R50FieldSourceType): 1,
-            p2(R50FieldSampleInstrument): AUValue(Instrument.spectrum7),
-            p2(R50FieldLevel): 0.5,
-            p2(R50FieldOctave): -1,
-            p2(R50FieldCutoff): 5000,
-            p2(R50FieldAmpAttack): 0.5,
-            p2(R50FieldAmpSustain): 0.8,
-            p2(R50FieldAmpRelease): 1.8,
-        ]),
-
-        R50FactoryPreset(name: "Glass Bell", values: [
-            slot(1, R50FxFieldAlgorithm): 6,
-            slot(1, R50FxFieldMix): 0.22,
-            slot(2, R50FxFieldAlgorithm): 1,
-            slot(2, R50FxFieldMix): 0.34,
-            addr(R50ParamOscWave): 10,
-            addr(R50ParamCutoff): 8500,
-            addr(R50ParamKeyTrack): 0.8,
-            addr(R50ParamFilterEnvAmount): 0.35,
-            addr(R50ParamAmpAttack): 0.001,
-            addr(R50ParamAmpDecay): 2.2,
-            addr(R50ParamAmpSustain): 0.0,
-            addr(R50ParamAmpRelease): 1.4,
-            addr(R50ParamFilterDecay): 1.2,
-            addr(R50ParamFilterSustain): 0.15,
-        ]),
-    ]
-
-    static let all: [R50FactoryPreset] = instrumentPresets + effectShowcases
-
-    /// Small, deliberately obvious examples for the effect families that were
-    /// not represented by the original factory patches.
-    private static let effectShowcases: [R50FactoryPreset] = [
-        rackShowcase("FX • Tremolo", algorithm: 11, mix: 1, controls: [
-            0: 0.48, 1: 0.75, 2: 0.5, 3: 0.5, 4: 0.5
-        ]),
-        rackShowcase("FX • Rotary", algorithm: 12, mix: 1, controls: [
-            0: 0.55, 1: 0.48, 2: 0.5, 3: 0.45,
-            4: 0.65, 5: 0.7, 6: 0.5
-        ], mode: 1),
-        rackShowcase("FX • Digital EQ", algorithm: 13, mix: 1, controls: [
-            0: 0.42, 1: 0.45, 2: 0.62, 5: 0.58, 6: 0.58
-        ]),
-        rackShowcase("FX • Overdrive", algorithm: 14, mix: 0.72, controls: [
-            0: 0.45, 2: 0.62, 5: 0.68
-        ], mode: 1),
-        rackShowcase("FX • Exciter", algorithm: 16, mix: 0.55, controls: [
-            0: 0.45, 1: 0.38, 2: 0.62, 3: 0.48
-        ])
-    ]
-
-    private static func rackShowcase(
-        _ name: String, algorithm: AUValue, mix: AUValue,
-        controls: [Int: AUValue], mode: AUValue = 0
-    ) -> R50FactoryPreset {
-        var values: [AUParameterAddress: AUValue] = [
-            p1(R50FieldDryLevel): 0,
-            p1(R50FieldSend1): 1,
-            slot(0, R50FxFieldAlgorithm): algorithm,
-            slot(0, R50FxFieldMix): mix,
-            slot(0, R50FxFieldMode1): mode,
-            addr(R50ParamCutoff): 5200,
-            addr(R50ParamAmpRelease): 0.55
+    static let all: [R50FactoryPreset] = buildBank()
+
+    private static func buildBank() -> [R50FactoryPreset] {
+        var bank: [R50FactoryPreset] = []
+
+        let basses = [
+            "BASS • Rubber Floor", "BASS • Slap Circuit", "BASS • Night Sub",
+            "BASS • Resonant Pick", "BASS • FM Growl", "BASS • Pulse Driver",
+            "BASS • Mini Stack", "BASS • Fretless Air", "BASS • Sync Weight",
+            "BASS • Acid Memory", "BASS • Digi Thumb", "BASS • Twin Octaves"
         ]
-        for (index, value) in controls {
-            let field = R50FxSlotField(
-                rawValue: R50FxFieldControl1.rawValue + UInt32(index))
-            values[slot(0, field)] = value
+        for (i, name) in basses.enumerated() { bank.append(bass(name, i)) }
+
+        let synths = [
+            "SYNTH • Neon Poly", "SYNTH • Brass Stab", "SYNTH • Glass Sync",
+            "SYNTH • Pulse Fifth", "SYNTH • Vector Motion", "SYNTH • Rez Chord",
+            "SYNTH • Digital Sweep", "SYNTH • PWM Memory", "SYNTH • Ring Leader",
+            "SYNTH • Soft Focus", "SYNTH • Hard Wire", "SYNTH • Unison Spark",
+            "LEAD • Aftertouch Saw", "LEAD • Mono Reed", "LEAD • Laser Pulse",
+            "LEAD • Singing Square", "LEAD • Fusion Wire", "LEAD • Lonely Vox"
+        ]
+        for (i, name) in synths.enumerated() { bank.append(synth(name, i)) }
+
+        let keys = [
+            "KEYS • Mellow Stage", "KEYS • Bright Tines", "KEYS • Dyno Chorus",
+            "KEYS • Digital Piano", "KEYS • Glass EP", "KEYS • Soft Grand",
+            "KEYS • House Piano", "KEYS • Piano & Strings", "KEYS • Bell Piano",
+            "KEYS • LA Stack", "KEYS • Velvet Tines", "KEYS • Wire Clav",
+            "KEYS • Chorus Clav", "KEYS • Midnight EP"
+        ]
+        for (i, name) in keys.enumerated() { bank.append(keysPatch(name, i)) }
+
+        let plucks = [
+            "PLUCK • Nylon Dream", "PLUCK • Digital Harp", "PLUCK • Kalimba Sun",
+            "PLUCK • Marimba Air", "PLUCK • Vibes Cloud", "PLUCK • Pizzicato Pop",
+            "PLUCK • Bottle Wire", "PLUCK • Koto Circuit", "PLUCK • Muted Bell",
+            "PLUCK • Ice Mallet", "PLUCK • Picked Pad", "PLUCK • Anvil String"
+        ]
+        for (i, name) in plucks.enumerated() { bank.append(pluck(name, i)) }
+
+        let pads = [
+            "PAD • Warm Horizon", "PAD • Hollow Heaven", "PAD • Choir Glass",
+            "PAD • Vector Aurora", "PAD • Analog Sea", "PAD • Digital Mist",
+            "PAD • Ooh Machine", "PAD • Spectrum Drift", "PAD • Breath Field",
+            "PAD • Ice Palace", "PAD • Slow Brass", "PAD • Solar Choir",
+            "PAD • Dark Motion", "PAD • Shimmer Bed", "PAD • Space Memory",
+            "PAD • Endless Blue"
+        ]
+        for (i, name) in pads.enumerated() { bank.append(pad(name, i)) }
+
+        let strings = [
+            "STRINGS • Warm Section", "STRINGS • Wide Ensemble",
+            "STRINGS • Slow Cinema", "STRINGS • Pizz & Bow",
+            "STRINGS • Synth Orchestra", "STRINGS • Chamber Air",
+            "STRINGS • Octave Sweep", "STRINGS • Bowed Glass",
+            "STRINGS • Marcato Layer", "STRINGS • Silk Machine"
+        ]
+        for (i, name) in strings.enumerated() { bank.append(stringsPatch(name, i)) }
+
+        let winds = [
+            "REED • Warm Clarinet", "REED • Breath Solo", "REED • Digital Oboe",
+            "REED • Soft Sax", "WIND • Air Flute", "WIND • Chiff Pipe",
+            "WIND • Pan Dream", "WIND • Synthetic Shaku"
+        ]
+        for (i, name) in winds.enumerated() { bank.append(wind(name, i)) }
+
+        let performance = [
+            "BRASS • Power Section", "BRASS • Mute Stack",
+            "ORGAN • Drawbar Fast", "ORGAN • Gospel Rotary",
+            "BELL • Spectrum Tower", "BELL • Ring Cathedral",
+            "WORLD • Taiko Choir", "SPLIT • Bass & Piano",
+            "SPLIT • Pad & Lead", "VECTOR • Four Corners"
+        ]
+        for (i, name) in performance.enumerated() {
+            bank.append(performancePatch(name, i))
         }
-        return R50FactoryPreset(name: name, values: values)
+
+        precondition(bank.count == 100)
+        return bank
+    }
+
+    // MARK: - Musical recipes
+
+    private static func bass(_ name: String, _ i: Int) -> R50FactoryPreset {
+        let wave = [0, 0, 1, 4, 2, 4, 0, 7, 3, 0, 2, 0][i]
+        var v = base(wave: wave, cutoff: 260 + AUValue(i) * 75,
+                     attack: 0.002, release: 0.08 + AUValue(i % 4) * 0.04)
+        put(&v, p1(R50FieldOctave), -1)
+        put(&v, p1(R50FieldSlope), 1)
+        put(&v, p1(R50FieldResonance), 0.25 + AUValue(i % 4) * 0.11)
+        put(&v, p1(R50FieldFilterEnvAmount), 0.45 + AUValue(i % 3) * 0.12)
+        put(&v, p1(R50FieldFilterDecay), 0.12 + AUValue(i % 5) * 0.07)
+        put(&v, p1(R50FieldFilterSustain), i == 7 ? 0.45 : 0.05)
+        put(&v, p1(R50FieldAmpDecay), 0.35 + AUValue(i % 4) * 0.18)
+        put(&v, p1(R50FieldAmpSustain), 0.45 + AUValue(i % 3) * 0.12)
+        if i == 1 || i == 3 || i == 10 {
+            attackSustain(&v, attack: i == 3 ? Instrument.pick : Instrument.slapBass,
+                          sustainWave: wave, blend: 0.035)
+        } else if i == 2 || i == 6 || i == 11 {
+            enable(&v, partial: 1, wave: 1, octave: -2, level: 0.32,
+                   pan: 0, fine: 0)
+        }
+        if i == 4 || i == 8 {
+            put(&v, addr(R50ParamToneStructure), AUValue(Structure.ring))
+            put(&v, addr(R50ParamToneRingLevel), 1.7)
+            enable(&v, partial: 1, wave: 2, octave: -1, level: 0.18,
+                   pan: 0, fine: 3)
+        }
+        addDrive(&v, amount: 0.18 + AUValue(i % 3) * 0.09)
+        return R50FactoryPreset(name: name, values: v)
+    }
+
+    private static func synth(_ name: String, _ i: Int) -> R50FactoryPreset {
+        let wave = [0, 8, 10, 4, 0, 2, 11, 4, 10, 6, 3, 0,
+                    0, 7, 3, 1, 2, 9][i]
+        var v = base(wave: wave, cutoff: 1800 + AUValue(i % 6) * 850,
+                     attack: i == 9 ? 0.18 : 0.008,
+                     release: 0.25 + AUValue(i % 4) * 0.16)
+        put(&v, p1(R50FieldResonance), 0.12 + AUValue(i % 5) * 0.08)
+        put(&v, p1(R50FieldFilterEnvAmount), 0.18 + AUValue(i % 4) * 0.14)
+        put(&v, p1(R50FieldFilterDecay), 0.35 + AUValue(i % 5) * 0.22)
+        put(&v, p1(R50FieldAmpSustain), i == 1 || i == 5 ? 0.55 : 0.88)
+        enable(&v, partial: 1, wave: (wave + 1) % 12,
+               octave: i == 3 ? 0 : (i % 6 == 0 ? -1 : 0),
+               level: 0.35, pan: 0.35, fine: AUValue(5 + i % 5))
+        put(&v, p1(R50FieldPan), -0.35)
+        if i == 4 || i == 6 {
+            vectorTone(&v, sample: i == 4 ? Instrument.spectrum4 : Instrument.spectrum7,
+                       mix: 0.42, depth: 0.25)
+        }
+        if i == 8 {
+            put(&v, addr(R50ParamToneStructure), AUValue(Structure.ring))
+            put(&v, addr(R50ParamToneRingLevel), 2.0)
+        }
+        if i >= 12 {
+            put(&v, p1(R50FieldAmpAttack), 0.025)
+            put(&v, p1(R50FieldAmpRelease), 0.16)
+            put(&v, p1(R50FieldPitchAmount), i == 14 ? 12 : 2)
+            put(&v, p1(R50FieldPitchDecay), 0.08)
+        }
+        addChorus(&v, mix: i % 3 == 0 ? 0.28 : 0.16)
+        if i % 4 == 2 { addDelay(&v, time: 0.24, feedback: 0.28, mix: 0.22) }
+        return R50FactoryPreset(name: name, values: v)
+    }
+
+    private static func keysPatch(_ name: String, _ i: Int) -> R50FactoryPreset {
+        let sustain = [Instrument.piano, Instrument.piano, Instrument.piano,
+                       Instrument.piano, Instrument.glassPad, Instrument.piano,
+                       Instrument.piano, Instrument.strings, Instrument.glassPad,
+                       Instrument.warmPad, Instrument.piano, Instrument.nasty,
+                       Instrument.fatBlock, Instrument.piano][i]
+        let attack = i == 11 || i == 12 ? Instrument.pick
+            : (i == 1 || i == 2 || i == 4 || i == 10
+                ? Instrument.tineStrike : Instrument.pianoHammer)
+        var v = sampleBase(sustain, cutoff: 3600 + AUValue(i % 5) * 1000,
+                           attack: 0.003, release: 0.35 + AUValue(i % 4) * 0.16)
+        attackSustain(&v, attack: attack, sustainSample: sustain,
+                      blend: 0.045 + AUValue(i % 3) * 0.02)
+        put(&v, p2(R50FieldAmpDecay), 1.2 + AUValue(i % 4) * 0.5)
+        put(&v, p2(R50FieldAmpSustain), 0.2 + AUValue(i % 3) * 0.12)
+        put(&v, p2(R50FieldKeyTrack), 0.55)
+        if i == 7 {
+            put(&v, addr(R50ParamToneStructure), AUValue(Structure.mix))
+            put(&v, p1(R50FieldLevel), 0.65)
+            put(&v, p2(R50FieldSampleInstrument), AUValue(Instrument.strings))
+            put(&v, p2(R50FieldAmpAttack), 0.22)
+            put(&v, p2(R50FieldAmpSustain), 0.9)
+        }
+        if i == 8 || i == 9 {
+            put(&v, p2(R50FieldSampleInstrument), AUValue(
+                i == 8 ? Instrument.glassPad : Instrument.warmPad))
+        }
+        addChorus(&v, mix: [1, 2, 4, 10, 12, 13].contains(i) ? 0.34 : 0.12)
+        addReverb(&v, decay: 1.8 + AUValue(i % 4) * 0.55, mix: 0.18)
+        return R50FactoryPreset(name: name, values: v)
+    }
+
+    private static func pluck(_ name: String, _ i: Int) -> R50FactoryPreset {
+        let attacks = [Instrument.pluck, Instrument.pluck, Instrument.kalimba,
+                       Instrument.marimba, Instrument.vibraphone,
+                       Instrument.pizzicato, Instrument.chiff, Instrument.pick,
+                       Instrument.mallet, Instrument.xylophone, Instrument.pick,
+                       Instrument.anvil]
+        let sustains = [Instrument.nylonGuitar, Instrument.glassPad,
+                        Instrument.warmPad, Instrument.warmPad,
+                        Instrument.glassPad, Instrument.strings,
+                        Instrument.spectrum3, Instrument.spectrum6,
+                        Instrument.glassPad, Instrument.spectrum8,
+                        Instrument.warmPad, Instrument.strings]
+        var v = sampleBase(sustains[i], cutoff: 4300 + AUValue(i % 5) * 1300,
+                           attack: 0.001, release: 0.35 + AUValue(i % 4) * 0.22)
+        attackSustain(&v, attack: attacks[i], sustainSample: sustains[i],
+                      blend: 0.035 + AUValue(i % 4) * 0.025)
+        put(&v, p2(R50FieldAmpDecay), 0.65 + AUValue(i % 5) * 0.45)
+        put(&v, p2(R50FieldAmpSustain), i % 3 == 0 ? 0.12 : 0)
+        put(&v, p2(R50FieldFilterEnvAmount), 0.25)
+        put(&v, p2(R50FieldFilterDecay), 0.45)
+        if i == 5 { put(&v, p2(R50FieldOctave), 1) }
+        addDelay(&v, time: 0.16 + AUValue(i % 4) * 0.07,
+                 feedback: 0.20 + AUValue(i % 3) * 0.09, mix: 0.18)
+        addReverb(&v, decay: 2.3 + AUValue(i % 4) * 0.7, mix: 0.24)
+        return R50FactoryPreset(name: name, values: v)
+    }
+
+    private static func pad(_ name: String, _ i: Int) -> R50FactoryPreset {
+        let samples = [Instrument.warmPad, Instrument.warmPad, Instrument.choir,
+                       Instrument.glassPad, Instrument.strings, Instrument.spectrum2,
+                       Instrument.voiceOoh, Instrument.spectrum5, Instrument.breath,
+                       Instrument.glassPad, Instrument.trumpet, Instrument.choir,
+                       Instrument.spectrum9, Instrument.glassPad,
+                       Instrument.spectrum6, Instrument.warmPad]
+        var v = sampleBase(samples[i], cutoff: 1700 + AUValue(i % 6) * 650,
+                           attack: 0.45 + AUValue(i % 5) * 0.22,
+                           release: 1.4 + AUValue(i % 4) * 0.65)
+        put(&v, p1(R50FieldAmpSustain), 1)
+        put(&v, p1(R50FieldFilterAttack), 0.7 + AUValue(i % 4) * 0.5)
+        put(&v, p1(R50FieldFilterSustain), 0.55)
+        put(&v, p1(R50FieldPan), -0.32)
+        enable(&v, partial: 1, wave: [4, 8, 9, 10][i % 4],
+               octave: i % 5 == 0 ? -1 : 0, level: 0.42,
+               pan: 0.32, fine: AUValue(6 + i % 4))
+        put(&v, p2(R50FieldAmpAttack), 0.65 + AUValue(i % 4) * 0.28)
+        put(&v, p2(R50FieldAmpRelease), 1.8)
+        put(&v, p2(R50FieldCutoff), 2200 + AUValue(i % 5) * 700)
+        if i % 4 == 3 || i == 7 || i == 12 || i == 15 {
+            vectorTone(&v, sample: [Instrument.voiceOoh, Instrument.spectrum7,
+                                    Instrument.choir, Instrument.spectrum9][i % 4],
+                       mix: 0.5, depth: 0.22 + AUValue(i % 3) * 0.08)
+        }
+        if i == 8 {
+            put(&v, p2(R50FieldNoiseMix), 0.7)
+            put(&v, p2(R50FieldNoiseSpectrum), 5)
+            put(&v, p2(R50FieldNoisePitchTrack), 1)
+        }
+        addChorus(&v, mix: 0.30)
+        addReverb(&v, decay: 4.0 + AUValue(i % 5), mix: 0.38)
+        return R50FactoryPreset(name: name, values: v)
+    }
+
+    private static func stringsPatch(_ name: String, _ i: Int) -> R50FactoryPreset {
+        var v = sampleBase(Instrument.strings, cutoff: 2600 + AUValue(i % 5) * 700,
+                           attack: 0.18 + AUValue(i % 4) * 0.13,
+                           release: 0.7 + AUValue(i % 4) * 0.3)
+        put(&v, p1(R50FieldPan), -0.48)
+        enable(&v, partial: 1, wave: 8, octave: i == 6 ? 1 : 0,
+               level: 0.48, pan: 0.48, fine: 7)
+        put(&v, p2(R50FieldAmpAttack), 0.24 + AUValue(i % 3) * 0.16)
+        put(&v, p2(R50FieldAmpRelease), 0.9)
+        put(&v, p2(R50FieldCutoff), 3000)
+        if i == 3 || i == 8 {
+            put(&v, addr(R50ParamToneStructure), AUValue(Structure.attackSustain))
+            put(&v, addr(R50ParamToneBlendTime), 0.09)
+            put(&v, p1(R50FieldSourceType), 1)
+            put(&v, p1(R50FieldSampleInstrument),
+                AUValue(i == 3 ? Instrument.pizzicato : Instrument.bowScrape))
+            put(&v, p1(R50FieldAmpDecay), 0.35)
+            put(&v, p1(R50FieldAmpSustain), 0)
+        }
+        if i == 7 { put(&v, p2(R50FieldSampleInstrument), AUValue(Instrument.glassPad)) }
+        addChorus(&v, mix: 0.36)
+        addReverb(&v, decay: 2.8 + AUValue(i % 4) * 0.8, mix: 0.28)
+        return R50FactoryPreset(name: name, values: v)
+    }
+
+    private static func wind(_ name: String, _ i: Int) -> R50FactoryPreset {
+        let wave = [7, 7, 9, 7, 7, 5, 7, 9][i]
+        var v = base(wave: wave, cutoff: 3300 + AUValue(i % 4) * 850,
+                     attack: 0.045 + AUValue(i % 3) * 0.035,
+                     release: 0.18 + AUValue(i % 3) * 0.08)
+        put(&v, p1(R50FieldAmpSustain), 0.92)
+        put(&v, p1(R50FieldKeyTrack), 0.55)
+        put(&v, p1(R50FieldNoiseMix), 0.12 + AUValue(i % 4) * 0.07)
+        put(&v, p1(R50FieldNoiseSpectrum), 5)
+        put(&v, p1(R50FieldNoiseTone), 0.3)
+        put(&v, p1(R50FieldNoisePitchTrack), 1)
+        if i == 4 || i == 5 || i == 7 {
+            attackSustain(&v, attack: i == 5 ? Instrument.chiff : Instrument.breath,
+                          sustainSample: Instrument.flute, blend: 0.09)
+        }
+        addReverb(&v, decay: 1.9 + AUValue(i % 4) * 0.5, mix: 0.19)
+        return R50FactoryPreset(name: name, values: v)
+    }
+
+    private static func performancePatch(
+        _ name: String, _ i: Int
+    ) -> R50FactoryPreset {
+        switch i {
+        case 0, 1:
+            var v = sampleBase(Instrument.trumpet, cutoff: i == 0 ? 5200 : 3200,
+                               attack: 0.035, release: 0.28)
+            attackSustain(&v, attack: Instrument.lipBuzz,
+                          sustainSample: Instrument.trumpet, blend: 0.055)
+            enable(&v, partial: 2, wave: 8, octave: 0, level: 0.38,
+                   pan: 0.25, fine: 5)
+            addReverb(&v, decay: 2.1, mix: 0.2)
+            return R50FactoryPreset(name: name, values: v)
+        case 2, 3:
+            var v = sampleBase(Instrument.organ, cutoff: 7200,
+                               attack: 0.002, release: 0.06)
+            enable(&v, partial: 1, wave: 5, octave: i == 2 ? 1 : 0,
+                   level: 0.42, pan: 0, fine: 0)
+            addRotary(&v, fast: i == 2)
+            return R50FactoryPreset(name: name, values: v)
+        case 4, 5:
+            var v = sampleBase(i == 4 ? Instrument.spectrum8 : Instrument.gong,
+                               cutoff: 8200, attack: 0.002, release: 2.2)
+            enable(&v, partial: 1, wave: 10, octave: 1, level: 0.25,
+                   pan: 0.3, fine: 7)
+            if i == 5 {
+                put(&v, addr(R50ParamToneStructure), AUValue(Structure.ring))
+                put(&v, addr(R50ParamToneRingLevel), 2.1)
+            }
+            addDelay(&v, time: 0.31, feedback: 0.42, mix: 0.28)
+            addReverb(&v, decay: 6.5, mix: 0.42)
+            return R50FactoryPreset(name: name, values: v)
+        case 6:
+            var v = sampleBase(Instrument.choir, cutoff: 3600,
+                               attack: 0.12, release: 1.1)
+            attackSustain(&v, attack: Instrument.taikoDrum,
+                          sustainSample: Instrument.choir, blend: 0.13)
+            addReverb(&v, decay: 5.2, mix: 0.44)
+            return R50FactoryPreset(name: name, values: v)
+        case 7:
+            var v = base(wave: 0, cutoff: 650, attack: 0.002, release: 0.1)
+            put(&v, p1(R50FieldOctave), -1)
+            splitTone(&v, sample: Instrument.piano, point: 55)
+            return R50FactoryPreset(name: name, values: v)
+        case 8:
+            var v = sampleBase(Instrument.warmPad, cutoff: 2400,
+                               attack: 0.4, release: 1.2)
+            splitTone(&v, sample: Instrument.spectrum3, point: 67)
+            put(&v, p3(R50FieldAmpAttack), 0.03)
+            put(&v, p3(R50FieldAmpRelease), 0.25)
+            addDelay(&v, time: 0.24, feedback: 0.3, mix: 0.2)
+            return R50FactoryPreset(name: name, values: v)
+        default:
+            var v = sampleBase(Instrument.strings, cutoff: 3400,
+                               attack: 0.35, release: 1.5)
+            enable(&v, partial: 1, wave: 9, octave: 0, level: 0.42,
+                   pan: 0.3, fine: 6)
+            vectorTone(&v, sample: Instrument.spectrum9, mix: 0.5, depth: 0.34)
+            enable(&v, partial: 3, wave: 10, octave: 1, level: 0.32,
+                   pan: 0.5, fine: -5)
+            addReverb(&v, decay: 5.8, mix: 0.4)
+            return R50FactoryPreset(name: name, values: v)
+        }
+    }
+
+    // MARK: - Recipe building blocks
+
+    private static func base(
+        wave: Int, cutoff: AUValue, attack: AUValue, release: AUValue
+    ) -> [AUParameterAddress: AUValue] {
+        [
+            p1(R50FieldOscWave): AUValue(wave),
+            p1(R50FieldCutoff): cutoff,
+            p1(R50FieldKeyTrack): 0.5,
+            p1(R50FieldAmpAttack): attack,
+            p1(R50FieldAmpDecay): 0.8,
+            p1(R50FieldAmpSustain): 0.8,
+            p1(R50FieldAmpRelease): release,
+            p1(R50FieldFilterAttack): 0.004,
+            p1(R50FieldFilterDecay): 0.6,
+            p1(R50FieldFilterSustain): 0.35
+        ]
+    }
+
+    private static func sampleBase(
+        _ instrument: Int, cutoff: AUValue, attack: AUValue, release: AUValue
+    ) -> [AUParameterAddress: AUValue] {
+        var v = base(wave: 0, cutoff: cutoff, attack: attack, release: release)
+        put(&v, p1(R50FieldSourceType), 1)
+        put(&v, p1(R50FieldSampleInstrument), AUValue(instrument))
+        return v
+    }
+
+    private static func attackSustain(
+        _ v: inout [AUParameterAddress: AUValue], attack: Int,
+        sustainWave: Int? = nil, sustainSample: Int? = nil, blend: AUValue
+    ) {
+        put(&v, addr(R50ParamToneStructure), AUValue(Structure.attackSustain))
+        put(&v, addr(R50ParamToneBlendTime), blend)
+        put(&v, p1(R50FieldSourceType), 1)
+        put(&v, p1(R50FieldSampleInstrument), AUValue(attack))
+        put(&v, p1(R50FieldFilterEnvAmount), 0)
+        put(&v, p1(R50FieldAmpDecay), 0.25)
+        put(&v, p1(R50FieldAmpSustain), 0)
+        put(&v, p2(R50FieldEnabled), 1)
+        if let sustainSample {
+            put(&v, p2(R50FieldSourceType), 1)
+            put(&v, p2(R50FieldSampleInstrument), AUValue(sustainSample))
+        } else {
+            put(&v, p2(R50FieldOscWave), AUValue(sustainWave ?? 0))
+        }
+        put(&v, p2(R50FieldCutoff), v[p1(R50FieldCutoff)] ?? 4000)
+        put(&v, p2(R50FieldAmpAttack), 0.02)
+        put(&v, p2(R50FieldAmpSustain), 0.75)
+        put(&v, p2(R50FieldAmpRelease), v[p1(R50FieldAmpRelease)] ?? 0.4)
+    }
+
+    private static func enable(
+        _ v: inout [AUParameterAddress: AUValue], partial: Int, wave: Int,
+        octave: Int, level: AUValue, pan: AUValue, fine: AUValue
+    ) {
+        let a = partialAddress(partial)
+        put(&v, a(R50FieldEnabled), 1)
+        put(&v, a(R50FieldOscWave), AUValue(wave))
+        put(&v, a(R50FieldOctave), AUValue(octave))
+        put(&v, a(R50FieldLevel), level)
+        put(&v, a(R50FieldPan), pan)
+        put(&v, a(R50FieldFine), fine)
+        put(&v, a(R50FieldCutoff), 4200)
+        put(&v, a(R50FieldAmpAttack), 0.01)
+        put(&v, a(R50FieldAmpSustain), 0.85)
+        put(&v, a(R50FieldAmpRelease), 0.5)
+    }
+
+    private static func vectorTone(
+        _ v: inout [AUParameterAddress: AUValue], sample: Int,
+        mix: AUValue, depth: AUValue
+    ) {
+        put(&v, addr(R50ParamPatchStructure), 4)
+        put(&v, addr(R50ParamPatchVectorMix), mix)
+        put(&v, addr(R50ParamToneBLevel), 0.82)
+        put(&v, p3(R50FieldEnabled), 1)
+        put(&v, p3(R50FieldSourceType), 1)
+        put(&v, p3(R50FieldSampleInstrument), AUValue(sample))
+        put(&v, p3(R50FieldCutoff), 4800)
+        put(&v, p3(R50FieldAmpAttack), 0.45)
+        put(&v, p3(R50FieldAmpSustain), 1)
+        put(&v, p3(R50FieldAmpRelease), 1.5)
+        put(&v, p3(R50FieldPan), 0.25)
+        put(&v, addr(R50ParamVectorLfoWave), 0)
+        put(&v, addr(R50ParamVectorLfoRate), 0.08)
+        put(&v, addr(R50ParamVectorLfoDepth), depth)
+        put(&v, addr(R50ParamVectorLfoRetrigger), 0)
+    }
+
+    private static func splitTone(
+        _ v: inout [AUParameterAddress: AUValue], sample: Int, point: AUValue
+    ) {
+        put(&v, addr(R50ParamPatchStructure), 1)
+        put(&v, addr(R50ParamPatchSplitPoint), point)
+        put(&v, p3(R50FieldEnabled), 1)
+        put(&v, p3(R50FieldSourceType), 1)
+        put(&v, p3(R50FieldSampleInstrument), AUValue(sample))
+        put(&v, p3(R50FieldCutoff), 5200)
+        put(&v, p3(R50FieldAmpAttack), 0.01)
+        put(&v, p3(R50FieldAmpSustain), 0.8)
+        put(&v, p3(R50FieldAmpRelease), 0.45)
+    }
+
+    private static func addChorus(
+        _ v: inout [AUParameterAddress: AUValue], mix: AUValue
+    ) {
+        put(&v, slot(0, R50FxFieldAlgorithm), 7)
+        put(&v, slot(0, R50FxFieldMix), mix)
+        put(&v, slot(0, R50FxFieldControl1), chorusRate(0.35))
+    }
+
+    private static func addDelay(
+        _ v: inout [AUParameterAddress: AUValue], time: AUValue,
+        feedback: AUValue, mix: AUValue
+    ) {
+        put(&v, slot(1, R50FxFieldAlgorithm), 5)
+        put(&v, slot(1, R50FxFieldMix), mix)
+        put(&v, slot(1, R50FxFieldControl1), delayTime(time))
+        put(&v, slot(1, R50FxFieldControl3), delayFeedback(feedback))
+    }
+
+    private static func addReverb(
+        _ v: inout [AUParameterAddress: AUValue], decay: AUValue, mix: AUValue
+    ) {
+        put(&v, slot(2, R50FxFieldAlgorithm), 1)
+        put(&v, slot(2, R50FxFieldMix), mix)
+        put(&v, slot(2, R50FxFieldControl2), reverbDecay(decay))
+    }
+
+    private static func addDrive(
+        _ v: inout [AUParameterAddress: AUValue], amount: AUValue
+    ) {
+        put(&v, slot(0, R50FxFieldAlgorithm), 14)
+        put(&v, slot(0, R50FxFieldMix), 0.42)
+        put(&v, slot(0, R50FxFieldControl1), amount)
+    }
+
+    private static func addRotary(
+        _ v: inout [AUParameterAddress: AUValue], fast: Bool
+    ) {
+        put(&v, slot(0, R50FxFieldAlgorithm), 12)
+        put(&v, slot(0, R50FxFieldMix), 1)
+        put(&v, slot(0, R50FxFieldMode1), fast ? 1 : 0)
+        put(&v, slot(2, R50FxFieldAlgorithm), 2)
+        put(&v, slot(2, R50FxFieldMix), 0.18)
+    }
+
+    private static func put(
+        _ values: inout [AUParameterAddress: AUValue],
+        _ address: AUParameterAddress, _ value: AUValue
+    ) {
+        values[address] = value
     }
 
     private static func chorusRate(_ hertz: AUValue) -> AUValue {
@@ -743,33 +533,36 @@ enum R50FactoryPresets {
     private static func addr(_ p: R50Param) -> AUParameterAddress {
         AUParameterAddress(p.rawValue)
     }
-    private static func slot(_ index: Int,
-                             _ field: R50FxSlotField) -> AUParameterAddress {
+    private static func slot(
+        _ index: Int, _ field: R50FxSlotField
+    ) -> AUParameterAddress {
         AUParameterAddress(r50FxSlotParam(Int32(index), field).rawValue)
     }
-
-    /// Address of a field on a given Partial. Partial 1's fields resolve to the
-    /// original addresses, so the older presets above stay valid unchanged.
     private static func p1(_ field: R50PartialField) -> AUParameterAddress {
         AUParameterAddress(r50PartialParam(0, field).rawValue)
     }
     private static func p2(_ field: R50PartialField) -> AUParameterAddress {
         AUParameterAddress(r50PartialParam(1, field).rawValue)
     }
+    private static func p3(_ field: R50PartialField) -> AUParameterAddress {
+        AUParameterAddress(r50PartialParam(2, field).rawValue)
+    }
 
-    /// Factory instrument indices, in the order buildFactoryContent() publishes
-    /// them in R50SampleFactory.hpp.
+    private static func partialAddress(
+        _ index: Int
+    ) -> (R50PartialField) -> AUParameterAddress {
+        { field in AUParameterAddress(r50PartialParam(Int32(index), field).rawValue) }
+    }
+
     private enum Instrument {
         static let choir = 0, strings = 1, warmPad = 2, glassPad = 3
         static let voiceOoh = 4, flute = 5, trumpet = 6, organ = 7
         static let nylonGuitar = 8, piano = 9, gong = 10, nasty = 11, fatBlock = 12
-        // Attacks follow the thirteen sustains, in buildFactoryContent order.
         static let mallet = 13, pluck = 14, chiff = 15, noiseBurst = 16
         static let tineStrike = 17, marimba = 18, vibraphone = 19, xylophone = 20
         static let kalimba = 21, slapBass = 22, pullBass = 23, pick = 24
         static let pianoHammer = 25, anvil = 26, taikoDrum = 27, lipBuzz = 28
         static let breath = 29, bowScrape = 30
-        // Registered after everything above, so these indices are append-only.
         static let spectrum1 = 31, spectrum2 = 32, spectrum3 = 33
         static let spectrum4 = 34, spectrum5 = 35, spectrum6 = 36
         static let spectrum7 = 37, spectrum8 = 38, spectrum9 = 39
@@ -778,6 +571,5 @@ enum R50FactoryPresets {
 
     private enum Structure {
         static let mix = 0, ring = 1, attackSustain = 2
-        static let velocityCrossfade = 3, keyCrossfade = 4
     }
 }

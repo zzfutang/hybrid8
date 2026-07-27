@@ -206,6 +206,11 @@ public:
         shaper_.setParams(p.shaperType,
                           synth::clampf(p.shaperDrive + mod.shaperDrive, 0.0f, 1.0f),
                           p.shaperPosition);
+        // The discontinuous folder/rectifier need spectral headroom even at
+        // 4x. Half an octave of mip bias removes only the shaper input's top
+        // band; clean Partials retain the new near-20 kHz oscillator bandwidth.
+        osc_.setMipBias(shaper_.isActive()
+                            ? 0.5f * r50::kWaveLevelsPerOctave : 0.0f);
 
         const double detune = p.octave * 12.0 + p.semitone
                             + p.fineCents / 100.0 + pitchBendSemitones

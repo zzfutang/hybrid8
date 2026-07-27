@@ -1224,7 +1224,11 @@ Multi-stage envelopes, per-Partial filter and pan, noise source, waveshaper, two
 Partials per Tone with Mix / RingMod / AttackSustain / crossfade structures.
 
 ### Phase 4 — Patch engine
-Two Tones, layer/split/velocity/vector structures, 16 voices, unison.
+Complete at the product's deliberate eight-voice polyphony: two Tones, four
+Partials, Layer, Key Split, Velocity Split, Velocity Crossfade, and Vector Mix.
+Vector Mix is both a Patch-level matrix destination and the target of a
+dedicated Vector LFO. The planned unison expansion remains outside the
+implemented Patch layer.
 
 ### Phase 5 — Modulation
 Modulation matrix, four macros, LFO tempo sync (requires restoring the

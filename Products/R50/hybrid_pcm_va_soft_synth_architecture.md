@@ -1732,8 +1732,8 @@ Use it for:
 
 # 34. Development roadmap
 
-Phases 1–3 and 5–7 are built, bar the exceptions noted under each. Phase 4 has
-not been started and phase 8 has barely been. Where the shipped instrument
+Phases 1–7 are built, bar the exceptions noted under each. Phase 8 has barely
+been started. Where the shipped instrument
 departs from what a phase asked for, the departure is recorded rather than the
 plan quietly restated — the roadmap is only useful if it can be trusted to say
 what is missing.
@@ -1796,8 +1796,16 @@ velocity crossfade.
 - vector mix;
 - 32 voices.
 
-**Not started.** This is the one structural block of the version-one boundary
-still outstanding: there is a single Tone, and no Patch layer above it.
+Built, at the product's deliberate **8 voices** rather than the source
+document's 32. Every voice owns four Partials arranged as two independent
+Tones. The Patch layer provides Layer, Key Split, Velocity Split, Velocity
+Crossfade, and Vector Mix, with independent Tone levels. Tone B has its own
+complete structure controls, and Partials 3–4 have the same source, envelope,
+filter, waveshaper, pan, dry, and send controls as Partials 1–2. Old presets
+remain Tone-A-only because both new Partials default off. Vector Mix is a
+Patch-level modulation-matrix destination and also has a dedicated
+wave/rate/depth/retrigger/phase LFO, so movement above the Tone hierarchy does
+not have to be constructed from Partial modulation.
 
 ## Phase 5 — Modulation
 
@@ -1838,9 +1846,8 @@ are all covered by the R50 regression suite.
 - modulation matrix;
 - sample browser.
 
-Built bar **VST3** — Audio Unit and standalone only. There is no Patch page
-because there is no Patch; the pages are Partial, Envelopes, Tone, Mod, FX and
-Samples.
+Built bar **VST3** — Audio Unit and standalone only. The pages are Partial,
+Envelopes, Tone, Patch, Mod, FX and Samples.
 
 ## Phase 8 — Production quality
 

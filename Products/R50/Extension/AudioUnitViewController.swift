@@ -103,7 +103,8 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
         view.subviews.forEach { $0.removeFromSuperview() }
         let model = R50ParameterModel(tree: tree,
                                       meterProvider: { r50.outputMeter() },
-                                      presetApplier: { r50.applyFactoryPreset($0) })
+                                      presetApplier: { r50.applyFactoryPreset($0) },
+                                      audioUnit: r50)
         let samples = R50SampleStore(model: model, audioUnit: r50)
         let host = NSHostingView(rootView: R50View(model: model, samples: samples))
         host.frame = view.bounds

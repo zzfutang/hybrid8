@@ -3,9 +3,9 @@
 //  Declarative definition of the AUParameterTree. Addresses come from the
 //  shared C header (R50Parameters.h) so Swift and C++ agree on every index.
 //
-//  Both Partials are generated from one field table through r50PartialParam(),
+//  All four Partials are generated from one field table through r50PartialParam(),
 //  the same accessor the engine uses. Writing sixty entries by hand would let
-//  the two Partials drift apart, and would duplicate the address mapping in a
+//  the Partials drift apart, and would duplicate the address mapping in a
 //  second place.
 //
 
@@ -16,7 +16,8 @@ enum R50Parameters {
     /// Order must match waveDescriptors() in R50Wave.hpp.
     static let waveformNames = [
         "Saw", "Triangle", "Square", "Pulse 10%", "Pulse",
-        "Organ", "Tine", "Clarinet", "Strings", "Vocal Ah", "Bell"
+        "Organ", "Tine", "Clarinet", "Strings", "Vocal Ah", "Bell", "Sine",
+        "Vocal E", "Vocal I", "Vocal O", "Vocal U", "Vocal Nasal"
     ]
     static let slopeNames    = ["12 dB", "24 dB"]
 
@@ -43,13 +44,16 @@ enum R50Parameters {
     static let modDestinationNames = [
         "—", "Pitch", "Cutoff", "Resonance", "Level", "Pan",
         "Wave", "Pulse Width", "Noise Mix", "Sample Start", "Shaper Drive",
-        "Ring Level"
+        "Ring Level", "Vector Mix"
     ]
     static let modTargetNames = ["Both", "P1", "P2"]
 
     /// Order must match ToneStructure in R50Voice.hpp.
     static let toneStructureNames = [
         "Mix", "Ring", "Atk/Sus", "Vel XF", "Key XF"
+    ]
+    static let patchStructureNames = [
+        "Layer", "Key Split", "Velocity Split", "Velocity XF", "Vector Mix"
     ]
     static let effectTopologyNames = [
         "Serial", "Parallel", "1→2 + 3", "(1+2)→3"
@@ -139,7 +143,7 @@ enum R50Parameters {
             Field(field: R50FieldNoiseRate, id: "NoiseRate", name: "Noise Rate",
                   min: 20, max: 16000, value: 4000, unit: .hertz, log: true),
             Field(field: R50FieldNoisePitchTrack, id: "NoiseTrack",
-                  name: "Noise Track", min: 0, max: 1, value: 0,
+                  name: "S&H Rate Source", min: 0, max: 1, value: 0,
                   unit: .indexed, strings: trackNames),
 
             Field(field: R50FieldCutoff, id: "Cutoff", name: "Cutoff",
@@ -250,7 +254,7 @@ enum R50Parameters {
 
     static func buildTree() -> AUParameterTree {
         let tone = AUParameterTree.createGroup(
-            withIdentifier: "tone", name: "Tone", children: [
+            withIdentifier: "toneA", name: "Tone A", children: [
                 param(R50ParamToneStructure, "toneStructure", "Structure",
                       min: 0, max: AUValue(toneStructureNames.count - 1),
                       value: 0, unit: .indexed, strings: toneStructureNames),
@@ -261,6 +265,16 @@ enum R50Parameters {
                 // 1 to make ring the character of a patch rather than a hint.
                 param(R50ParamToneRingLevel, "toneRingLevel", "Ring Level",
                       min: 0, max: 8, value: 1),
+                param(R50ParamToneRingPan, "toneRingPan", "Ring Pan",
+                      min: -1, max: 1, value: 0),
+                param(R50ParamToneRingDry, "toneRingDry", "Ring Dry",
+                      min: 0, max: 1, value: 1),
+                param(R50ParamToneRingSend1, "toneRingSend1", "Ring Send 1",
+                      min: 0, max: 1, value: 0),
+                param(R50ParamToneRingSend2, "toneRingSend2", "Ring Send 2",
+                      min: 0, max: 1, value: 0),
+                param(R50ParamToneRingSend3, "toneRingSend3", "Ring Send 3",
+                      min: 0, max: 1, value: 0),
                 param(R50ParamToneBlendTime, "toneBlendTime", "Blend Time",
                       min: 0.001, max: 4, value: 0.25,
                       unit: .seconds, log: true),
@@ -268,6 +282,62 @@ enum R50Parameters {
                       min: 0, max: 127, value: 48, unit: .indexed),
                 param(R50ParamToneCrossfadeHigh, "toneCrossfadeHigh", "XF High",
                       min: 0, max: 127, value: 72, unit: .indexed),
+            ])
+
+        let toneB = AUParameterTree.createGroup(
+            withIdentifier: "toneB", name: "Tone B", children: [
+                param(R50ParamToneBStructure, "toneBStructure", "Structure",
+                      min: 0, max: AUValue(toneStructureNames.count - 1),
+                      value: 0, unit: .indexed, strings: toneStructureNames),
+                param(R50ParamToneBRingLevel, "toneBRingLevel", "Ring Level",
+                      min: 0, max: 8, value: 1),
+                param(R50ParamToneBRingPan, "toneBRingPan", "Ring Pan",
+                      min: -1, max: 1, value: 0),
+                param(R50ParamToneBRingDry, "toneBRingDry", "Ring Dry",
+                      min: 0, max: 1, value: 1),
+                param(R50ParamToneBRingSend1, "toneBRingSend1", "Ring Send 1",
+                      min: 0, max: 1, value: 0),
+                param(R50ParamToneBRingSend2, "toneBRingSend2", "Ring Send 2",
+                      min: 0, max: 1, value: 0),
+                param(R50ParamToneBRingSend3, "toneBRingSend3", "Ring Send 3",
+                      min: 0, max: 1, value: 0),
+                param(R50ParamToneBBlendTime, "toneBBlendTime", "Blend Time",
+                      min: 0.001, max: 4, value: 0.25,
+                      unit: .seconds, log: true),
+                param(R50ParamToneBCrossfadeLow, "toneBCrossfadeLow", "XF Low",
+                      min: 0, max: 127, value: 48, unit: .indexed),
+                param(R50ParamToneBCrossfadeHigh, "toneBCrossfadeHigh", "XF High",
+                      min: 0, max: 127, value: 72, unit: .indexed),
+            ])
+
+        let patch = AUParameterTree.createGroup(
+            withIdentifier: "patch", name: "Patch", children: [
+                param(R50ParamPatchStructure, "patchStructure", "Patch Structure",
+                      min: 0, max: AUValue(patchStructureNames.count - 1),
+                      value: 0, unit: .indexed, strings: patchStructureNames),
+                param(R50ParamPatchSplitPoint, "patchSplitPoint", "Split Point",
+                      min: 0, max: 127, value: 60, unit: .indexed),
+                param(R50ParamPatchVelocitySplit, "patchVelocitySplit",
+                      "Velocity Split", min: 0, max: 1, value: 0.5),
+                param(R50ParamPatchVectorMix, "patchVectorMix", "Vector Mix",
+                      min: 0, max: 1, value: 0),
+                param(R50ParamToneALevel, "toneALevel", "Tone A Level",
+                      min: 0, max: 1, value: 1),
+                param(R50ParamToneBLevel, "toneBLevel", "Tone B Level",
+                      min: 0, max: 1, value: 1),
+                param(R50ParamVectorLfoWave, "vectorLfoWave", "Vector LFO Wave",
+                      min: 0, max: AUValue(lfoWaveNames.count - 1), value: 0,
+                      unit: .indexed, strings: lfoWaveNames),
+                param(R50ParamVectorLfoRate, "vectorLfoRate", "Vector LFO Rate",
+                      min: 0.01, max: 20, value: 0.25,
+                      unit: .hertz, log: true),
+                param(R50ParamVectorLfoDepth, "vectorLfoDepth",
+                      "Vector LFO Depth", min: 0, max: 1, value: 0),
+                param(R50ParamVectorLfoRetrigger, "vectorLfoRetrigger",
+                      "Vector LFO Run", min: 0, max: 1, value: 0,
+                      unit: .indexed, strings: ["Free", "Note"]),
+                param(R50ParamVectorLfoPhase, "vectorLfoPhase",
+                      "Vector LFO Phase", min: 0, max: 1, value: 0),
             ])
 
         var effectChildren: [AUParameter] = [
@@ -386,7 +456,9 @@ enum R50Parameters {
             ])
 
         return AUParameterTree.createTree(
-            withChildren: [partialGroup(0), partialGroup(1), tone,
+            withChildren: [partialGroup(0), partialGroup(1),
+                           partialGroup(2), partialGroup(3),
+                           tone, toneB, patch,
                            modulation, effects, global])
     }
 }

@@ -94,6 +94,9 @@ public final class R50AudioUnit: AUAudioUnit {
             guard let preset = newValue else { _currentPreset = nil; return }
             if preset.number >= 0 && preset.number < R50FactoryPresets.all.count {
                 applyFactoryPreset(preset.number)
+            } else if preset.number < 0,
+                      let state = try? presetState(for: preset) {
+                fullState = state
             }
             _currentPreset = preset
         }

@@ -33,9 +33,10 @@ static constexpr int kModSourceCount = 15;
 enum class ModDestination {
     None = 0,
     Pitch, Cutoff, Resonance, Level, Pan,
-    WaveIndex, PulseWidth, NoiseMix, SampleStart, ShaperDrive, RingLevel
+    WaveIndex, PulseWidth, NoiseMix, SampleStart, ShaperDrive, RingLevel,
+    VectorMix
 };
-static constexpr int kModDestinationCount = 12;
+static constexpr int kModDestinationCount = 13;
 
 /// Which Partial a slot acts on. With two Partials, forcing a slot per Partial
 /// for the common "both" case would waste half the matrix.
@@ -94,6 +95,7 @@ struct ModulationBlock {
     float sampleStart    = 0.0f;   // +/- 1
     float shaperDrive    = 0.0f;   // +/- 1
     float ringLevel      = 0.0f;   // +/- 8, applied at the Tone
+    float vectorMix      = 0.0f;   // +/- 1, applied at the Patch
 
     bool active = false;
 };
@@ -141,14 +143,15 @@ inline ModulationBlock evaluateMatrix(const ModParams &params,
                                       const ModSourceValues &sources,
                                       int partialIndex) {
     ModulationBlock block;
+    const int withinTone = partialIndex % 2;
     for (const ModSlot &slot : params.slots) {
         if (slot.source == ModSource::None
          || slot.destination == ModDestination::None
          || slot.amount == 0.0f) {
             continue;
         }
-        if (slot.target == ModTarget::Partial1 && partialIndex != 0) continue;
-        if (slot.target == ModTarget::Partial2 && partialIndex != 1) continue;
+        if (slot.target == ModTarget::Partial1 && withinTone != 0) continue;
+        if (slot.target == ModTarget::Partial2 && withinTone != 1) continue;
 
         const float amount = slot.amount * sources.value(slot.source);
         block.active = true;
@@ -165,10 +168,26 @@ inline ModulationBlock evaluateMatrix(const ModParams &params,
             case ModDestination::SampleStart: block.sampleStart    += amount;         break;
             case ModDestination::ShaperDrive: block.shaperDrive    += amount;         break;
             case ModDestination::RingLevel:   block.ringLevel      += amount * 8.0f;  break;
+            case ModDestination::VectorMix:   block.vectorMix      += amount;         break;
             case ModDestination::None:        break;
         }
     }
     return block;
+}
+
+/// Patch destinations are evaluated once per voice, above both Tones. The
+/// Partial target column is intentionally irrelevant for these routes.
+inline float evaluatePatchVector(const ModParams &params,
+                                 const ModSourceValues &sources) {
+    float value = 0.0f;
+    for (const ModSlot &slot : params.slots) {
+        if (slot.destination != ModDestination::VectorMix
+            || slot.source == ModSource::None || slot.amount == 0.0f) {
+            continue;
+        }
+        value += slot.amount * sources.value(slot.source);
+    }
+    return value;
 }
 
 /// An LFO plus the delay and fade-in that make it usable musically. Neither is
