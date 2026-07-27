@@ -195,7 +195,15 @@ struct R50Value: View {
         guard let param else { return 0 }
         let lo = param.minValue, hi = param.maxValue
         guard hi > lo else { return 0 }
-        if param.unit == .seconds && lo < 1 && hi > 1 {
+        guard value.isFinite else { return 0 }
+        if param.unit == .seconds && lo == 0 && hi > 1 {
+            // Delay, fade and the optional EG slope genuinely include Off.
+            // Give 0...1 second half the travel, then expand smoothly to max.
+            if value <= 1 { return 0.5 * min(max(value, 0), 1) }
+            let upper = min(max((value - 1) / (hi - 1), 0), 1)
+            return 0.5 + 0.5 * sqrt(upper)
+        }
+        if param.unit == .seconds && lo > 0 && lo < 1 && hi > 1 {
             if value <= 1 {
                 return 0.5 * Float(log(Double(max(value, lo) / lo))
                                    / log(Double(1 / lo)))
@@ -212,16 +220,22 @@ struct R50Value: View {
     private func denormalized(_ norm: Float) -> Float {
         guard let param else { return 0 }
         let lo = param.minValue, hi = param.maxValue
-        if param.unit == .seconds && lo < 1 && hi > 1 {
-            if norm <= 0.5 {
-                return lo * Float(pow(Double(1 / lo), Double(norm * 2)))
+        let position = norm.isFinite ? min(max(norm, 0), 1) : 0
+        if param.unit == .seconds && lo == 0 && hi > 1 {
+            if position <= 0.5 { return position * 2 }
+            let upper = (position - 0.5) * 2
+            return 1 + (hi - 1) * upper * upper
+        }
+        if param.unit == .seconds && lo > 0 && lo < 1 && hi > 1 {
+            if position <= 0.5 {
+                return lo * Float(pow(Double(1 / lo), Double(position * 2)))
             }
-            return Float(pow(Double(hi), Double((norm - 0.5) * 2)))
+            return Float(pow(Double(hi), Double((position - 0.5) * 2)))
         }
         if isLogarithmic && lo > 0 {
-            return lo * Float(pow(Double(hi / lo), Double(norm)))
+            return lo * Float(pow(Double(hi / lo), Double(position)))
         }
-        return lo + norm * (hi - lo)
+        return lo + position * (hi - lo)
     }
 }
 

@@ -94,6 +94,8 @@ class Voice {
 public:
     void setSampleRate(double sr) {
         sampleRate_ = sr;
+        ringDcPole_ = static_cast<float>(
+            std::exp(-2.0 * synth::kPi * 8.0 / std::max(sr, 1.0)));
         for (Partial &partial : partials_) partial.setSampleRate(sr);
         for (ModLfo &lfo : lfos_) lfo.setBlockRate(sr / kControlBlockForLfo);
         vectorLfo_.setBlockRate(sr / kControlBlockForLfo);
@@ -110,6 +112,9 @@ public:
 
     void reset() {
         for (Partial &partial : partials_) partial.reset();
+        for (int tone = 0; tone < kTonesPerVoice; ++tone) {
+            ringDcInput_[tone] = ringDcOutput_[tone] = 0.0f;
+        }
         active_ = false;
         note_ = -1;
     }
@@ -122,6 +127,9 @@ public:
         held_     = true;
         active_   = true;
         blendPosition_[0] = blendPosition_[1] = 0.0;
+        for (int tone = 0; tone < kTonesPerVoice; ++tone) {
+            ringDcInput_[tone] = ringDcOutput_[tone] = 0.0f;
+        }
         structure_[0] = p.structure;
         structure_[1] = p.toneB.structure;
         ringLevel_[0] = p.ringLevel;
@@ -258,7 +266,14 @@ public:
                 case ToneStructure::KeyCrossfade:
                     break;
                 case ToneStructure::RingMod:
-                    extra = signal[ia] * signal[ib] * ringLevel_[tone];
+                    {
+                        const float product =
+                            signal[ia] * signal[ib] * ringLevel_[tone];
+                        extra = product - ringDcInput_[tone]
+                              + ringDcPole_ * ringDcOutput_[tone];
+                        ringDcInput_[tone] = product;
+                        ringDcOutput_[tone] = extra;
+                    }
                     break;
                 case ToneStructure::AttackSustain: {
                     const float x = static_cast<float>(blendPosition_[tone]);
@@ -380,6 +395,9 @@ private:
     };
     float  ringLevel_[kTonesPerVoice] = {1.0f, 1.0f};
     float  ringPan_[kTonesPerVoice] = {0.0f, 0.0f};
+    float  ringDcInput_[kTonesPerVoice] = {0.0f, 0.0f};
+    float  ringDcOutput_[kTonesPerVoice] = {0.0f, 0.0f};
+    float  ringDcPole_ = 0.99886f; // 8 Hz at 44.1 kHz
     float  weightA_[kTonesPerVoice] = {1.0f, 1.0f};
     float  weightB_[kTonesPerVoice] = {1.0f, 1.0f};
     float  toneWeight_[kTonesPerVoice] = {1.0f, 0.0f};

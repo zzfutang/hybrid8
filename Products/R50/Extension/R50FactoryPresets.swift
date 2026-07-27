@@ -92,6 +92,15 @@ enum R50FactoryPresets {
         }
 
         precondition(bank.count == 100)
+        for index in bank.indices {
+            var values = bank[index].values
+            addPerformanceModulation(&values, name: bank[index].name,
+                                     index: index)
+            configureRingOutput(&values, index: index)
+            bank[index] = R50FactoryPreset(name: bank[index].name,
+                                           values: values)
+        }
+        precondition(bank.allSatisfy { hasModWheelRoute($0.values) })
         return bank
     }
 
@@ -510,6 +519,135 @@ enum R50FactoryPresets {
         put(&v, slot(2, R50FxFieldMix), 0.18)
     }
 
+    /// Every factory sound has a useful wheel gesture plus category-specific
+    /// movement. Slot 1 is always the wheel so performance behaviour is
+    /// predictable while browsing; the remaining routes give the bank life
+    /// without forcing the same vibrato onto a bass, piano and pad.
+    private static func addPerformanceModulation(
+        _ v: inout [AUParameterAddress: AUValue], name: String, index: Int
+    ) {
+        let wheelAmount: AUValue
+        if name.hasPrefix("BASS") {
+            wheelAmount = 0.14
+        } else if name.hasPrefix("PAD") || name.hasPrefix("STRINGS") {
+            wheelAmount = 0.20
+        } else if name.hasPrefix("REED") || name.hasPrefix("WIND")
+                    || name.hasPrefix("BRASS") {
+            wheelAmount = 0.17
+        } else {
+            wheelAmount = 0.16
+        }
+        mod(&v, slot: 0, source: ModSource.wheel,
+            destination: ModDestination.cutoff, amount: wheelAmount)
+
+        if name.hasPrefix("PAD") {
+            put(&v, addr(R50ParamLfo1Rate), 0.10 + AUValue(index % 4) * 0.035)
+            put(&v, addr(R50ParamLfo1Retrigger), 0)
+            mod(&v, slot: 1, source: ModSource.lfo1,
+                destination: ModDestination.cutoff, amount: 0.045)
+            put(&v, addr(R50ParamLfo2Rate), 0.055 + AUValue(index % 3) * 0.025)
+            put(&v, addr(R50ParamLfo2Retrigger), 0)
+            mod(&v, slot: 2, source: ModSource.lfo2,
+                destination: ModDestination.pan, amount: 0.12)
+        } else if name.hasPrefix("STRINGS") {
+            delayedVibrato(&v, amount: 0.007, rate: 4.7)
+            put(&v, addr(R50ParamLfo2Rate), 0.13)
+            put(&v, addr(R50ParamLfo2Retrigger), 0)
+            mod(&v, slot: 2, source: ModSource.lfo2,
+                destination: ModDestination.pan, amount: 0.07)
+        } else if name.hasPrefix("SYNTH") || name.hasPrefix("LEAD")
+                    || name.hasPrefix("REED") || name.hasPrefix("WIND")
+                    || name.hasPrefix("BRASS") {
+            delayedVibrato(&v, amount: name.hasPrefix("LEAD") ? 0.014 : 0.009,
+                           rate: 4.8 + AUValue(index % 4) * 0.35)
+        } else if name.hasPrefix("BASS") || name.hasPrefix("KEYS")
+                    || name.hasPrefix("PLUCK") {
+            mod(&v, slot: 1, source: ModSource.velocity,
+                destination: ModDestination.cutoff,
+                amount: name.hasPrefix("BASS") ? 0.08 : 0.11)
+        } else {
+            put(&v, addr(R50ParamLfo1Rate), 0.18)
+            put(&v, addr(R50ParamLfo1Retrigger), 0)
+            mod(&v, slot: 1, source: ModSource.lfo1,
+                destination: ModDestination.pan, amount: 0.06)
+        }
+
+        if Int((v[addr(R50ParamToneStructure)] ?? 0).rounded())
+            == Structure.ring {
+            // The wheel both opens the sound and brings the product forward.
+            mod(&v, slot: 3, source: ModSource.wheel,
+                destination: ModDestination.ringLevel, amount: 0.12)
+        }
+        if Int((v[addr(R50ParamPatchStructure)] ?? 0).rounded()) == 4 {
+            // Vector patches deliberately leave room above their base position.
+            mod(&v, slot: 3, source: ModSource.wheel,
+                destination: ModDestination.vectorMix, amount: 0.28)
+        }
+    }
+
+    private static func delayedVibrato(
+        _ v: inout [AUParameterAddress: AUValue],
+        amount: AUValue, rate: AUValue
+    ) {
+        put(&v, addr(R50ParamLfo1Rate), rate)
+        put(&v, addr(R50ParamLfo1Delay), 0.28)
+        put(&v, addr(R50ParamLfo1Fade), 0.65)
+        put(&v, addr(R50ParamLfo1Retrigger), 1)
+        mod(&v, slot: 1, source: ModSource.lfo1,
+            destination: ModDestination.pitch, amount: amount)
+    }
+
+    /// Ring is a Tone output now, not two hidden halves of the Partial buses.
+    /// State every factory Ring patch's routing explicitly: a little direct
+    /// product for definition, mostly send 1 so it traverses the preset's
+    /// complete serial rack, and a modest alternating stereo position.
+    private static func configureRingOutput(
+        _ v: inout [AUParameterAddress: AUValue], index: Int
+    ) {
+        if Int((v[addr(R50ParamToneStructure)] ?? 0).rounded())
+            == Structure.ring {
+            put(&v, addr(R50ParamToneRingPan), index.isMultiple(of: 2) ? -0.14 : 0.14)
+            // Sync Weight multiplies two near-aligned pulse-family carriers;
+            // their product has a legitimate DC term, so keep that particular
+            // sound in the processed chain rather than leaking it directly.
+            put(&v, addr(R50ParamToneRingDry), index == 8 ? 0 : 0.24)
+            put(&v, addr(R50ParamToneRingSend1), 0.88)
+            put(&v, addr(R50ParamToneRingSend2), 0)
+            put(&v, addr(R50ParamToneRingSend3), 0)
+        }
+        if Int((v[addr(R50ParamToneBStructure)] ?? 0).rounded())
+            == Structure.ring {
+            put(&v, addr(R50ParamToneBRingPan), index.isMultiple(of: 2) ? 0.14 : -0.14)
+            put(&v, addr(R50ParamToneBRingDry), 0.24)
+            put(&v, addr(R50ParamToneBRingSend1), 0.88)
+            put(&v, addr(R50ParamToneBRingSend2), 0)
+            put(&v, addr(R50ParamToneBRingSend3), 0)
+        }
+    }
+
+    private static func mod(
+        _ v: inout [AUParameterAddress: AUValue], slot index: Int,
+        source: Int, destination: Int, target: Int = 0, amount: AUValue
+    ) {
+        put(&v, modSlot(index, R50ModFieldSource), AUValue(source))
+        put(&v, modSlot(index, R50ModFieldDestination), AUValue(destination))
+        put(&v, modSlot(index, R50ModFieldTarget), AUValue(target))
+        put(&v, modSlot(index, R50ModFieldAmount), amount)
+    }
+
+    private static func hasModWheelRoute(
+        _ values: [AUParameterAddress: AUValue]
+    ) -> Bool {
+        for index in 0..<6
+        where Int((values[modSlot(index, R50ModFieldSource)] ?? 0).rounded())
+                == ModSource.wheel
+           && Int((values[modSlot(index, R50ModFieldDestination)] ?? 0).rounded()) != 0
+           && abs(values[modSlot(index, R50ModFieldAmount)] ?? 0) > 0.0001 {
+            return true
+        }
+        return false
+    }
+
     private static func put(
         _ values: inout [AUParameterAddress: AUValue],
         _ address: AUParameterAddress, _ value: AUValue
@@ -537,6 +675,11 @@ enum R50FactoryPresets {
         _ index: Int, _ field: R50FxSlotField
     ) -> AUParameterAddress {
         AUParameterAddress(r50FxSlotParam(Int32(index), field).rawValue)
+    }
+    private static func modSlot(
+        _ index: Int, _ field: R50ModSlotField
+    ) -> AUParameterAddress {
+        AUParameterAddress(r50ModSlotParam(Int32(index), field).rawValue)
     }
     private static func p1(_ field: R50PartialField) -> AUParameterAddress {
         AUParameterAddress(r50PartialParam(0, field).rawValue)
@@ -571,5 +714,12 @@ enum R50FactoryPresets {
 
     private enum Structure {
         static let mix = 0, ring = 1, attackSustain = 2
+    }
+    private enum ModSource {
+        static let lfo1 = 1, lfo2 = 2, velocity = 6, wheel = 8
+    }
+    private enum ModDestination {
+        static let pitch = 1, cutoff = 2, pan = 5
+        static let ringLevel = 11, vectorMix = 12
     }
 }
