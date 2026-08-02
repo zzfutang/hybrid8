@@ -1659,6 +1659,61 @@ int main() {
             check(glidedLate > 0.5 * straightLate
                && glidedLate < 2.0 * straightLate,
                   "a finished glide sustains at the same level as no glide");
+
+            // Legato mode: a detached second note starts on pitch (identical
+            // to glide off); an overlapped one slides.
+            auto legatoTransition = [](float glideSeconds, bool overlap) {
+                r50::R50Engine engine;
+                setupSpectralTone(engine, 0);
+                engine.setParameter(R50ParamVoiceMode, 1.0f);
+                engine.setParameter(R50ParamGlideTime, glideSeconds);
+                engine.setParameter(R50ParamGlideMode, 1.0f);
+                engine.noteOn(48, 100);
+                (void)renderBuffer(engine, 0.20);
+                if (!overlap) {
+                    engine.noteOff(48);
+                    (void)renderBuffer(engine, 1.0);   // fully released
+                }
+                engine.noteOn(60, 100);
+                return renderBuffer(engine, 0.30);
+            };
+            const auto detachedOff = legatoTransition(0.0f, false);
+            const auto detachedOn = legatoTransition(0.25f, false);
+            double detachedDiff = 0.0;
+            for (size_t i = 0; i < detachedOff.size(); ++i)
+                detachedDiff += std::fabs(detachedOff[i] - detachedOn[i]);
+            check(detachedDiff < 1.0e-3,
+                  "legato mode leaves a detached note starting on pitch");
+            const auto overlappedOff = legatoTransition(0.0f, true);
+            const auto overlappedOn = legatoTransition(0.25f, true);
+            double overlappedDiff = 0.0;
+            const size_t overlapEarly = static_cast<size_t>(0.10 * kSR);
+            for (size_t i = 0; i < overlapEarly; ++i)
+                overlappedDiff += std::fabs(overlappedOff[i] - overlappedOn[i]);
+            check(overlappedDiff > 1.0,
+                  "legato mode slides a fingered transition");
+
+            // The trajectory family: exact endpoints and monotonic for every
+            // shape; ease-out departs at once, the S leans out slowly and
+            // eases onto the target.
+            bool endpoints = true, monotonic = true;
+            for (float shape : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f}) {
+                endpoints &= std::fabs(r50::glideCurve(0.0f, shape)) < 1e-6f
+                          && std::fabs(r50::glideCurve(1.0f, shape) - 1) < 1e-6f;
+                float previous = 0.0f;
+                for (int i = 1; i <= 64; ++i) {
+                    const float value = r50::glideCurve(i / 64.0f, shape);
+                    monotonic &= value >= previous - 1e-6f;
+                    previous = value;
+                }
+            }
+            check(endpoints, "every glide shape starts and lands exactly");
+            check(monotonic, "every glide shape is monotonic");
+            check(r50::glideCurve(0.1f, 0.0f) > 0.15f,
+                  "ease-out departs the old pitch immediately");
+            check(r50::glideCurve(0.1f, 1.0f) < 0.03f
+               && r50::glideCurve(0.9f, 1.0f) > 0.97f,
+                  "the S shape leans out slowly and eases onto the target");
         }
 
         bool adaptersEverywhere = true;

@@ -28,6 +28,23 @@ static constexpr int kPartialsPerVoice = kTonesPerVoice * kPartialsPerTone;
 /// rather than the other way round.
 static constexpr int kControlBlockForLfo = 32;
 
+/// The glide trajectory: pitch progress (0..1) at phase t (0..1). Shape 0 is
+/// a quadratic ease-out — the immediate departure and slowing arrival of an
+/// RC portamento. Shape 1 is a full S (smootherstep): the note leans out of
+/// the old pitch, moves quickly mid-flight, and eases onto the target. The
+/// knob blends through the straight line between them. Every shape starts at
+/// exactly 0, ends at exactly 1, and is monotonic.
+inline float glideCurve(float t, float shape) {
+    const float easeOut = 1.0f - (1.0f - t) * (1.0f - t);
+    const float sCurve  = t * t * t * (t * (6.0f * t - 15.0f) + 10.0f);
+    if (shape <= 0.5f) {
+        const float toward = shape * 2.0f;          // ease-out .. linear
+        return easeOut + (t - easeOut) * toward;
+    }
+    const float toward = shape * 2.0f - 1.0f;       // linear .. full S
+    return t + (sCurve - t) * toward;
+}
+
 enum class ToneStructure {
     Mix = 0,
     RingMod,
@@ -126,7 +143,7 @@ public:
         velocity_ = velocity;
         held_     = true;
         active_   = true;
-        glideOffset_ = 0.0;   // the engine re-arms glide after this call
+        glidePhase_ = 1.0;   // the engine re-arms glide after this call
         blendPosition_[0] = blendPosition_[1] = 0.0;
         for (int tone = 0; tone < kTonesPerVoice; ++tone) {
             ringDcInput_[tone] = ringDcOutput_[tone] = 0.0f;
@@ -174,11 +191,14 @@ public:
     int  note() const { return note_; }
 
     /// Arm a pitch glide: the voice starts `fromSemitones` away from its note
-    /// and decays toward it by `coefPerBlock` every control block. Called by
-    /// the engine right after noteOn, which cleared any previous glide.
-    void setGlide(double fromSemitones, double coefPerBlock) {
-        glideOffset_ = fromSemitones;
-        glideCoef_   = coefPerBlock;
+    /// and travels home over exactly 1/stepPerBlock control blocks, following
+    /// glideCurve(shape). Called by the engine right after noteOn, which
+    /// cleared any previous glide.
+    void setGlide(double fromSemitones, double stepPerBlock, float shape) {
+        glideFrom_  = fromSemitones;
+        glidePhase_ = 0.0;
+        glideStep_  = stepPerBlock;
+        glideShape_ = shape;
     }
 
     /// Rough "how disposable is this voice" score for stealing (lower = safer).
@@ -194,11 +214,13 @@ public:
     void updateBlock(const VoiceParams &p, double pitchBendSemitones,
                      float modWheel, float aftertouch) {
         // Glide rides the same per-block semitone path as pitch bend: the
-        // note starts offset toward the previous pitch and settles home.
-        if (glideOffset_ != 0.0) {
-            pitchBendSemitones += glideOffset_;
-            glideOffset_ *= glideCoef_;
-            if (std::fabs(glideOffset_) < 0.001) glideOffset_ = 0.0;
+        // note starts offset toward the previous pitch and travels home
+        // along the shaped trajectory.
+        if (glidePhase_ < 1.0) {
+            const float progress = glideCurve(
+                static_cast<float>(glidePhase_), glideShape_);
+            pitchBendSemitones += glideFrom_ * (1.0 - progress);
+            glidePhase_ = std::min(1.0, glidePhase_ + glideStep_);
         }
         structure_[0] = p.structure;
         structure_[1] = p.toneB.structure;
@@ -402,8 +424,10 @@ private:
 
     double sampleRate_ = 44100.0;
     int    note_       = -1;
-    double glideOffset_ = 0.0;
-    double glideCoef_   = 0.0;
+    double glideFrom_  = 0.0;
+    double glidePhase_ = 1.0;   // 1 = no glide in flight
+    double glideStep_  = 1.0;
+    float  glideShape_ = 0.0f;
     float  velocity_   = 1.0f;
     bool   held_       = false;
     bool   active_     = false;

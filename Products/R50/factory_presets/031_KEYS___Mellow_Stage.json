@@ -278,6 +278,8 @@
     "partial4.p4Slope" : 1,
     "partial4.p4SourceType" : 0,
     "partial4.p4Wave" : 0,
+    "patch.glideMode" : 0,
+    "patch.glideShape" : 0,
     "patch.glideTime" : 0,
     "patch.patchSplitPoint" : 60,
     "patch.patchStructure" : 0,

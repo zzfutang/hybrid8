@@ -56,6 +56,7 @@ enum R50Parameters {
         "Layer", "Key Split", "Velocity Split", "Velocity XF", "Vector Mix"
     ]
     static let voiceModeNames = ["Poly", "Mono"]
+    static let glideModeNames = ["Always", "Legato"]
     static let effectRoutingNames = ["Insert", "Send"]
     static let effectAlgorithmNames = [
         "Off", "Hall", "Room", "Plate/Stage", "Early Reflections",
@@ -322,6 +323,11 @@ enum R50Parameters {
                       strings: voiceModeNames),
                 param(R50ParamGlideTime, "glideTime", "Glide",
                       min: 0, max: 2, value: 0, unit: .seconds),
+                param(R50ParamGlideMode, "glideMode", "Glide Mode",
+                      min: 0, max: 1, value: 0, unit: .indexed,
+                      strings: glideModeNames),
+                param(R50ParamGlideShape, "glideShape", "Glide Shape",
+                      min: 0, max: 1, value: 0),
                 param(R50ParamPatchSplitPoint, "patchSplitPoint", "Split Point",
                       min: 0, max: 127, value: 60, unit: .indexed),
                 param(R50ParamPatchVelocitySplit, "patchVelocitySplit",

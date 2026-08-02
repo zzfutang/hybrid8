@@ -772,7 +772,14 @@ struct R50View: View {
                                     model: model)
                         R50Value(title: "Glide", address: R50ParamGlideTime,
                                  model: model)
+                        R50Value(title: "Shape", address: R50ParamGlideShape,
+                                 model: model)
+                            .help("Glide trajectory: 0 eases out of the start like an analog portamento, 0.5 is a straight line, 1 is an S — leaning out of the old note, quick mid-flight, easing onto the target.")
                     }
+                    R50Selector(title: "Glide Mode", address: R50ParamGlideMode,
+                                options: R50Parameters.glideModeNames,
+                                model: model)
+                        .help("Always: every note slides from the previous pitch. Legato: only a note played while another key is held slides — detached notes start on pitch.")
                     Text(patchHelp)
                         .font(.system(size: 8, weight: .medium,
                                       design: .monospaced))

@@ -176,6 +176,11 @@ typedef enum R50Param : unsigned long long {
     R50ParamVoiceMode,
     // Seconds for a new note to settle from the previous pitch; 0 = off.
     R50ParamGlideTime,
+    // 0 = always glide; 1 = legato (fingered portamento): only a note played
+    // while another key is still held slides, detached notes start on pitch.
+    R50ParamGlideMode,
+    // Trajectory: 0 = ease-out (RC portamento), 0.5 = linear, 1 = full S.
+    R50ParamGlideShape,
 
     R50ParamCount
 } R50Param;

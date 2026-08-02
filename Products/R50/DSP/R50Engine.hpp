@@ -108,17 +108,23 @@ public:
         // parameter writes that landed since the last control block.
         snapshotParams();
 
+        // Fingered portamento wants to know whether another key was still
+        // down when this one arrived — checked before this key is marked.
+        bool legato = false;
+        for (int key = 0; key < 128; ++key) {
+            if (keyDown_[key] && key != (note & 0x7F)) { legato = true; break; }
+        }
         keyDown_[note & 0x7F] = true;
 
         if (get(R50ParamVoiceMode) >= 0.5f) {
-            monoNoteOn(note, velocity);
+            monoNoteOn(note, velocity, legato);
             return;
         }
 
         // Re-use the voice already playing this note (retrigger) if there is one.
         Voice *voice = findVoice(note);
         if (voice == nullptr) voice = allocateVoice();
-        startVoice(*voice, note, velocity);
+        startVoice(*voice, note, velocity, legato);
     }
 
     void noteOff(uint8_t note) {
@@ -539,6 +545,8 @@ private:
         set(R50ParamMacro3, 0.0f); set(R50ParamMacro4, 0.0f);
         set(R50ParamVoiceMode, 0.0f);
         set(R50ParamGlideTime, 0.0f);
+        set(R50ParamGlideMode, 0.0f);
+        set(R50ParamGlideShape, 0.0f);
 
         for (int partial = 0; partial < kPartialsPerVoice; ++partial) {
             // Every source feeds the main path at unity; the main path runs
@@ -848,21 +856,26 @@ private:
         return quietest;
     }
 
-    void startVoice(Voice &voice, uint8_t note, uint8_t velocity) {
+    void startVoice(Voice &voice, uint8_t note, uint8_t velocity, bool legato) {
         voice.noteOn(note, velocity / 127.0f, params_,
                      static_cast<float>(sharedLfoPhase_[0]),
                      modWheel_, aftertouch_,
                      static_cast<float>(sharedVectorPhase_));
 
         // Glide: the new note starts at the previously played pitch and
-        // settles home. Constant-time exponential — a fifth and an octave
-        // both land within the stated time, which is what fingers expect.
+        // travels home over exactly the stated time — a fifth and an octave
+        // both land together, which is what fingers expect — along the
+        // trajectory Glide Shape picks. In Legato mode only fingered
+        // transitions slide; a detached note starts on pitch, which is the
+        // playable portamento of a mono lead.
         const float glideTime = get(R50ParamGlideTime);
-        if (glideTime > 0.001f && lastPlayedNote_ >= 0
+        const bool wantsGlide = get(R50ParamGlideMode) < 0.5f || legato;
+        if (glideTime > 0.001f && wantsGlide && lastPlayedNote_ >= 0
             && lastPlayedNote_ != static_cast<int>(note)) {
-            const double tau = static_cast<double>(glideTime) / 5.0;
-            const double coef = std::exp(-kControlBlock / (sampleRate_ * tau));
-            voice.setGlide(static_cast<double>(lastPlayedNote_) - note, coef);
+            const double step = kControlBlock
+                              / (sampleRate_ * static_cast<double>(glideTime));
+            voice.setGlide(static_cast<double>(lastPlayedNote_) - note, step,
+                           synth::clampf(get(R50ParamGlideShape), 0.0f, 1.0f));
         }
         lastPlayedNote_ = note;
     }
@@ -892,7 +905,7 @@ private:
         }
     }
 
-    void monoNoteOn(uint8_t note, uint8_t velocity) {
+    void monoNoteOn(uint8_t note, uint8_t velocity, bool legato) {
         monoRemove(note);
         if (monoDepth_ == kMonoStackDepth) {   // full: forget the oldest key
             for (int i = 0; i + 1 < monoDepth_; ++i) {
@@ -903,7 +916,7 @@ private:
         monoStack_[monoDepth_++] = {note, velocity};
         Voice *voice = monoVoice();
         if (voice == nullptr) voice = allocateVoice();
-        startVoice(*voice, note, velocity);
+        startVoice(*voice, note, velocity, legato);
     }
 
     void monoNoteOff(uint8_t note) {
@@ -914,9 +927,10 @@ private:
         if (!wasSounding) return;  // an inner held key released silently
         Voice *voice = monoVoice();
         if (monoDepth_ > 0) {
+            // Returning to a held key is legato by definition.
             const MonoKey key = monoStack_[monoDepth_ - 1];
             if (voice == nullptr) voice = allocateVoice();
-            startVoice(*voice, key.note, key.velocity);
+            startVoice(*voice, key.note, key.velocity, true);
         } else if (voice != nullptr) {
             voice->noteOff();
         }
