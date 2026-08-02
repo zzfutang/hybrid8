@@ -157,9 +157,28 @@ enum R50FactoryPresets {
     }
 
     private static func bass(_ name: String, _ i: Int) -> R50FactoryPreset {
+        // A bass whose name promises an instrument is built on its
+        // multisample; the rest stay virtual-analog waves. Sampled basses get
+        // a much higher cutoff — the recording already has the right
+        // spectrum, and the slap transient is the sound.
+        let sampled: [Int: String] = [
+            1: Instrument.slapBass,        // Slap Circuit
+            3: Instrument.pickedBass,      // Resonant Pick
+            7: Instrument.acousticBass,    // Fretless Air
+            10: Instrument.slapBass,       // Digi Thumb
+        ]
         let wave = [0, 0, 1, 4, 2, 4, 0, 7, 3, 0, 2, 0][i]
-        var v = base(wave: wave, cutoff: 260 + AUValue(i) * 75,
+        var assets: [Int: String] = [:]
+        var v: [AUParameterAddress: AUValue]
+        if let sample = sampled[i] {
+            v = sampleBase(sample, &assets,
+                           cutoff: 2400 + AUValue(i) * 120,
+                           attack: 0.002,
+                           release: 0.08 + AUValue(i % 4) * 0.04)
+        } else {
+            v = base(wave: wave, cutoff: 260 + AUValue(i) * 75,
                      attack: 0.002, release: 0.08 + AUValue(i % 4) * 0.04)
+        }
         put(&v, p1(R50FieldOctave), -1)
         put(&v, p1(R50FieldSlope), 1)
         put(&v, p1(R50FieldResonance), 0.25 + AUValue(i % 4) * 0.11)
@@ -168,12 +187,7 @@ enum R50FactoryPresets {
         put(&v, p1(R50FieldFilterSustain), i == 7 ? 0.45 : 0.05)
         put(&v, p1(R50FieldAmpDecay), 0.35 + AUValue(i % 4) * 0.18)
         put(&v, p1(R50FieldAmpSustain), 0.45 + AUValue(i % 3) * 0.12)
-        var assets: [Int: String] = [:]
-        if i == 1 || i == 3 || i == 10 {
-            attackSustain(&v, &assets,
-                          attack: i == 3 ? Instrument.pick : Instrument.slapBass,
-                          sustainWave: wave, blend: 0.035)
-        } else if i == 2 || i == 6 || i == 11 {
+        if i == 2 || i == 6 || i == 11 {
             enable(&v, partial: 1, wave: 1, octave: -2, level: 0.32,
                    pan: 0, fine: 0)
         }
@@ -184,6 +198,8 @@ enum R50FactoryPresets {
                    pan: 0, fine: 3)
         }
         addDrive(&v, amount: 0.18 + AUValue(i % 3) * 0.09)
+        put(&v, addr(R50ParamVoiceMode), 1)   // a bass is monophonic
+        if i == 7 { put(&v, addr(R50ParamGlideTime), 0.09) }  // fretless slides
         return R50FactoryPreset(name: name, values: v, sampleAssets: assets)
     }
 
@@ -216,6 +232,8 @@ enum R50FactoryPresets {
             put(&v, p1(R50FieldAmpRelease), 0.16)
             put(&v, p1(R50FieldPitchAmount), i == 14 ? 12 : 2)
             put(&v, p1(R50FieldPitchDecay), 0.08)
+            put(&v, addr(R50ParamVoiceMode), 1)   // a lead is monophonic
+            put(&v, addr(R50ParamGlideTime), 0.05) // a touch of portamento
         }
         addChorus(&v, mix: i % 3 == 0 ? 0.28 : 0.16)
         if i % 4 == 2 { addDelay(&v, time: 0.24, feedback: 0.28, mix: 0.22) }
@@ -804,6 +822,8 @@ enum R50FactoryPresets {
         static let kalimba = "factory.harp"
         static let slapBass = "factory.slap_bass_multisample"
         static let pullBass = "factory.picked_bass"
+        static let pickedBass = "factory.picked_bass"
+        static let acousticBass = "factory.acoustic_bass"
         static let pick = "factory.acoustic_guitar"
         static let pianoHammer = "factory.piano_multisample"
         static let anvil = "factory.anvil"

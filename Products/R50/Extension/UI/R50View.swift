@@ -182,14 +182,7 @@ struct R50View: View {
                 newPatchName = model.presetIndex < 0 ? model.presetName : ""
                 showingSavePatch = true
             } label: {
-                Text("SAVE")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .tracking(0.8)
-                    .foregroundColor(R50Palette.legend)
-                    .frame(width: 46, height: 24)
-                    .background(Color(white: 0.15))
-                    .overlay(RoundedRectangle(cornerRadius: 2)
-                        .stroke(Color(white: 0.30), lineWidth: 1))
+                browserButtonLabel("SAVE", width: 46)
             }
             .buttonStyle(.plain)
         }
@@ -215,6 +208,18 @@ struct R50View: View {
             Text(patchSaveError)
         }
     }
+
+    private func browserButtonLabel(_ title: String, width: CGFloat) -> some View {
+        Text(title)
+            .font(.system(size: 8, weight: .bold, design: .monospaced))
+            .tracking(0.8)
+            .foregroundColor(R50Palette.legend)
+            .frame(width: width, height: 24)
+            .background(Color(white: 0.15))
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color(white: 0.30), lineWidth: 1))
+    }
+
 
     private var presetList: some View {
         ScrollView {
@@ -611,14 +616,13 @@ struct R50View: View {
                                 (R50ParamToneRingSend2, R50ParamToneBRingSend2),
                                 (R50ParamToneRingSend3, R50ParamToneBRingSend3),
                             ]
-                            let active = model.value(r50FxSlotParam(
-                                Int32(slot), R50FxFieldRouting)) >= 0.5
                             R50Value(title: "Ring S\(slot + 1)",
                                 address: toneParam(sendParams[slot].0,
                                                    sendParams[slot].1),
                                 model: model)
-                                .disabled(structure != 1 || !active)
-                                .opacity(structure == 1 && active ? 1 : 0.32)
+                                .disabled(structure != 1)
+                                .opacity(structure == 1 ? 1 : 0.32)
+                                .help("Feeds FX Slot \(slot + 1); audible once that slot's Routing is Send.")
                         }
                     }
                     R50Value(title: "Blend Time",
@@ -664,21 +668,18 @@ struct R50View: View {
                                                                R50FieldDryLevel),
                                      model: model)
                             HStack(spacing: 5) {
+                                // Always editable, like a hardware send knob:
+                                // the level can be set before the slot is
+                                // switched to Send, and only takes effect once
+                                // it is. Dimming these read as broken.
                                 ForEach(0..<3, id: \.self) { slot in
-                                    // A send knob only reaches a slot that is
-                                    // routed as a send; dim the ones aimed at
-                                    // inserts instead of hiding them, so the
-                                    // row keeps its shape while editing.
-                                    let active = model.value(r50FxSlotParam(
-                                        Int32(slot), R50FxFieldRouting)) >= 0.5
                                     R50Value(title: "Send \(slot + 1)",
                                         address: r50PartialParam(Int32(index),
                                             R50PartialField(
                                                 rawValue: R50FieldSend1.rawValue
                                                     + UInt32(slot))),
                                         model: model)
-                                        .disabled(!active)
-                                        .opacity(active ? 1 : 0.32)
+                                        .help("Feeds FX Slot \(slot + 1); audible once that slot's Routing is Send.")
                                 }
                             }
                         }
@@ -716,6 +717,14 @@ struct R50View: View {
                                 address: R50ParamPatchStructure,
                                 options: R50Parameters.patchStructureNames,
                                 columns: 3, model: model)
+                    HStack(alignment: .top, spacing: 8) {
+                        R50Selector(title: "Voice Assign",
+                                    address: R50ParamVoiceMode,
+                                    options: R50Parameters.voiceModeNames,
+                                    model: model)
+                        R50Value(title: "Glide", address: R50ParamGlideTime,
+                                 model: model)
+                    }
                     Text(patchHelp)
                         .font(.system(size: 8, weight: .medium,
                                       design: .monospaced))

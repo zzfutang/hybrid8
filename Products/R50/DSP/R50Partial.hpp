@@ -127,6 +127,13 @@ public:
                 float startOffset = 0.0f) {
         note_     = note;
         velocity_ = velocity;
+        // Loudness follows a squared curve — about -12 dB per halving of
+        // velocity — because amplitude linear in velocity is dynamically
+        // flat: mezzo-forte sat only 6 dB under fortissimo. Everything else
+        // that consumes velocity (region selection, velocity splits and
+        // crossfades, the matrix source) stays linear; only loudness is
+        // perceptual.
+        ampVelocity_ = velocity * velocity;
         active_   = p.enabled;
         if (!p.enabled) return;
 
@@ -275,9 +282,9 @@ public:
         float out;
         if (shaper_.position() == ShaperPosition::PreFilter) {
             source = shaper_.process(source);
-            out = filter_.process(source) * ampLevel_ * velocity_;
+            out = filter_.process(source) * ampLevel_ * ampVelocity_;
         } else {
-            out = shaper_.process(filter_.process(source)) * ampLevel_ * velocity_;
+            out = shaper_.process(filter_.process(source)) * ampLevel_ * ampVelocity_;
         }
 
         // A one-shot sample that has played to its end can never produce
@@ -353,6 +360,7 @@ private:
     double sampleRate_  = 44100.0;
     int    note_        = -1;
     float  velocity_    = 1.0f;
+    float  ampVelocity_ = 1.0f;   // velocity_^2: the loudness curve
     bool   active_      = false;
     SourceType sourceType_ = SourceType::Wave;
 

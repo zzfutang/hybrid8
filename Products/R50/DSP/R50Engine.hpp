@@ -21,6 +21,22 @@ static constexpr int kNumVoices   = 8;
 /// Control-rate block: filter coefficients and pitch update this often.
 static constexpr int kControlBlock = 32;
 
+/// The output safety ceiling. Bit-transparent below the knee and a smooth,
+/// monotonic bend into 1.0 above it — a safety device, not a colour. The
+/// tanh-style softClip it replaced bent the curve at every level, and the
+/// harmonics it added to a single loud top-octave note folded over Nyquist
+/// as measurable aliasing once the gain staging stopped hiding everything
+/// 10 dB down.
+inline float outputLimit(float x) {
+    constexpr float knee = 0.75f;
+    const float magnitude = std::fabs(x);
+    if (magnitude <= knee) return x;
+    const float span = 1.0f - knee;
+    const float t = (magnitude - knee) / span;   // 0.. as the input rises
+    const float shaped = knee + span * (t / (1.0f + t));  // asymptote at 1.0
+    return std::copysign(shaped, x);
+}
+
 class R50Engine {
 public:
     R50Engine() {
@@ -94,13 +110,15 @@ public:
 
         keyDown_[note & 0x7F] = true;
 
+        if (get(R50ParamVoiceMode) >= 0.5f) {
+            monoNoteOn(note, velocity);
+            return;
+        }
+
         // Re-use the voice already playing this note (retrigger) if there is one.
         Voice *voice = findVoice(note);
         if (voice == nullptr) voice = allocateVoice();
-        voice->noteOn(note, velocity / 127.0f, params_,
-                      static_cast<float>(sharedLfoPhase_[0]),
-                      modWheel_, aftertouch_,
-                      static_cast<float>(sharedVectorPhase_));
+        startVoice(*voice, note, velocity);
     }
 
     void noteOff(uint8_t note) {
@@ -108,6 +126,12 @@ public:
         // consults keyDown_, so a note retriggered while the pedal is held is
         // not released out from under the player.
         keyDown_[note & 0x7F] = false;
+
+        if (get(R50ParamVoiceMode) >= 0.5f) {
+            monoNoteOff(note);
+            return;
+        }
+
         if (sustain_) return;
 
         for (auto &voice : voices_) {
@@ -145,6 +169,8 @@ public:
             if (voice.isActive()) voice.noteOff();
         }
         std::memset(keyDown_, 0, sizeof(keyDown_));
+        monoDepth_ = 0;
+        lastPlayedNote_ = -1;
     }
 
     void allSoundOff() {
@@ -153,6 +179,8 @@ public:
         auditionHold_ = 0;
         effects_.reset();
         std::memset(keyDown_, 0, sizeof(keyDown_));
+        monoDepth_ = 0;
+        lastPlayedNote_ = -1;
     }
 
     void setTempo(double) {}   // R50 has no tempo-synced sources (yet).
@@ -309,11 +337,14 @@ public:
                 // 0.25 was sized for eight voices all peaking together, which
                 // left a single note at -20 dBFS; the soft clip exists exactly
                 // to catch the rare moment when a dense chord does line up.
-                rackInput.dry.l *= 0.55f;
-                rackInput.dry.r *= 0.55f;
+                // 0.55 in turn measured a four-note chord at -10 dBFS median
+                // across the factory bank — quiet enough to read as a fault —
+                // so the scale trusts the clip a little further still.
+                rackInput.dry.l *= 0.9f;
+                rackInput.dry.r *= 0.9f;
                 for (StereoSample &send : rackInput.send) {
-                    send.l *= 0.55f;
-                    send.r *= 0.55f;
+                    send.l *= 0.9f;
+                    send.r *= 0.9f;
                 }
 
                 // Effects run before the master trim, so moving the output
@@ -335,9 +366,9 @@ public:
 
                 const float gain = gainSmoother_.next();
                 const float sumL =
-                    synth::softClip((wet.l + auditionL * kAuditionLevel) * gain);
+                    outputLimit((wet.l + auditionL * kAuditionLevel) * gain);
                 const float sumR =
-                    synth::softClip((wet.r + auditionR * kAuditionLevel) * gain);
+                    outputLimit((wet.r + auditionR * kAuditionLevel) * gain);
 
                 outL[offset + i] = sumL;
                 outR[offset + i] = sumR;
@@ -379,7 +410,7 @@ private:
         set(R50ParamFilterDecay,     0.45f);
         set(R50ParamFilterSustain,   0.30f);
         set(R50ParamFilterRelease,   0.30f);
-        set(R50ParamMasterGain,      0.8f);
+        set(R50ParamMasterGain,      0.9f);
         set(R50ParamPitchBendRange,  2.0f);
         set(R50ParamNoiseMix,        0.0f);
         set(R50ParamNoiseSpectrum,   0.0f);   // white
@@ -506,6 +537,8 @@ private:
         }
         set(R50ParamMacro1, 0.0f); set(R50ParamMacro2, 0.0f);
         set(R50ParamMacro3, 0.0f); set(R50ParamMacro4, 0.0f);
+        set(R50ParamVoiceMode, 0.0f);
+        set(R50ParamGlideTime, 0.0f);
 
         for (int partial = 0; partial < kPartialsPerVoice; ++partial) {
             // Every source feeds the main path at unity; the main path runs
@@ -815,6 +848,80 @@ private:
         return quietest;
     }
 
+    void startVoice(Voice &voice, uint8_t note, uint8_t velocity) {
+        voice.noteOn(note, velocity / 127.0f, params_,
+                     static_cast<float>(sharedLfoPhase_[0]),
+                     modWheel_, aftertouch_,
+                     static_cast<float>(sharedVectorPhase_));
+
+        // Glide: the new note starts at the previously played pitch and
+        // settles home. Constant-time exponential — a fifth and an octave
+        // both land within the stated time, which is what fingers expect.
+        const float glideTime = get(R50ParamGlideTime);
+        if (glideTime > 0.001f && lastPlayedNote_ >= 0
+            && lastPlayedNote_ != static_cast<int>(note)) {
+            const double tau = static_cast<double>(glideTime) / 5.0;
+            const double coef = std::exp(-kControlBlock / (sampleRate_ * tau));
+            voice.setGlide(static_cast<double>(lastPlayedNote_) - note, coef);
+        }
+        lastPlayedNote_ = note;
+    }
+
+    // ---- Monophonic voice handling ---------------------------------------
+    //
+    // Last-note priority with a held-key stack: a new key replaces the
+    // sounding pitch, and releasing it returns to the most recent key still
+    // down — the trill behaviour every mono bass and lead has taught players
+    // to expect. Fixed storage; note events run on the render thread.
+
+    Voice *monoVoice() {
+        for (auto &voice : voices_) {
+            if (voice.isActive() && voice.isHeld()) return &voice;
+        }
+        return nullptr;
+    }
+
+    void monoRemove(uint8_t note) {
+        for (int i = 0; i < monoDepth_; ++i) {
+            if (monoStack_[i].note != note) continue;
+            for (int j = i; j + 1 < monoDepth_; ++j) {
+                monoStack_[j] = monoStack_[j + 1];
+            }
+            --monoDepth_;
+            return;
+        }
+    }
+
+    void monoNoteOn(uint8_t note, uint8_t velocity) {
+        monoRemove(note);
+        if (monoDepth_ == kMonoStackDepth) {   // full: forget the oldest key
+            for (int i = 0; i + 1 < monoDepth_; ++i) {
+                monoStack_[i] = monoStack_[i + 1];
+            }
+            --monoDepth_;
+        }
+        monoStack_[monoDepth_++] = {note, velocity};
+        Voice *voice = monoVoice();
+        if (voice == nullptr) voice = allocateVoice();
+        startVoice(*voice, note, velocity);
+    }
+
+    void monoNoteOff(uint8_t note) {
+        const bool wasSounding = monoDepth_ > 0
+            && monoStack_[monoDepth_ - 1].note == note;
+        monoRemove(note);
+        if (sustain_) return;      // CC64 keeps the gate open, as in poly
+        if (!wasSounding) return;  // an inner held key released silently
+        Voice *voice = monoVoice();
+        if (monoDepth_ > 0) {
+            const MonoKey key = monoStack_[monoDepth_ - 1];
+            if (voice == nullptr) voice = allocateVoice();
+            startVoice(*voice, key.note, key.velocity);
+        } else if (voice != nullptr) {
+            voice->noteOff();
+        }
+    }
+
     // Written by the host/UI from any thread; read on the render thread.
     std::atomic<float> store_[R50ParamCount];
 
@@ -831,11 +938,18 @@ private:
     /// Physical key state, independent of the CC64 gate hold.
     bool   keyDown_[128] = {false};
 
+    struct MonoKey { uint8_t note; uint8_t velocity; };
+    static constexpr int kMonoStackDepth = 32;
+    MonoKey monoStack_[kMonoStackDepth] = {};
+    int     monoDepth_ = 0;
+    /// Where a glide departs from: the last pitch any voice was started at.
+    int     lastPlayedNote_ = -1;
+
     // Sample-browser preview. The request word is the only thing crossing
     // threads; everything derived from it lives on the render thread, exactly
     // as the parameter store does.
     static constexpr double kAuditionSeconds = 1.5;
-    static constexpr float  kAuditionLevel   = 0.55f;   // matches the voice sum
+    static constexpr float  kAuditionLevel   = 0.9f;    // matches the voice sum
     std::atomic<uint64_t> auditionRequest_{0};
     std::atomic<uint64_t> auditionSequence_{0};
     uint64_t    auditionSeen_ = 0;

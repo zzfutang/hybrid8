@@ -55,6 +55,7 @@ enum R50Parameters {
     static let patchStructureNames = [
         "Layer", "Key Split", "Velocity Split", "Velocity XF", "Vector Mix"
     ]
+    static let voiceModeNames = ["Poly", "Mono"]
     static let effectRoutingNames = ["Insert", "Send"]
     static let effectAlgorithmNames = [
         "Off", "Hall", "Room", "Plate/Stage", "Early Reflections",
@@ -316,6 +317,11 @@ enum R50Parameters {
                 param(R50ParamPatchStructure, "patchStructure", "Patch Structure",
                       min: 0, max: AUValue(patchStructureNames.count - 1),
                       value: 0, unit: .indexed, strings: patchStructureNames),
+                param(R50ParamVoiceMode, "voiceMode", "Voice Mode",
+                      min: 0, max: 1, value: 0, unit: .indexed,
+                      strings: voiceModeNames),
+                param(R50ParamGlideTime, "glideTime", "Glide",
+                      min: 0, max: 2, value: 0, unit: .seconds),
                 param(R50ParamPatchSplitPoint, "patchSplitPoint", "Split Point",
                       min: 0, max: 127, value: 60, unit: .indexed),
                 param(R50ParamPatchVelocitySplit, "patchVelocitySplit",
@@ -446,7 +452,7 @@ enum R50Parameters {
         let global = AUParameterTree.createGroup(
             withIdentifier: "global", name: "Global", children: [
                 param(R50ParamMasterGain, "masterGain", "Master",
-                      min: 0, max: 1, value: 0.8),
+                      min: 0, max: 1, value: 0.9),
                 param(R50ParamPitchBendRange, "bendRange", "Bend Range",
                       min: 0, max: 24, value: 2, unit: .indexed),
             ])

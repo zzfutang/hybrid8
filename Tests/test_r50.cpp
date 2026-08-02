@@ -1589,6 +1589,78 @@ int main() {
         check(routedPartialPeak(1, 2) > 0.001f,
               "Partial 2 routes independently to a global slot");
 
+        // ---- Monophonic voice mode ------------------------------------
+        {
+            auto rmsTail = [](const std::vector<float> &buffer, size_t from) {
+                double sum = 0.0;
+                for (size_t i = from; i < buffer.size(); ++i)
+                    sum += static_cast<double>(buffer[i]) * buffer[i];
+                return std::sqrt(sum / static_cast<double>(buffer.size() - from));
+            };
+            auto heldPairRms = [&](bool mono) {
+                r50::R50Engine engine;
+                setupSpectralTone(engine, 0);
+                engine.setParameter(R50ParamVoiceMode, mono ? 1.0f : 0.0f);
+                engine.noteOn(48, 100);
+                engine.noteOn(60, 100);
+                const auto buffer = renderBuffer(engine, 0.30);
+                return rmsTail(buffer, buffer.size() / 2);
+            };
+            const double monoRms = heldPairRms(true);
+            const double polyRms = heldPairRms(false);
+            check(monoRms > 1.0e-4, "mono mode sounds");
+            check(polyRms > monoRms * 1.2,
+                  "mono holds one voice where poly holds two");
+
+            r50::R50Engine returning;
+            setupSpectralTone(returning, 0);
+            returning.setParameter(R50ParamVoiceMode, 1.0f);
+            returning.noteOn(48, 100);
+            (void)renderBuffer(returning, 0.05);
+            returning.noteOn(60, 100);
+            (void)renderBuffer(returning, 0.05);
+            returning.noteOff(60);
+            const auto returned = renderBuffer(returning, 0.30);
+            check(rmsTail(returned, returned.size() / 2) > monoRms * 0.25,
+                  "releasing the top mono key returns to the held key");
+
+            returning.noteOff(48);
+            const auto released = renderBuffer(returning, 1.0);
+            check(rmsTail(released, released.size() * 3 / 4) < monoRms * 0.05,
+                  "releasing the last mono key releases the voice");
+        }
+
+        // ---- Glide ----------------------------------------------------
+        {
+            auto transition = [](float glideSeconds) {
+                r50::R50Engine engine;
+                setupSpectralTone(engine, 0);
+                engine.setParameter(R50ParamVoiceMode, 1.0f);
+                engine.setParameter(R50ParamGlideTime, glideSeconds);
+                engine.noteOn(48, 100);
+                (void)renderBuffer(engine, 0.20);
+                engine.noteOn(60, 100);
+                return renderBuffer(engine, 0.50);
+            };
+            const auto straight = transition(0.0f);
+            const auto glided = transition(0.25f);
+            double early = 0.0, late = 0.0;
+            const size_t earlyEnd = static_cast<size_t>(0.10 * kSR);
+            for (size_t i = 0; i < earlyEnd; ++i)
+                early += std::fabs(straight[i] - glided[i]);
+            const size_t lateFrom = static_cast<size_t>(0.40 * kSR);
+            double straightLate = 0.0, glidedLate = 0.0;
+            for (size_t i = lateFrom; i < straight.size(); ++i) {
+                straightLate += std::fabs(straight[i]);
+                glidedLate += std::fabs(glided[i]);
+            }
+            check(early > 1.0,
+                  "glide bends the transition region away from a hard jump");
+            check(glidedLate > 0.5 * straightLate
+               && glidedLate < 2.0 * straightLate,
+                  "a finished glide sustains at the same level as no glide");
+        }
+
         bool adaptersEverywhere = true;
         const r50::EffectAlgorithm adapted[] = {
             r50::EffectAlgorithm::Chorus,

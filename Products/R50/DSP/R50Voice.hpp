@@ -126,6 +126,7 @@ public:
         velocity_ = velocity;
         held_     = true;
         active_   = true;
+        glideOffset_ = 0.0;   // the engine re-arms glide after this call
         blendPosition_[0] = blendPosition_[1] = 0.0;
         for (int tone = 0; tone < kTonesPerVoice; ++tone) {
             ringDcInput_[tone] = ringDcOutput_[tone] = 0.0f;
@@ -172,6 +173,14 @@ public:
     bool isHeld() const { return held_; }
     int  note() const { return note_; }
 
+    /// Arm a pitch glide: the voice starts `fromSemitones` away from its note
+    /// and decays toward it by `coefPerBlock` every control block. Called by
+    /// the engine right after noteOn, which cleared any previous glide.
+    void setGlide(double fromSemitones, double coefPerBlock) {
+        glideOffset_ = fromSemitones;
+        glideCoef_   = coefPerBlock;
+    }
+
     /// Rough "how disposable is this voice" score for stealing (lower = safer).
     float releaseProgress() const {
         if (held_) return 1.0f;
@@ -184,6 +193,13 @@ public:
 
     void updateBlock(const VoiceParams &p, double pitchBendSemitones,
                      float modWheel, float aftertouch) {
+        // Glide rides the same per-block semitone path as pitch bend: the
+        // note starts offset toward the previous pitch and settles home.
+        if (glideOffset_ != 0.0) {
+            pitchBendSemitones += glideOffset_;
+            glideOffset_ *= glideCoef_;
+            if (std::fabs(glideOffset_) < 0.001) glideOffset_ = 0.0;
+        }
         structure_[0] = p.structure;
         structure_[1] = p.toneB.structure;
         ringPan_[0] = p.ringPan;
@@ -386,6 +402,8 @@ private:
 
     double sampleRate_ = 44100.0;
     int    note_       = -1;
+    double glideOffset_ = 0.0;
+    double glideCoef_   = 0.0;
     float  velocity_   = 1.0f;
     bool   held_       = false;
     bool   active_     = false;

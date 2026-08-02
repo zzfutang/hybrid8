@@ -171,6 +171,12 @@ typedef enum R50Param : unsigned long long {
     R50ParamToneBRingSend2,
     R50ParamToneBRingSend3,
 
+    // Patch-level voice allocation: 0 = polyphonic, 1 = monophonic with
+    // last-note priority (releasing returns to the previous held key).
+    R50ParamVoiceMode,
+    // Seconds for a new note to settle from the previous pitch; 0 = off.
+    R50ParamGlideTime,
+
     R50ParamCount
 } R50Param;
 
