@@ -202,10 +202,6 @@ public:
                 1.0f + 7.0f * compressorAmount_,     // ratio
                 0.010f, 0.120f,
                 6.0f * compressorAmount_);           // makeup
-            const int topology = static_cast<int>(get(R50ParamFxTopology) + 0.5f);
-            effects_.setRackTopology(static_cast<EffectTopology>(
-                topology < 0 ? 0 : (topology >= kEffectTopologyCount
-                    ? kEffectTopologyCount - 1 : topology)));
             for (int slot = 0; slot < kEffectSlotCount; ++slot) {
                 const auto slotValue = [&](R50FxSlotField field) {
                     return get(r50FxSlotParam(slot, field));
@@ -217,10 +213,7 @@ public:
                     algorithm < 0 ? 0 : (algorithm >= kEffectAlgorithmCount
                         ? kEffectAlgorithmCount - 1 : algorithm));
                 descriptor.bypass = slotValue(R50FxFieldBypass) >= 0.5f;
-                descriptor.inputGain =
-                    std::pow(10.0f, slotValue(R50FxFieldInputGain) / 20.0f);
-                descriptor.outputGain =
-                    std::pow(10.0f, slotValue(R50FxFieldOutputGain) / 20.0f);
+                descriptor.send = slotValue(R50FxFieldRouting) >= 0.5f;
                 descriptor.mix = synth::clampf(slotValue(R50FxFieldMix), 0.0f, 1.0f);
                 descriptor.width =
                     synth::clampf(slotValue(R50FxFieldWidth), 0.0f, 2.0f);
@@ -515,21 +508,21 @@ private:
         set(R50ParamMacro3, 0.0f); set(R50ParamMacro4, 0.0f);
 
         for (int partial = 0; partial < kPartialsPerVoice; ++partial) {
-            // The default Serial topology uses Slot 1 as its rack entrance.
-            // Off slots are transparent in a serial path, so this is identical
-            // to a unity dry path until an algorithm is selected — and makes
-            // that selection immediately audible without a second routing edit.
-            setPartial(partial, R50FieldDryLevel, 0.0f);
-            setPartial(partial, R50FieldSend1, 1.0f);
+            // Every source feeds the main path at unity; the main path runs
+            // through the insert slots, and Off inserts are transparent. So
+            // the default patch is a plain dry path, and selecting an
+            // algorithm is immediately audible with no routing edit — a send
+            // knob only matters once a slot is switched to Send.
+            setPartial(partial, R50FieldDryLevel, 1.0f);
+            setPartial(partial, R50FieldSend1, 0.0f);
             setPartial(partial, R50FieldSend2, 0.0f);
             setPartial(partial, R50FieldSend3, 0.0f);
         }
-        set(R50ParamFxTopology, 0.0f);
         for (int slot = 0; slot < kEffectSlotCount; ++slot) {
             set(r50FxSlotParam(slot, R50FxFieldAlgorithm), 0.0f);
             set(r50FxSlotParam(slot, R50FxFieldBypass), 0.0f);
-            set(r50FxSlotParam(slot, R50FxFieldInputGain), 0.0f);
-            set(r50FxSlotParam(slot, R50FxFieldOutputGain), 0.0f);
+            set(r50FxSlotParam(slot, R50FxFieldRouting), 0.0f);
+            set(r50FxSlotParam(slot, R50FxFieldReserved), 0.0f);
             set(r50FxSlotParam(slot, R50FxFieldMix), 1.0f);
             set(r50FxSlotParam(slot, R50FxFieldWidth), 1.0f);
             for (int control = 0; control < 8; ++control) {

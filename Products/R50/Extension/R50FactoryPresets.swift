@@ -681,30 +681,23 @@ enum R50FactoryPresets {
     }
 
     /// Ring is a Tone output now, not two hidden halves of the Partial buses.
-    /// State every factory Ring patch's routing explicitly: a little direct
-    /// product for definition, mostly send 1 so it traverses the preset's
-    /// complete serial rack, and a modest alternating stereo position.
+    /// The ring product rides the main path at full level — through whatever
+    /// insert slots the preset carries — with a modest alternating stereo
+    /// position. (The old mixer split it 0.24 direct / 0.88 into the serial
+    /// chain; with insert routing the whole path traverses the rack, and each
+    /// insert's own Mix keeps the unprocessed component alive.)
     private static func configureRingOutput(
         _ v: inout [AUParameterAddress: AUValue], index: Int
     ) {
         if Int((v[addr(R50ParamToneStructure)] ?? 0).rounded())
             == Structure.ring {
             put(&v, addr(R50ParamToneRingPan), index.isMultiple(of: 2) ? -0.14 : 0.14)
-            // Sync Weight multiplies two near-aligned pulse-family carriers;
-            // their product has a legitimate DC term, so keep that particular
-            // sound in the processed chain rather than leaking it directly.
-            put(&v, addr(R50ParamToneRingDry), index == 8 ? 0 : 0.24)
-            put(&v, addr(R50ParamToneRingSend1), 0.88)
-            put(&v, addr(R50ParamToneRingSend2), 0)
-            put(&v, addr(R50ParamToneRingSend3), 0)
+            put(&v, addr(R50ParamToneRingDry), 1.0)
         }
         if Int((v[addr(R50ParamToneBStructure)] ?? 0).rounded())
             == Structure.ring {
             put(&v, addr(R50ParamToneBRingPan), index.isMultiple(of: 2) ? 0.14 : -0.14)
-            put(&v, addr(R50ParamToneBRingDry), 0.24)
-            put(&v, addr(R50ParamToneBRingSend1), 0.88)
-            put(&v, addr(R50ParamToneBRingSend2), 0)
-            put(&v, addr(R50ParamToneBRingSend3), 0)
+            put(&v, addr(R50ParamToneBRingDry), 1.0)
         }
     }
 

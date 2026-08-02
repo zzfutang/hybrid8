@@ -598,28 +598,29 @@ struct R50View: View {
                              model: model)
                         .disabled(structure != 1)
                         .opacity(structure == 1 ? 1 : 0.32)
-                    R50Value(title: "Ring Dry",
+                    R50Value(title: "Ring Direct",
                              address: toneParam(R50ParamToneRingDry,
                                                 R50ParamToneBRingDry),
                              model: model)
                         .disabled(structure != 1)
                         .opacity(structure == 1 ? 1 : 0.32)
                     HStack(spacing: 5) {
-                        R50Value(title: "Ring S1",
-                            address: toneParam(R50ParamToneRingSend1,
-                                               R50ParamToneBRingSend1),
-                            model: model)
-                        R50Value(title: "Ring S2",
-                            address: toneParam(R50ParamToneRingSend2,
-                                               R50ParamToneBRingSend2),
-                            model: model)
-                        R50Value(title: "Ring S3",
-                            address: toneParam(R50ParamToneRingSend3,
-                                               R50ParamToneBRingSend3),
-                            model: model)
+                        ForEach(0..<3, id: \.self) { slot in
+                            let sendParams: [(R50Param, R50Param)] = [
+                                (R50ParamToneRingSend1, R50ParamToneBRingSend1),
+                                (R50ParamToneRingSend2, R50ParamToneBRingSend2),
+                                (R50ParamToneRingSend3, R50ParamToneBRingSend3),
+                            ]
+                            let active = model.value(r50FxSlotParam(
+                                Int32(slot), R50FxFieldRouting)) >= 0.5
+                            R50Value(title: "Ring S\(slot + 1)",
+                                address: toneParam(sendParams[slot].0,
+                                                   sendParams[slot].1),
+                                model: model)
+                                .disabled(structure != 1 || !active)
+                                .opacity(structure == 1 && active ? 1 : 0.32)
+                        }
                     }
-                    .disabled(structure != 1)
-                    .opacity(structure == 1 ? 1 : 0.32)
                     R50Value(title: "Blend Time",
                              address: toneParam(R50ParamToneBlendTime,
                                                 R50ParamToneBBlendTime),
@@ -658,23 +659,27 @@ struct R50View: View {
                             R50Value(title: "Pan",
                                      address: r50PartialParam(Int32(index), R50FieldPan),
                                      model: model)
-                            R50Value(title: "Dry",
+                            R50Value(title: "Direct",
                                      address: r50PartialParam(Int32(index),
                                                                R50FieldDryLevel),
                                      model: model)
                             HStack(spacing: 5) {
-                                R50Value(title: "Send 1",
-                                    address: r50PartialParam(Int32(index),
-                                                              R50FieldSend1),
-                                    model: model)
-                                R50Value(title: "Send 2",
-                                    address: r50PartialParam(Int32(index),
-                                                              R50FieldSend2),
-                                    model: model)
-                                R50Value(title: "Send 3",
-                                    address: r50PartialParam(Int32(index),
-                                                              R50FieldSend3),
-                                    model: model)
+                                ForEach(0..<3, id: \.self) { slot in
+                                    // A send knob only reaches a slot that is
+                                    // routed as a send; dim the ones aimed at
+                                    // inserts instead of hiding them, so the
+                                    // row keeps its shape while editing.
+                                    let active = model.value(r50FxSlotParam(
+                                        Int32(slot), R50FxFieldRouting)) >= 0.5
+                                    R50Value(title: "Send \(slot + 1)",
+                                        address: r50PartialParam(Int32(index),
+                                            R50PartialField(
+                                                rawValue: R50FieldSend1.rawValue
+                                                    + UInt32(slot))),
+                                        model: model)
+                                        .disabled(!active)
+                                        .opacity(active ? 1 : 0.32)
+                                }
                             }
                         }
                     }
@@ -906,13 +911,8 @@ struct R50View: View {
     private var effectsPage: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                R50Panel(title: "Routing") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        R50Selector(title: "Topology", address: R50ParamFxTopology,
-                                    options: R50Parameters.effectTopologyNames,
-                                    model: model)
-                        topologyDiagram
-                    }
+                R50Panel(title: "Signal Flow") {
+                    routingDiagram
                 }
                 .frame(width: 650)
                 R50Panel(title: "Post-Rack Compressor") {
@@ -948,6 +948,7 @@ struct R50View: View {
         let algorithm = Int(model.value(
             fxAddress(slot, R50FxFieldAlgorithm)).rounded())
         let labels = effectControlLabels(algorithm)
+        let isSend = slotIsSend(slot)
         return R50Panel(title: "Slot \(slot + 1)") {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(alignment: .top, spacing: 8) {
@@ -955,6 +956,10 @@ struct R50View: View {
                         address: fxAddress(slot, R50FxFieldAlgorithm),
                         names: R50Parameters.effectAlgorithmNames, model: model)
                         .frame(maxWidth: .infinity)
+                    R50Selector(title: "Routing",
+                        address: fxAddress(slot, R50FxFieldRouting),
+                        options: R50Parameters.effectRoutingNames, model: model)
+                        .frame(width: 132)
                     R50Selector(title: "Bypass",
                         address: fxAddress(slot, R50FxFieldBypass),
                         options: R50Parameters.onOffNames, model: model)
@@ -962,11 +967,7 @@ struct R50View: View {
                 }
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 6) {
-                        R50Value(title: "Input",
-                            address: fxAddress(slot, R50FxFieldInputGain), model: model)
-                        R50Value(title: "Output",
-                            address: fxAddress(slot, R50FxFieldOutputGain), model: model)
-                        R50MappedValue(title: "Mix / Return",
+                        R50MappedValue(title: isSend ? "Return" : "Mix",
                             address: fxAddress(slot, R50FxFieldMix), model: model,
                             display: percent)
                         R50Value(title: "Width",
@@ -1194,15 +1195,21 @@ struct R50View: View {
         }
     }
 
-    private var topologyDiagram: some View {
-        let topology = Int(model.value(R50ParamFxTopology).rounded())
-        let text: String
-        switch topology {
-        case 1: text = "DRY ─────────► OUT    ① + ② + ③ ─────────► OUT"
-        case 2: text = "DRY ─► OUT    ① ─► ② ─┐    ③ ─────────┴► OUT"
-        case 3: text = "DRY ─► OUT    ① ─┐    ② ─┴─► ③ ───────► OUT"
-        default: text = "DRY ─► OUT    SEND ─► ① ─► ② ─► ③ ───► OUT"
+    private func slotIsSend(_ slot: Int) -> Bool {
+        model.value(r50FxSlotParam(Int32(slot), R50FxFieldRouting)) >= 0.5
+    }
+
+    private var routingDiagram: some View {
+        // One path, walked slot by slot: inserts sit in line, sends hang off
+        // it and rejoin wet-only at their position.
+        var text = "DIRECT "
+        for slot in 0..<3 {
+            let number = ["①", "②", "③"][slot]
+            text += slotIsSend(slot)
+                ? "─►(+ SEND\(slot + 1) ─► \(number)) "
+                : "─► \(number) "
         }
+        text += "─► OUT"
         return Text(text)
             .font(.system(size: 9, weight: .semibold, design: .monospaced))
             .foregroundColor(R50Palette.glow)
@@ -1212,7 +1219,7 @@ struct R50View: View {
             .background(R50Palette.track)
             .overlay(RoundedRectangle(cornerRadius: 2)
                 .stroke(Color(white: 0.32), lineWidth: 1))
-            .help("Dry is always summed directly. Sends feed the three global slots; topology determines whether those slots run in series or parallel.")
+            .help("Each source's Direct level feeds the main path, which passes through the Insert slots in order. A Send slot is fed only by the per-source Send knobs and adds its wet return to the path at its position — dry signal is never doubled.")
     }
 
     // MARK: - Samples page

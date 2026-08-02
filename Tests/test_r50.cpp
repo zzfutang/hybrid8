@@ -1493,44 +1493,62 @@ int main() {
     {
         r50::ThreeSlotEffectsRack rack;
         rack.setup(kSR);
-        for (int slot = 0; slot < r50::kEffectSlotCount; ++slot) {
-            r50::EffectSlotDescriptor descriptor;
-            descriptor.algorithm = r50::EffectAlgorithm::Equalizer;
-            descriptor.outputGain = static_cast<float>(slot + 2);
-            descriptor.mix = 1.0f;
-            rack.setSlot(slot, descriptor);
-        }
-        rack.reset();
+        // The flat Equalizer is a unity processor, which makes the routing
+        // algebra exact: an insert passes the main path through it, a send
+        // adds mix-scaled bus signal at its slot position.
         r50::EffectRackInput impulse;
         impulse.dry = {1.0f, -1.0f};
         impulse.send[0] = {2.0f, 20.0f};
         impulse.send[1] = {3.0f, 30.0f};
         impulse.send[2] = {5.0f, 50.0f};
-        const float expected[][2] = {
-            {105.0f, 1039.0f}, {34.0f, 329.0f},
-            {42.0f, 409.0f}, {73.0f, 719.0f}
+        struct RoutingCase {
+            bool send[3];
+            float mix[3];
+            float expected[2];
         };
-        bool topologyGood = true;
-        for (int topology = 0; topology < r50::kEffectTopologyCount; ++topology) {
-            rack.setTopology(static_cast<r50::EffectTopology>(topology));
+        const RoutingCase cases[] = {
+            // All inserts: send buses are ignored entirely.
+            {{false, false, false}, {1, 1, 1}, {1.0f, -1.0f}},
+            // All sends: dry plus every return.
+            {{true, true, true}, {1, 1, 1}, {11.0f, 99.0f}},
+            // Send between inserts joins the path at its position.
+            {{false, true, false}, {1, 1, 1}, {4.0f, 29.0f}},
+            // Send pair into a master insert.
+            {{true, true, false}, {1, 1, 1}, {6.0f, 49.0f}},
+            // A send's Mix is its return level.
+            {{true, false, false}, {0.5f, 1, 1}, {2.0f, 9.0f}},
+        };
+        bool routingGood = true;
+        for (const RoutingCase &routingCase : cases) {
+            for (int slot = 0; slot < r50::kEffectSlotCount; ++slot) {
+                r50::EffectSlotDescriptor descriptor;
+                descriptor.algorithm = r50::EffectAlgorithm::Equalizer;
+                descriptor.send = routingCase.send[slot];
+                descriptor.mix = routingCase.mix[slot];
+                rack.setSlot(slot, descriptor);
+            }
             rack.reset();
             const r50::StereoSample output = rack.process(impulse);
-            topologyGood &= std::fabs(output.l - expected[topology][0]) < 1.0e-3f;
-            topologyGood &= std::fabs(output.r - expected[topology][1]) < 1.0e-3f;
+            routingGood &= std::fabs(output.l - routingCase.expected[0]) < 1.0e-3f;
+            routingGood &= std::fabs(output.r - routingCase.expected[1]) < 1.0e-3f;
         }
-        check(topologyGood, "all four named FX topologies route deterministic impulses");
+        check(routingGood, "insert and send routings mix deterministic impulses");
 
         r50::ThreeSlotEffectsRack offRack;
         offRack.setup(kSR);
-        offRack.setTopology(r50::EffectTopology::Parallel);
+        for (int slot = 0; slot < r50::kEffectSlotCount; ++slot) {
+            r50::EffectSlotDescriptor descriptor;
+            descriptor.send = true;
+            offRack.setSlot(slot, descriptor);
+        }
         offRack.reset();
         const r50::StereoSample offOutput = offRack.process(impulse);
         check(offOutput.l == impulse.dry.l && offOutput.r == impulse.dry.r,
-              "Off slots are silent parallel returns");
+              "Off slots are silent send returns");
 
-        // The default serial route enters at Slot 1. Selecting an algorithm
-        // must therefore be audible without requiring the user to discover
-        // and raise a separate Partial send first.
+        // The default patch runs the main path through the insert slots.
+        // Selecting an algorithm must therefore be audible without requiring
+        // the user to discover and raise a separate Partial send first.
         r50::R50Engine defaultDry, defaultTremolo;
         setupSpectralTone(defaultDry, 0);
         setupSpectralTone(defaultTremolo, 0);
@@ -1548,7 +1566,7 @@ int main() {
             tremoloDifference += std::fabs(
                 defaultDryRender[i] - defaultTremoloRender[i]);
         check(tremoloDifference > 1.0,
-              "selecting Tremolo is audible with the default serial routing");
+              "selecting Tremolo is audible with the default insert routing");
 
         auto routedPartialPeak = [](int partial, int slot) {
             r50::R50Engine engine;
@@ -1560,8 +1578,7 @@ int main() {
             engine.setParameter(r50PartialParam(partial, R50FieldDryLevel), 0.0f);
             engine.setParameter(r50PartialParam(
                 partial, static_cast<R50PartialField>(R50FieldSend1 + slot)), 1.0f);
-            engine.setParameter(R50ParamFxTopology,
-                                static_cast<float>(r50::EffectTopology::Parallel));
+            engine.setParameter(r50FxSlotParam(slot, R50FxFieldRouting), 1.0f);
             engine.setParameter(r50FxSlotParam(slot, R50FxFieldAlgorithm),
                                 static_cast<float>(r50::EffectAlgorithm::Chorus));
             engine.noteOn(60, 100);
@@ -1582,9 +1599,9 @@ int main() {
             for (int slot = 0; slot < r50::kEffectSlotCount; ++slot) {
                 r50::ThreeSlotEffectsRack adapterRack;
                 adapterRack.setup(kSR);
-                adapterRack.setTopology(r50::EffectTopology::Parallel);
                 r50::EffectSlotDescriptor descriptor;
                 descriptor.algorithm = algorithm;
+                descriptor.send = true;
                 descriptor.mix = 1.0f;
                 descriptor.control[0] = 0.25f;
                 descriptor.control[1] = 0.35f;
@@ -1902,13 +1919,14 @@ int main() {
         check(engineBudgetFinite && worstEngineRatio < engineCpuLimit,
               "maximum-polyphony FX budget is finite and faster than realtime");
 
-        // Bypass and topology changes begin from the preceding output sample
+        // Bypass and routing changes begin from the preceding output sample
         // and crossfade over 20 ms. Bound the largest discontinuity under a
         // sustained input well below a full-scale click.
         r50::ThreeSlotEffectsRack switchingRack;
         switchingRack.setup(kSR);
         r50::EffectSlotDescriptor switchingDescriptor;
         switchingDescriptor.algorithm = r50::EffectAlgorithm::Chorus;
+        switchingDescriptor.send = true;
         switchingDescriptor.mix = 0.8f;
         switchingRack.setSlot(0, switchingDescriptor);
         float previous = 0.0f, largestStep = 0.0f;
@@ -1917,8 +1935,10 @@ int main() {
                 switchingDescriptor.bypass = true;
                 switchingRack.setSlot(0, switchingDescriptor);
             }
-            if (i == 4000)
-                switchingRack.setTopology(r50::EffectTopology::Parallel);
+            if (i == 4000) {
+                switchingDescriptor.send = false;
+                switchingRack.setSlot(0, switchingDescriptor);
+            }
             r50::EffectRackInput in;
             in.send[0] = {0.35f * std::sin(i * 0.031f),
                           0.35f * std::sin(i * 0.031f)};
@@ -1927,13 +1947,14 @@ int main() {
             previous = output;
         }
         check(largestStep < 0.08f,
-              "slot bypass and topology changes are click-free");
+              "slot bypass and routing changes are click-free");
 
         r50::R50Engine stateEngine;
         bool rackStateRoundTrips = true;
-        stateEngine.setParameter(R50ParamFxTopology, 3.0f);
-        rackStateRoundTrips &=
-            stateEngine.getParameter(R50ParamFxTopology) == 3.0f;
+        stateEngine.setParameter(
+            r50FxSlotParam(1, R50FxFieldRouting), 1.0f);
+        rackStateRoundTrips &= stateEngine.getParameter(
+            r50FxSlotParam(1, R50FxFieldRouting)) == 1.0f;
         for (int partial = 0; partial < 2; ++partial) {
             for (int offset = 0; offset < 4; ++offset) {
                 const R50PartialField field = static_cast<R50PartialField>(
@@ -1956,7 +1977,7 @@ int main() {
             }
         }
         check(rackStateRoundTrips,
-              "topology, sends and every slot field round-trip by stable address");
+              "routing, sends and every slot field round-trip by stable address");
 
         // Every effect defaults to silent, so a patch that names none of them
         // must render exactly as it did before the rack existed. This is the

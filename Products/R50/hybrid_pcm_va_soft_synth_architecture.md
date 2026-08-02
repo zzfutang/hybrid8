@@ -1854,9 +1854,10 @@ AU parameter tree, and per-block smoothing.
 
 ## Phase 6 — Effects
 
-- three interchangeable global slots;
-- four named serial/parallel routing topologies;
-- independent dry and three-slot sends per Partial;
+- three interchangeable global slots, each routed as an Insert on the main
+  path or as a wet-only Send return (this replaced four named rack-wide
+  topologies, whose per-knob semantics shifted with the topology);
+- independent Direct level and three send levels per Partial and Ring output;
 - modulation, delay, space, EQ, nonlinear, and exciter algorithms;
 - post-rack compressor.
 

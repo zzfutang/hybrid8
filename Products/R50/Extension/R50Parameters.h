@@ -128,7 +128,7 @@ typedef enum R50Param : unsigned long long {
     R50ParamP1Send1,
     R50ParamP1Send2,
     R50ParamP1Send3,
-    R50ParamFxTopology,          // 0..3, see EffectTopology
+    R50ParamFxTopology,          // retired: routing is per slot now (Insert/Send)
     R50ParamFxSlotBase,
     R50ParamFxSlotLast = R50ParamFxSlotBase + 47,
 
@@ -229,13 +229,17 @@ typedef enum R50PartialField {
     R50PartialFieldCount
 } R50PartialField;
 
-/// Common fields stored for each global effect slot.
+/// Common fields stored for each global effect slot. The block layout is
+/// append-only and full (3 x 16 fills the reserved address range), so retired
+/// fields are repurposed in place rather than removed: Routing took the old
+/// input-gain address when the per-slot gain stages went away, and the old
+/// output-gain address is held in reserve.
 typedef enum R50FxSlotField {
     R50FxFieldAlgorithm = 0,
     R50FxFieldBypass,
-    R50FxFieldInputGain,
-    R50FxFieldOutputGain,
-    R50FxFieldMix,
+    R50FxFieldRouting,           // 0 = insert on the main path, 1 = send
+    R50FxFieldReserved,          // retired output gain; not registered
+    R50FxFieldMix,               // insert: wet/dry mix; send: return level
     R50FxFieldWidth,
     R50FxFieldControl1,
     R50FxFieldControl2,

@@ -522,21 +522,15 @@ enum class EffectAlgorithm {
 static constexpr int kEffectAlgorithmCount = 17;
 static constexpr int kEffectSlotCount = 3;
 
-enum class EffectTopology {
-    Serial = 0,
-    Parallel,
-    SerialPairParallel,
-    ParallelPairMaster
-};
-
-static constexpr int kEffectTopologyCount = 4;
-
 struct EffectSlotDescriptor {
     EffectAlgorithm algorithm = EffectAlgorithm::Off;
     bool bypass = false;
-    float inputGain = 1.0f;
-    float outputGain = 1.0f;
-    float mix = 1.0f;
+    /// An insert processes the accumulated main path in slot order; a send is
+    /// fed only by its own send bus and adds a wet-only return to the main
+    /// path at its position. That position matters and is a feature: a send
+    /// chorus placed before an insert reverb gets reverberated.
+    bool send = false;
+    float mix = 1.0f;   // insert: wet/dry mix; send: return level
     float width = 1.0f;
     float control[8] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
     int mode[2] = {0, 0};
@@ -580,8 +574,6 @@ public:
         early_.reset();
         modernDelay_.reset();
         toneEffect_.reset();
-        inputGain_ = descriptor_.inputGain;
-        outputGain_ = descriptor_.outputGain;
         mix_ = descriptor_.mix;
         width_ = descriptor_.width;
         enabled_ = isEnabled(descriptor_) ? 1.0f : 0.0f;
@@ -705,6 +697,8 @@ public:
         return output;
     }
 
+    bool isSend() const { return descriptor_.send; }
+
     float tailSeconds() const {
         switch (descriptor_.algorithm) {
             case EffectAlgorithm::StereoDelay:
@@ -729,10 +723,6 @@ private:
     }
 
     inline void smooth() {
-        inputGain_ = descriptor_.inputGain
-                   + (inputGain_ - descriptor_.inputGain) * smoothCoef_;
-        outputGain_ = descriptor_.outputGain
-                    + (outputGain_ - descriptor_.outputGain) * smoothCoef_;
         mix_ = descriptor_.mix + (mix_ - descriptor_.mix) * smoothCoef_;
         width_ = descriptor_.width + (width_ - descriptor_.width) * smoothCoef_;
         const float enabledTarget = isEnabled(descriptor_) ? 1.0f : 0.0f;
@@ -744,8 +734,8 @@ private:
         // filter, or oversampling state for all subsequent renders.
         const float safeL = std::isfinite(input.l) ? input.l : 0.0f;
         const float safeR = std::isfinite(input.r) ? input.r : 0.0f;
-        float left = safeL * inputGain_;
-        float right = safeR * inputGain_;
+        float left = safeL;
+        float right = safeR;
         StereoSample wet;
         switch (descriptor_.algorithm) {
             case EffectAlgorithm::Chorus:
@@ -797,8 +787,7 @@ private:
         }
         const float wetMid = 0.5f * (wet.l + wet.r);
         const float wetSide = 0.5f * (wet.l - wet.r) * width_;
-        return {(wetMid + wetSide) * outputGain_,
-                (wetMid - wetSide) * outputGain_};
+        return {wetMid + wetSide, wetMid - wetSide};
     }
 
     inline StereoSample applyTransition(StereoSample output,
@@ -826,76 +815,60 @@ private:
     double sampleRate_ = 44100.0;
     float smoothCoef_ = 0.0f;
     float transitionStep_ = 1.0f, transition_ = 1.0f;
-    float inputGain_ = 1.0f, outputGain_ = 1.0f;
     float mix_ = 1.0f, width_ = 1.0f, enabled_ = 0.0f;
     StereoSample lastSerial_{}, lastParallel_{};
     StereoSample serialAnchor_{}, parallelAnchor_{};
 };
 
+/// One signal path, walked in slot order. An insert slot processes the
+/// accumulated main signal; a send slot adds its wet-only return into the
+/// main signal at its position. The invariant that keeps the mixer legible:
+/// a source's dry signal reaches the output exactly once — via the main path
+/// — and a send bus never carries dry, so nothing can arrive twice.
 class ThreeSlotEffectsRack {
 public:
     void setup(double sampleRate) {
-        topologyStep_ = 1.0f / static_cast<float>(
+        routingStep_ = 1.0f / static_cast<float>(
             std::max(1.0, sampleRate * 0.020));
         for (EffectSlot &slot : slot_) slot.setup(sampleRate);
         reset();
     }
     void reset() {
         for (EffectSlot &slot : slot_) slot.reset();
-        topologyTransition_ = 1.0f;
+        routingTransition_ = 1.0f;
         lastOutput_ = {};
-        topologyAnchor_ = {};
-    }
-    void setTopology(EffectTopology topology) {
-        if (topology != topology_) {
-            topology_ = topology;
-            topologyAnchor_ = lastOutput_;
-            topologyTransition_ = 0.0f;
-        }
+        routingAnchor_ = {};
     }
     void setSlot(int index, const EffectSlotDescriptor &descriptor) {
-        if (index >= 0 && index < kEffectSlotCount)
-            slot_[index].setDescriptor(descriptor);
+        if (index < 0 || index >= kEffectSlotCount) return;
+        // Flipping a slot between insert and send rearranges the summation
+        // abruptly; crossfade the rack output over the same 20 ms an
+        // algorithm change gets.
+        if (descriptor.send != slot_[index].isSend()) {
+            routingAnchor_ = lastOutput_;
+            routingTransition_ = 0.0f;
+        }
+        slot_[index].setDescriptor(descriptor);
     }
 
     inline StereoSample process(const EffectRackInput &input) {
-        StereoSample result = input.dry;
-        switch (topology_) {
-            case EffectTopology::Serial: {
-                StereoSample chain = slot_[0].processSerial(input.send[0]);
-                chain = slot_[1].processSerial(add(chain, input.send[1]));
-                chain = slot_[2].processSerial(add(chain, input.send[2]));
-                result = add(result, chain);
-                break;
-            }
-            case EffectTopology::Parallel:
-                for (int i = 0; i < kEffectSlotCount; ++i)
-                    result = add(result, slot_[i].processParallel(input.send[i]));
-                break;
-            case EffectTopology::SerialPairParallel: {
-                StereoSample pair = slot_[0].processSerial(input.send[0]);
-                pair = slot_[1].processSerial(add(pair, input.send[1]));
-                result = add(result, pair);
-                result = add(result, slot_[2].processParallel(input.send[2]));
-                break;
-            }
-            case EffectTopology::ParallelPairMaster: {
-                StereoSample pair = add(slot_[0].processParallel(input.send[0]),
-                                        slot_[1].processParallel(input.send[1]));
-                result = add(result, slot_[2].processSerial(add(pair, input.send[2])));
-                break;
-            }
+        StereoSample main = input.dry;
+        for (int i = 0; i < kEffectSlotCount; ++i) {
+            if (slot_[i].isSend())
+                main = add(main, slot_[i].processParallel(input.send[i]));
+            else
+                main = slot_[i].processSerial(main);
         }
-        if (topologyTransition_ < 1.0f) {
-            result = {topologyAnchor_.l
-                        + (result.l - topologyAnchor_.l) * topologyTransition_,
-                      topologyAnchor_.r
-                        + (result.r - topologyAnchor_.r) * topologyTransition_};
-            topologyTransition_ =
-                std::min(1.0f, topologyTransition_ + topologyStep_);
+        if (routingTransition_ < 1.0f) {
+            main = {routingAnchor_.l
+                        + (main.l - routingAnchor_.l) * routingTransition_,
+                    routingAnchor_.r
+                        + (main.r - routingAnchor_.r) * routingTransition_};
+            routingTransition_ =
+                std::min(1.0f, routingTransition_ + routingStep_);
         }
-        lastOutput_ = result;
-        return result;
+        lastOutput_ = main;
+        return main;
     }
 
 private:
@@ -903,10 +876,9 @@ private:
         return {a.l + b.l, a.r + b.r};
     }
 
-    EffectTopology topology_ = EffectTopology::Serial;
     EffectSlot slot_[kEffectSlotCount];
-    float topologyStep_ = 1.0f, topologyTransition_ = 1.0f;
-    StereoSample topologyAnchor_{}, lastOutput_{};
+    float routingStep_ = 1.0f, routingTransition_ = 1.0f;
+    StereoSample routingAnchor_{}, lastOutput_{};
 };
 
 class GlobalEffects {
@@ -938,7 +910,6 @@ public:
         return compressor_.gainReductionDb();
     }
 
-    void setRackTopology(EffectTopology topology) { rack_.setTopology(topology); }
     void setRackSlot(int index, const EffectSlotDescriptor &descriptor) {
         rack_.setSlot(index, descriptor);
     }

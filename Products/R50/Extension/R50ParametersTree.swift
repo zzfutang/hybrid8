@@ -55,9 +55,7 @@ enum R50Parameters {
     static let patchStructureNames = [
         "Layer", "Key Split", "Velocity Split", "Velocity XF", "Vector Mix"
     ]
-    static let effectTopologyNames = [
-        "Serial", "Parallel", "1→2 + 3", "(1+2)→3"
-    ]
+    static let effectRoutingNames = ["Insert", "Send"]
     static let effectAlgorithmNames = [
         "Off", "Hall", "Room", "Plate/Stage", "Early Reflections",
         "Stereo Delay", "Cross Delay", "Chorus", "Ensemble", "Flanger",
@@ -183,10 +181,13 @@ enum R50Parameters {
                   min: 0, max: 1, value: 1),
             Field(field: R50FieldPan, id: "Pan", name: "Pan",
                   min: -1, max: 1, value: 0),
-            Field(field: R50FieldDryLevel, id: "DryLevel", name: "Dry Level",
-                  min: 0, max: 1, value: 0),
-            Field(field: R50FieldSend1, id: "Send1", name: "Send 1",
+            // "DryLevel" identifier survives from the retired topology mixer;
+            // the field is the source's level into the main path, which runs
+            // through the insert slots.
+            Field(field: R50FieldDryLevel, id: "DryLevel", name: "Direct",
                   min: 0, max: 1, value: 1),
+            Field(field: R50FieldSend1, id: "Send1", name: "Send 1",
+                  min: 0, max: 1, value: 0),
             Field(field: R50FieldSend2, id: "Send2", name: "Send 2",
                   min: 0, max: 1, value: 0),
             Field(field: R50FieldSend3, id: "Send3", name: "Send 3",
@@ -267,7 +268,7 @@ enum R50Parameters {
                       min: 0, max: 8, value: 1),
                 param(R50ParamToneRingPan, "toneRingPan", "Ring Pan",
                       min: -1, max: 1, value: 0),
-                param(R50ParamToneRingDry, "toneRingDry", "Ring Dry",
+                param(R50ParamToneRingDry, "toneRingDry", "Ring Direct",
                       min: 0, max: 1, value: 1),
                 param(R50ParamToneRingSend1, "toneRingSend1", "Ring Send 1",
                       min: 0, max: 1, value: 0),
@@ -293,7 +294,7 @@ enum R50Parameters {
                       min: 0, max: 8, value: 1),
                 param(R50ParamToneBRingPan, "toneBRingPan", "Ring Pan",
                       min: -1, max: 1, value: 0),
-                param(R50ParamToneBRingDry, "toneBRingDry", "Ring Dry",
+                param(R50ParamToneBRingDry, "toneBRingDry", "Ring Direct",
                       min: 0, max: 1, value: 1),
                 param(R50ParamToneBRingSend1, "toneBRingSend1", "Ring Send 1",
                       min: 0, max: 1, value: 0),
@@ -343,9 +344,6 @@ enum R50Parameters {
         var effectChildren: [AUParameter] = [
                 param(R50ParamFxCompressor, "fxCompressor", "Compressor",
                       min: 0, max: 1, value: 0),
-                param(R50ParamFxTopology, "fxTopology", "FX Topology",
-                      min: 0, max: AUValue(effectTopologyNames.count - 1),
-                      value: 0, unit: .indexed, strings: effectTopologyNames),
             ]
         for slot in 0..<3 {
             let number = slot + 1
@@ -358,12 +356,10 @@ enum R50Parameters {
                       "fxSlot\(number)Bypass", "Slot \(number) Bypass",
                       min: 0, max: 1, value: 0, unit: .indexed,
                       strings: onOffNames),
-                param(r50FxSlotParam(Int32(slot), R50FxFieldInputGain),
-                      "fxSlot\(number)InputGain", "Slot \(number) Input Gain",
-                      min: -24, max: 12, value: 0, unit: .decibels),
-                param(r50FxSlotParam(Int32(slot), R50FxFieldOutputGain),
-                      "fxSlot\(number)OutputGain", "Slot \(number) Output Gain",
-                      min: -24, max: 12, value: 0, unit: .decibels),
+                param(r50FxSlotParam(Int32(slot), R50FxFieldRouting),
+                      "fxSlot\(number)Routing", "Slot \(number) Routing",
+                      min: 0, max: 1, value: 0, unit: .indexed,
+                      strings: effectRoutingNames),
                 param(r50FxSlotParam(Int32(slot), R50FxFieldMix),
                       "fxSlot\(number)Mix", "Slot \(number) Mix",
                       min: 0, max: 1, value: 1),

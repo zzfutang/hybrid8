@@ -261,7 +261,8 @@ int main() {
                             ? 0.4f * std::sin(static_cast<float>(kTwoPi * 220.0 * n / sr))
                             : 0.0f;
             r50::EffectRackInput rackInput;
-            rackInput.send[0] = {input, input};
+            // Insert slots process the main path; the dry bus is its entrance.
+            rackInput.dry = {input, input};
             r50::StereoSample y = fx.process(rackInput);
             L[n] = y.l; R[n] = y.r;
             finite = finite && std::isfinite(y.l) && std::isfinite(y.r);

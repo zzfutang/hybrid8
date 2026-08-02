@@ -1376,8 +1376,8 @@ Modulation matrix, four macros, LFO tempo sync (requires restoring the
 `AUHostMusicalContextBlock` path), parameter smoothing.
 
 ### Phase 6 — Effects
-Complete as a substantially expanded three-slot global rack: four named
-routing topologies, independent sends per Partial, 16 selectable algorithms
+Complete as a substantially expanded three-slot global rack: per-slot
+Insert/Send routing, independent sends per Partial, 16 selectable algorithms
 covering modulation, delay, space, EQ, nonlinear color and exciter, followed by
 the global compressor. Nonlinear slots and the per-Partial waveshaper use 4x
 oversampling. See `FX-updated.plan` for the completed implementation record.
