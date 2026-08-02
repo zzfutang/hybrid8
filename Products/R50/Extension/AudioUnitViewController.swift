@@ -8,28 +8,52 @@
 //  remote view never reach the host app's event monitor, so the responder that
 //  turns the computer keyboard into notes has to be inside the extension.
 //
+//  It is an event monitor, not a first-responder view. The old design made a
+//  key view first responder and fought to keep it — reclaiming focus on window
+//  activation, after every click, after the file panel — and any control that
+//  still held focus when a key came down let the event fall through to the
+//  macOS alert sound. A process-local monitor sees the extension's key events
+//  no matter which view has focus, and swallows what the instrument does not
+//  use, so there is no beep to lose a fight to.
+//
 
 import AppKit
 import CoreAudioKit
 import SwiftUI
 
-public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
+public class AudioUnitViewController: AUViewController, AUAudioUnitFactory,
+                                      PerformanceEventSink {
 
     var audioUnit: AUAudioUnit?
 
-    // Musical typing is only active inside our own standalone host (which
-    // announces itself); in a third-party DAW the host owns the keyboard.
-    private var standaloneMusicalTyping = false
-    private let typing = MusicalTypingStateMachine()
-    private var clickMonitor: Any?
+    private var typingKeyboard: MusicalTypingController?
+
+    // Musical typing is only for our own standalone container; in a DAW the
+    // host owns the computer keyboard. Frontmost-app identity is the primary
+    // signal — it needs no handshake — and the standalone's distributed
+    // announcement remains as a fallback in case the sandbox ever hides
+    // NSWorkspace's view of the frontmost application.
+    private var standaloneAnnounced = false
+
+    /// The container's identifier is the extension's own with the trailing
+    /// component dropped (com.johangorsjo.R50.AUv3 -> com.johangorsjo.R50).
+    private static let containerBundleID: String? = {
+        guard let id = Bundle.main.bundleIdentifier,
+              let dot = id.lastIndex(of: ".") else { return nil }
+        return String(id[..<dot])
+    }()
+
+    private var hostedInOwnStandalone: Bool {
+        guard let container = Self.containerBundleID else { return false }
+        if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == container {
+            return true
+        }
+        return standaloneAnnounced && NSApp.isActive
+    }
 
     public override func loadView() {
-        let keyView = MusicalTypingView(
-            frame: NSRect(x: 0, y: 0, width: R50Layout.width, height: R50Layout.height))
-        keyView.keyHandler = { [weak self] event, down in
-            self?.handleMusicalTyping(event, down: down) ?? false
-        }
-        self.view = keyView
+        self.view = NSView(frame: NSRect(x: 0, y: 0, width: R50Layout.width,
+                                         height: R50Layout.height))
         self.preferredContentSize = NSSize(width: R50Layout.width,
                                            height: R50Layout.height)
     }
@@ -39,53 +63,13 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.johangorsjo.R50.standaloneActive"),
             object: nil, queue: .main) { [weak self] _ in
-                self?.standaloneMusicalTyping = true
-                // The notification and viewDidAppear race; whichever lands
-                // second grabs first responder so typing works from launch.
-                self?.grabKeyboardFocus()
+                self?.standaloneAnnounced = true
             }
-
-        // Anything that takes first responder away — the sample file panel,
-        // switching apps, clicking a control — leaves keys falling through to
-        // super, where macOS answers every keystroke with the alert sound.
-        // Reclaiming it whenever our window becomes key covers all of those.
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.didBecomeKeyNotification,
-            object: nil, queue: .main) { [weak self] notification in
-                guard let self,
-                      let window = notification.object as? NSWindow,
-                      window === self.view.window else { return }
-                self.grabKeyboardFocus()
-            }
-
-        // A click inside the editor can leave focus on whichever control was
-        // hit; take it back once the click finishes.
-        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp]) {
-            [weak self] event in
-            if let self, event.window === self.view.window {
-                DispatchQueue.main.async { self.grabKeyboardFocus() }
-            }
-            return event
-        }
-
+        typingKeyboard = MusicalTypingController(
+            sink: self,
+            isActive: { [weak self] in self?.hostedInOwnStandalone ?? false },
+            stateChanged: { _ in })
         if audioUnit != nil { setupUI() }
-    }
-
-    deinit {
-        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
-    }
-
-    public override func viewDidAppear() {
-        super.viewDidAppear()
-        grabKeyboardFocus()
-    }
-
-    /// Make the key view first responder so keys reach `handleMusicalTyping`.
-    /// Only acts in our standalone host so a third-party DAW keeps control of
-    /// the keyboard.
-    private func grabKeyboardFocus() {
-        guard standaloneMusicalTyping else { return }
-        view.window?.makeFirstResponder(view)
     }
 
     public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {
@@ -110,29 +94,10 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
         host.frame = view.bounds
         host.autoresizingMask = [.width, .height]
         view.addSubview(host)
-        grabKeyboardFocus()
     }
 
-    /// Returns true when the event was consumed (so the view must not fall
-    /// through to `super`, which would play the macOS alert sound).
-    private func handleMusicalTyping(_ event: NSEvent, down: Bool) -> Bool {
-        guard standaloneMusicalTyping,
-              event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
-              let character = event.charactersIgnoringModifiers?.lowercased().first
-        else { return false }
-
-        let (_, output) = typing.handle(
-            character: character, isDown: down, isRepeat: event.isARepeat)
-        dispatch(output)
-        return true
-    }
-
-    private func dispatch(_ output: MusicalTypingStateMachine.Output?) {
-        switch output {
-        case let .noteOn(note, velocity): sendMIDI([0x90, note, velocity])
-        case let .noteOff(note): sendMIDI([0x80, note, 0])
-        case nil: break
-        }
+    func sendPerformanceEvent(_ event: PerformanceMIDIEvent) {
+        sendMIDI(event.bytes)
     }
 
     private func sendMIDI(_ bytes: [UInt8]) {
@@ -141,18 +106,5 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory {
             guard let base = buffer.baseAddress else { return }
             block(AUEventSampleTimeImmediate, 0, bytes.count, base)
         }
-    }
-}
-
-private final class MusicalTypingView: NSView {
-    var keyHandler: ((NSEvent, Bool) -> Bool)?
-    override var acceptsFirstResponder: Bool { true }
-
-    override func keyDown(with event: NSEvent) {
-        if keyHandler?(event, true) != true { super.keyDown(with: event) }
-    }
-
-    override func keyUp(with event: NSEvent) {
-        if keyHandler?(event, false) != true { super.keyUp(with: event) }
     }
 }

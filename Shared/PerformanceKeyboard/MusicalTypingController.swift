@@ -3,15 +3,23 @@ import AppKit
 /// One state machine for standalone musical typing. Text entry keeps normal key
 /// handling while it is active; Escape or Return explicitly returns ownership
 /// to the instrument.
+///
+/// The controller is a process-local event monitor, so it works no matter
+/// which view currently has focus — there is no first responder to lose. It
+/// runs in the standalone host and in the AUv3 view service alike; `isActive`
+/// is where the appex declines the keyboard while a DAW is frontmost.
 final class MusicalTypingController {
     private weak var sink: PerformanceEventSink?
+    private let isActive: () -> Bool
     private let stateChanged: (MusicalTypingState) -> Void
     private var monitors: [Any] = []
     private let machine = MusicalTypingStateMachine()
 
     init(sink: PerformanceEventSink,
+         isActive: @escaping () -> Bool = { true },
          stateChanged: @escaping (MusicalTypingState) -> Void) {
         self.sink = sink
+        self.isActive = isActive
         self.stateChanged = stateChanged
         stateChanged(machine.state)
 
@@ -35,6 +43,7 @@ final class MusicalTypingController {
     }
 
     private func handle(_ event: NSEvent, isDown: Bool) -> NSEvent? {
+        guard isActive() else { return event }
         if !event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
             return event
         }

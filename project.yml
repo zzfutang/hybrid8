@@ -132,6 +132,11 @@ targets:
           - "*.entitlements"
       - path: Products/R50/DSP
       - path: Shared/PerformanceKeyboard/MusicalTypingStateMachine.swift
+      # The controller (and the event types it dispatches) run inside the
+      # extension too: the AUv3 editor is a separate view-service process, so
+      # standalone musical typing has to be handled here as well.
+      - path: Shared/PerformanceKeyboard/MusicalTypingController.swift
+      - path: Shared/PerformanceKeyboard/MIDIEvent.swift
       # A folder reference, so the whole directory is copied into the bundle's
       # Resources and adding a WAV needs no project change.
       - path: Products/R50/Samples
