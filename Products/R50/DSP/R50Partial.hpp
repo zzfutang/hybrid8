@@ -82,10 +82,17 @@ struct PartialParams {
     /// nothing else here can do.
     float pitchKeyFollow = 1.0f;
 
-    // Pitch envelope: a rise and fall applied to this Partial's pitch.
-    float pitchAmount = 0.0f;      // semitones, bipolar
+    // Pitch envelope, multi-stage: Start -> (attack) -> Amount -> (decay) ->
+    // 0 in tune -> note-off -> (release) -> Release level. All levels are
+    // semitones, bipolar. The historical pair Amount/Attack/Decay kept their
+    // meaning when Start and the release stage were added: with Start at 0
+    // the old rise-and-fall is exactly what plays.
+    float pitchStartLevel = 0.0f;
+    float pitchAmount = 0.0f;      // the attack stage's target level
     float pitchAttack = 0.001f;
     float pitchDecay  = 0.2f;
+    float pitchRelease = 0.001f;
+    float pitchReleaseLevel = 0.0f;
 
     ShaperType     shaperType     = ShaperType::Off;
     float          shaperDrive    = 0.0f;
@@ -95,6 +102,88 @@ struct PartialParams {
     float pan   = 0.0f;                 // -1 = left, +1 = right
     float dryLevel = 1.0f;
     float send[3] = {0.0f, 0.0f, 0.0f};
+};
+
+/// The multi-stage pitch envelope, shaped like the classic workstation one:
+/// pitch starts at Start, travels to the Attack level, settles to zero — in
+/// tune — for the held note, and drifts to the Release level after note-off.
+/// Levels are semitones and bipolar throughout; the envelope's output IS the
+/// pitch offset, there is no separate amount to scale it by.
+class PitchEnvelope {
+public:
+    void setSampleRate(double sr) { sampleRate_ = sr; }
+
+    void configure(float startLevel, float attackTime, float attackLevel,
+                   float decayTime, float releaseTime, float releaseLevel) {
+        start_       = startLevel;
+        attackTime_  = attackTime;
+        attackLevel_ = attackLevel;
+        decayTime_   = decayTime;
+        releaseTime_ = releaseTime;
+        releaseLevel_ = releaseLevel;
+    }
+
+    void resetHard() {
+        stage_ = Stage::Idle;
+        current_ = 0.0f;
+        remaining_ = 0;
+        delta_ = 0.0f;
+    }
+
+    void gate(bool on) {
+        if (on) {
+            current_ = start_;
+            stage_ = Stage::Attack;
+            beginRamp(attackLevel_, attackTime_);
+        } else if (stage_ != Stage::Idle) {
+            stage_ = Stage::Release;
+            beginRamp(releaseLevel_, releaseTime_);
+        }
+    }
+
+    /// The current pitch offset in semitones.
+    inline float process() {
+        if (stage_ == Stage::Idle || stage_ == Stage::Done) return current_;
+        if (remaining_ > 0) {
+            current_ += delta_;
+            --remaining_;
+            return current_;
+        }
+        switch (stage_) {
+            case Stage::Attack:
+                current_ = attackLevel_;
+                stage_ = Stage::Decay;
+                beginRamp(0.0f, decayTime_);
+                break;
+            case Stage::Decay:
+                current_ = 0.0f;
+                stage_ = Stage::Sustain;   // in tune while the note holds
+                break;
+            case Stage::Release:
+                current_ = releaseLevel_;
+                stage_ = Stage::Done;
+                break;
+            default:
+                break;
+        }
+        return current_;
+    }
+
+private:
+    enum class Stage { Idle, Attack, Decay, Sustain, Release, Done };
+
+    void beginRamp(float target, float seconds) {
+        remaining_ = static_cast<int>(
+            std::max(1.0, seconds * sampleRate_));
+        delta_ = (target - current_) / static_cast<float>(remaining_);
+    }
+
+    double sampleRate_ = 44100.0;
+    Stage  stage_ = Stage::Idle;
+    float  current_ = 0.0f, delta_ = 0.0f;
+    int    remaining_ = 0;
+    float  start_ = 0.0f, attackLevel_ = 0.0f, releaseLevel_ = 0.0f;
+    float  attackTime_ = 0.001f, decayTime_ = 0.2f, releaseTime_ = 0.001f;
 };
 
 class Partial {
@@ -187,7 +276,8 @@ public:
     bool  isActive() const { return active_; }
     float ampLevel() const { return ampLevel_; }
     float filterEnvLevel() const { return filterLevel_; }
-    float pitchEnvLevel() const { return pitchLevel_; }
+    /// Matrix source: the envelope's semitone output normalised to -1..1.
+    float pitchEnvLevel() const { return pitchLevel_ / 24.0f; }
 
     /// Per-control-block update: envelope times, pitch and filter coefficients.
     /// Modulation is applied here, on top of the snapshotted parameters, in the
@@ -221,7 +311,7 @@ public:
 
         const double detune = p.octave * 12.0 + p.semitone
                             + p.fineCents / 100.0 + pitchBendSemitones
-                            + p.pitchAmount * pitchLevel_
+                            + pitchLevel_
                             + mod.pitchSemitones;
         // Key follow pivots on middle C rather than on note zero, so turning it
         // down pulls the keyboard in around the middle of its range instead of
@@ -342,10 +432,9 @@ private:
 
         // A pitch envelope wants exactly a rise then a fall to nothing, so the
         // seven-stage machinery would be wasted on it.
-        pitchEnv_.setAttack(p.pitchAttack);
-        pitchEnv_.setDecay(p.pitchDecay);
-        pitchEnv_.setSustain(0.0f);
-        pitchEnv_.setRelease(0.001f);
+        pitchEnv_.configure(p.pitchStartLevel, p.pitchAttack, p.pitchAmount,
+                            p.pitchDecay, p.pitchRelease,
+                            p.pitchReleaseLevel);
     }
 
     WaveOscillator      osc_;
@@ -355,7 +444,7 @@ private:
     Waveshaper          shaper_;
     R50Envelope         ampEnv_;
     R50Envelope         filterEnv_;
-    synth::ADSR         pitchEnv_;
+    PitchEnvelope       pitchEnv_;
 
     double sampleRate_  = 44100.0;
     int    note_        = -1;

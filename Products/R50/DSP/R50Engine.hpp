@@ -213,12 +213,21 @@ public:
 
     float outputMeter() const { return meter_.load(std::memory_order_relaxed); }
 
+    /// Peak of the signal entering the output limiter since the last read.
+    /// Reading resets the hold, so a poll sees every excursion exactly once.
+    /// Above the limiter knee the output is being coloured; above 1.0 it
+    /// would have clipped outright without the limiter.
+    float readHeadroomPeak() {
+        return headroomPeak_.exchange(0.0f, std::memory_order_relaxed);
+    }
+
     // MARK: - Render
 
     void render(float *outL, float *outR, int frameCount) {
         const double bendSemitones =
             bendNorm_ * store_[R50ParamPitchBendRange].load(std::memory_order_relaxed);
         float peak = 0.0f;
+        float prePeak = 0.0f;
         int offset = 0;
 
         while (offset < frameCount) {
@@ -371,20 +380,31 @@ public:
                 }
 
                 const float gain = gainSmoother_.next();
-                const float sumL =
-                    outputLimit((wet.l + auditionL * kAuditionLevel) * gain);
-                const float sumR =
-                    outputLimit((wet.r + auditionR * kAuditionLevel) * gain);
+                const float preL =
+                    (wet.l + auditionL * kAuditionLevel) * gain;
+                const float preR =
+                    (wet.r + auditionR * kAuditionLevel) * gain;
+                const float sumL = outputLimit(preL);
+                const float sumR = outputLimit(preR);
 
                 outL[offset + i] = sumL;
                 outR[offset + i] = sumR;
                 const float magnitude = std::max(std::fabs(sumL), std::fabs(sumR));
                 if (magnitude > peak) peak = magnitude;
+                // The clip indicator watches the signal BEFORE the limiter:
+                // above the knee the limiter is already colouring the sound,
+                // which is exactly what "clipping" means here.
+                const float preMagnitude =
+                    std::max(std::fabs(preL), std::fabs(preR));
+                if (preMagnitude > prePeak) prePeak = preMagnitude;
             }
             offset += block;
         }
 
         meter_.store(peak, std::memory_order_relaxed);
+        if (prePeak > headroomPeak_.load(std::memory_order_relaxed)) {
+            headroomPeak_.store(prePeak, std::memory_order_relaxed);
+        }
     }
 
 private:
@@ -416,7 +436,9 @@ private:
         set(R50ParamFilterDecay,     0.45f);
         set(R50ParamFilterSustain,   0.30f);
         set(R50ParamFilterRelease,   0.30f);
-        set(R50ParamMasterGain,      0.9f);
+        // 0.74 is played-in, not derived: 0.9 left the all-wave synth
+        // presets leaning on the output limiter on every chord.
+        set(R50ParamMasterGain,      0.74f);
         set(R50ParamPitchBendRange,  2.0f);
         set(R50ParamNoiseMix,        0.0f);
         set(R50ParamNoiseSpectrum,   0.0f);   // white
@@ -483,9 +505,12 @@ private:
             setPartial(partial, R50FieldFilterBreak,       1.0f);
             setPartial(partial, R50FieldFilterSlope,       0.0f);
             setPartial(partial, R50FieldPitchKeyFollow,    1.0f);
+            setPartial(partial, R50FieldPitchStartLevel,   0.0f);
             setPartial(partial, R50FieldPitchAmount,       0.0f);
             setPartial(partial, R50FieldPitchAttack,       0.001f);
             setPartial(partial, R50FieldPitchDecay,        0.2f);
+            setPartial(partial, R50FieldPitchRelease,      0.001f);
+            setPartial(partial, R50FieldPitchReleaseLevel, 0.0f);
             setPartial(partial, R50FieldShaperType,        0.0f);
             setPartial(partial, R50FieldShaperDrive,       0.0f);
             setPartial(partial, R50FieldShaperPosition,    0.0f);
@@ -638,9 +663,14 @@ private:
         out.filterSlope       = std::max(0.0f, field(R50FieldFilterSlope));
 
         out.pitchKeyFollow = synth::clampf(field(R50FieldPitchKeyFollow), 0.0f, 2.0f);
+        out.pitchStartLevel = synth::clampf(
+            field(R50FieldPitchStartLevel), -24.0f, 24.0f);
         out.pitchAmount = synth::clampf(field(R50FieldPitchAmount), -24.0f, 24.0f);
         out.pitchAttack = std::max(0.0005f, field(R50FieldPitchAttack));
         out.pitchDecay  = std::max(0.0005f, field(R50FieldPitchDecay));
+        out.pitchRelease = std::max(0.0005f, field(R50FieldPitchRelease));
+        out.pitchReleaseLevel = synth::clampf(
+            field(R50FieldPitchReleaseLevel), -24.0f, 24.0f);
 
         const int shaper = static_cast<int>(field(R50FieldShaperType) + 0.5f);
         out.shaperType = static_cast<ShaperType>(
@@ -984,6 +1014,7 @@ private:
     float routingSmoothCoef_ = 0.0f;
     synth::OnePoleSmoother gainSmoother_;
     std::atomic<float>     meter_{0.0f};
+    std::atomic<float>     headroomPeak_{0.0f};
 };
 
 } // namespace r50

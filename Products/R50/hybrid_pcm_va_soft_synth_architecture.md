@@ -772,7 +772,9 @@ Each Partial has:
 - filter envelope;
 - amplitude envelope.
 
-Use a multi-stage envelope rather than only ADSR.
+Use a multi-stage envelope rather than only ADSR. (Shipped: amp and filter
+run the six-segment EG; pitch runs a five-segment bipolar envelope — start
+level, attack level, in-tune sustain, release level, in semitones.)
 
 ```cpp
 enum class EnvelopeCurve {
@@ -981,8 +983,9 @@ Support:
 - repeated-note policy;
 - note IDs;
 - MPE per-note controls;
-- mono note priority;
-- glide.
+- mono note priority (shipped: Voice Mode, last-note priority with
+  return-to-held);
+- glide (shipped: time, Always/Legato mode, ease-out-to-S shape).
 
 ---
 

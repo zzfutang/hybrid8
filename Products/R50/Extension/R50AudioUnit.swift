@@ -232,6 +232,7 @@ public final class R50AudioUnit: AUAudioUnit {
     }
 
     func outputMeter() -> Float { kernel.outputMeter() }
+    func headroomPeak() -> Float { kernel.headroomPeak() }
 
     // MARK: - Sample library
 

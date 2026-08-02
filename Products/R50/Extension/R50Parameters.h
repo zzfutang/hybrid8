@@ -182,6 +182,12 @@ typedef enum R50Param : unsigned long long {
     // Trajectory: 0 = ease-out (RC portamento), 0.5 = linear, 1 = full S.
     R50ParamGlideShape,
 
+    // Partial 1's multi-stage pitch EG extension (start and release stage);
+    // Partials 2-4 carry these inside their blocks like every other field.
+    R50ParamP1PitchStartLevel,
+    R50ParamP1PitchRelease,
+    R50ParamP1PitchReleaseLevel,
+
     R50ParamCount
 } R50Param;
 
@@ -236,6 +242,12 @@ typedef enum R50PartialField {
     R50FieldSend1,
     R50FieldSend2,
     R50FieldSend3,
+
+    // Multi-stage pitch EG: the start level before the attack stage, and the
+    // release stage the note drifts through after note-off.
+    R50FieldPitchStartLevel,
+    R50FieldPitchRelease,
+    R50FieldPitchReleaseLevel,
 
     R50PartialFieldCount
 } R50PartialField;
@@ -351,6 +363,9 @@ static inline R50Param r50PartialParam(int partial, R50PartialField field) {
         case R50FieldSend1:            return R50ParamP1Send1;
         case R50FieldSend2:            return R50ParamP1Send2;
         case R50FieldSend3:            return R50ParamP1Send3;
+        case R50FieldPitchStartLevel:  return R50ParamP1PitchStartLevel;
+        case R50FieldPitchRelease:     return R50ParamP1PitchRelease;
+        case R50FieldPitchReleaseLevel: return R50ParamP1PitchReleaseLevel;
         default:                       return R50ParamCount;
     }
 }

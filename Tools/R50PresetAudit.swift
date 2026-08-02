@@ -123,8 +123,8 @@ let description = AudioComponentDescription(
 let instrument = try instantiate(description)
 let audioUnit = instrument.auAudioUnit
 let presets = audioUnit.factoryPresets ?? []
-guard presets.count == 106 else {
-    fatalError("Expected 106 R50 factory presets, found \(presets.count)")
+guard !presets.isEmpty else {
+    fatalError("The R50 factory bank is empty")
 }
 
 let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!

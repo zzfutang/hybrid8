@@ -26,6 +26,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Peak output level of the last render quantum, for the UI meter.
 - (AUValue)outputMeter;
+- (AUValue)headroomPeak;
 
 /// Decode-side sample installation. Allocates and copies, so it must never be
 /// called from the render thread. Adds the asset plus a single-region

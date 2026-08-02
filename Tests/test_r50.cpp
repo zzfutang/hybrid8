@@ -1716,6 +1716,58 @@ int main() {
                   "the S shape leans out slowly and eases onto the target");
         }
 
+        // ---- Multi-stage pitch envelope -------------------------------
+        {
+            auto renderPitchEnv = [](float start, float release,
+                                     float releaseLevel) {
+                r50::R50Engine engine;
+                setupSpectralTone(engine, 0);
+                engine.setParameter(
+                    r50PartialParam(0, R50FieldPitchStartLevel), start);
+                engine.setParameter(
+                    r50PartialParam(0, R50FieldPitchAttack), 0.15f);
+                engine.setParameter(
+                    r50PartialParam(0, R50FieldPitchDecay), 0.05f);
+                engine.setParameter(
+                    r50PartialParam(0, R50FieldPitchRelease), release);
+                engine.setParameter(
+                    r50PartialParam(0, R50FieldPitchReleaseLevel),
+                    releaseLevel);
+                engine.noteOn(60, 100);
+                auto held = renderBuffer(engine, 0.60);
+                engine.noteOff(60);
+                auto released = renderBuffer(engine, 0.25);
+                held.insert(held.end(), released.begin(), released.end());
+                return held;
+            };
+            const auto flat = renderPitchEnv(0.0f, 0.001f, 0.0f);
+            const auto risen = renderPitchEnv(-12.0f, 0.001f, 0.0f);
+            double early = 0.0, settled = 0.0;
+            const size_t attackEnd = static_cast<size_t>(0.15 * kSR);
+            for (size_t i = 0; i < attackEnd; ++i)
+                early += std::fabs(flat[i] - risen[i]);
+            const size_t settleFrom = static_cast<size_t>(0.40 * kSR);
+            const size_t settleTo = static_cast<size_t>(0.58 * kSR);
+            double flatEnergy = 0.0, risenEnergy = 0.0;
+            for (size_t i = settleFrom; i < settleTo; ++i) {
+                flatEnergy += std::fabs(flat[i]);
+                risenEnergy += std::fabs(risen[i]);
+            }
+            check(early > 1.0,
+                  "a pitch EG start level bends the onset away from pitch");
+            check(risenEnergy > 0.5 * flatEnergy
+               && risenEnergy < 2.0 * flatEnergy,
+                  "the pitch EG settles back in tune while the note holds");
+
+            const auto bentTail = renderPitchEnv(0.0f, 0.2f, 12.0f);
+            double tailDiff = 0.0;
+            for (size_t i = static_cast<size_t>(0.62 * kSR);
+                 i < bentTail.size(); ++i)
+                tailDiff += std::fabs(flat[i] - bentTail[i]);
+            check(tailDiff > 1.0,
+                  "the release stage bends the tail after note-off");
+        }
+
         bool adaptersEverywhere = true;
         const r50::EffectAlgorithm adapted[] = {
             r50::EffectAlgorithm::Chorus,

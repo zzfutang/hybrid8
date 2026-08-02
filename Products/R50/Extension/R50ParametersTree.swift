@@ -214,6 +214,8 @@ enum R50Parameters {
             Field(field: R50FieldPitchKeyFollow, id: "PitchKeyFollow",
                   name: "Key Follow", min: 0, max: 2, value: 1),
 
+            Field(field: R50FieldPitchStartLevel, id: "PitchStartLevel",
+                  name: "Pitch Env Start", min: -24, max: 24, value: 0),
             Field(field: R50FieldPitchAmount, id: "PitchAmount",
                   name: "Pitch Env Amount", min: -24, max: 24, value: 0),
             Field(field: R50FieldPitchAttack, id: "PitchAttack",
@@ -222,6 +224,11 @@ enum R50Parameters {
             Field(field: R50FieldPitchDecay, id: "PitchDecay",
                   name: "Pitch Env Decay", min: 0.001, max: 8, value: 0.2,
                   unit: .seconds, log: true),
+            Field(field: R50FieldPitchRelease, id: "PitchRelease",
+                  name: "Pitch Env Release", min: 0.001, max: 8, value: 0.001,
+                  unit: .seconds, log: true),
+            Field(field: R50FieldPitchReleaseLevel, id: "PitchReleaseLevel",
+                  name: "Pitch Env Rel Level", min: -24, max: 24, value: 0),
 
             Field(field: R50FieldShaperType, id: "ShaperType",
                   name: "Shaper", min: 0,
@@ -458,7 +465,7 @@ enum R50Parameters {
         let global = AUParameterTree.createGroup(
             withIdentifier: "global", name: "Global", children: [
                 param(R50ParamMasterGain, "masterGain", "Master",
-                      min: 0, max: 1, value: 0.9),
+                      min: 0, max: 1, value: 0.74),
                 param(R50ParamPitchBendRange, "bendRange", "Bend Range",
                       min: 0, max: 24, value: 2, unit: .indexed),
             ])

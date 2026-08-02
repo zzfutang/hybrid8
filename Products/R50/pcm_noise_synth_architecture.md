@@ -1390,6 +1390,16 @@ modulation matrix, macro assignment.
 Tier-2 patch state and `fullState`, preset migration, asset hashing, missing
 sample resolution, memory-mapped factory library, SIMD, profiling.
 
+### Shipped since the phase record
+Monophonic voice mode (last-note priority with return-to-held) and glide
+with a fingered Legato mode and a shaped trajectory; loudness on a squared
+velocity curve with reworked gain staging behind a bit-transparent knee
+limiter and a headroom LED beside the master control on the top bar; the
+pitch envelope grown to the full multi-stage shape (start level, attack
+level, in-tune sustain, release level — all bipolar semitones); the factory
+bank as JSON patch documents with import/export, including twenty Korg M1
+ports converted by `Tools/m1_to_r50.py`.
+
 ### 22.1 Version-one boundary
 
 **Ship v1 with:** 4 Partials; PCM and noise sources; 2 Tones; multisamples;

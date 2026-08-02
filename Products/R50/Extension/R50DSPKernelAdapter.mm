@@ -77,6 +77,10 @@
     return (AUValue)_engine.outputMeter();
 }
 
+- (AUValue)headroomPeak {
+    return (AUValue)_engine.readHeadroomPeak();
+}
+
 - (NSInteger)installSampleNamed:(NSString *)name
                         samples:(NSData *)samples
                      sampleRate:(double)sampleRate

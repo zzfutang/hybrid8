@@ -121,9 +121,34 @@ struct R50View: View {
             Spacer()
             presetBrowser
             Spacer()
+            R50Value(title: "Master", address: R50ParamMasterGain, model: model)
+                .frame(width: 110)
+            clipLED
             R50Meter(level: model.outputLevel)
         }
         .padding(.horizontal, 4)
+    }
+
+    /// Headroom LED beside the master meter: amber while the output safety
+    /// limiter is shaping the sound, red when the pre-limiter signal exceeded
+    /// full scale. Held briefly so single transients register.
+    private var clipLED: some View {
+        let color: Color = model.clipState == 2 ? Color(red: 1.0, green: 0.16, blue: 0.12)
+                        : model.clipState == 1 ? Color(red: 1.0, green: 0.72, blue: 0.1)
+                        : Color(white: 0.22)
+        return VStack(spacing: 2) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+                .overlay(Circle().stroke(Color(white: 0.32), lineWidth: 1))
+                .shadow(color: model.clipState > 0 ? color.opacity(0.8) : .clear,
+                        radius: 3)
+            Text("CLIP")
+                .font(.system(size: 6, weight: .bold, design: .monospaced))
+                .tracking(0.6)
+                .foregroundColor(R50Palette.engrave)
+        }
+        .help("Headroom at the master output. Amber: the safety limiter is colouring the sound — back off Partial levels, sends or Master. Red: the signal before the limiter exceeded full scale.")
     }
 
     private var pageTabs: some View {
@@ -587,10 +612,19 @@ struct R50View: View {
     private var pitchEnvelope: some View {
         R50Panel(title: "Pitch Envelope") {
             VStack(alignment: .leading, spacing: 8) {
-                R50Value(title: "Amount", address: addr(R50FieldPitchAmount), model: model)
-                R50Value(title: "Attack", address: addr(R50FieldPitchAttack), model: model)
-                R50Value(title: "Decay", address: addr(R50FieldPitchDecay), model: model)
-                Text("Bends this Partial at note-on and settles back to pitch. A few semitones with a short decay is what makes a sampled attack read as struck.")
+                HStack(spacing: 5) {
+                    R50Value(title: "Start", address: addr(R50FieldPitchStartLevel), model: model)
+                    R50Value(title: "Amount", address: addr(R50FieldPitchAmount), model: model)
+                }
+                HStack(spacing: 5) {
+                    R50Value(title: "Attack", address: addr(R50FieldPitchAttack), model: model)
+                    R50Value(title: "Decay", address: addr(R50FieldPitchDecay), model: model)
+                }
+                HStack(spacing: 5) {
+                    R50Value(title: "Release", address: addr(R50FieldPitchRelease), model: model)
+                    R50Value(title: "Rel Level", address: addr(R50FieldPitchReleaseLevel), model: model)
+                }
+                Text("Start → Amount over Attack, settles to pitch over Decay; note-off drifts to the Rel Level over Release. Semitones throughout — Start −12 with a slow attack is the classic riser.")
                     .font(.system(size: 8, weight: .medium, design: .monospaced))
                     .foregroundColor(R50Palette.engrave)
                     .lineLimit(6)
