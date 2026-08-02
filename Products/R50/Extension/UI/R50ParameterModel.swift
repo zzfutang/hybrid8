@@ -108,4 +108,25 @@ final class R50ParameterModel: ObservableObject {
         presetName = preset.name
         version &+= 1
     }
+
+    // MARK: - JSON patch documents
+
+    func exportPatchJSON() throws -> Data {
+        guard let r50 = audioUnit as? R50AudioUnit else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return try r50.exportPatchJSON(name: presetName)
+    }
+
+    /// Applies the document; returns any keyPaths this build did not know.
+    func importPatchJSON(_ data: Data) throws -> [String] {
+        guard let r50 = audioUnit as? R50AudioUnit else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        let result = try r50.importPatchJSON(data)
+        presetIndex = -1
+        presetName = result.name
+        version &+= 1
+        return result.unknownKeys
+    }
 }

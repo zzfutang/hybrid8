@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0A57810F0215EDF591C3BE88 /* MusicalTypingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E121C11D557B938C66F5F0E /* MusicalTypingController.swift */; };
 		0CB313381221B65D2FFD8BA4 /* R50ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFAAC8942C83291B677DAB8 /* R50ContentView.swift */; };
 		11715466F6817FCC81AFD690 /* SynthParametersTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1C382D5C95F92CE70271E1 /* SynthParametersTree.swift */; };
 		14360062978DE98839567A6C /* R50ParameterModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B552FFA0A3EC1055376BC7DF /* R50ParameterModel.swift */; };
@@ -21,6 +22,8 @@
 		43FBC657F39D95336B7D9936 /* factory_samples in Resources */ = {isa = PBXBuildFile; fileRef = 1A29DF6BB2B6903AAAF4CF46 /* factory_samples */; };
 		45CCA61426EF5F476F70D725 /* PresetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97914D3D466CC0071C9535CD /* PresetStore.swift */; };
 		47F141DCE65FEF40141E5DC2 /* PerformanceKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D27DAF314B0D8B1899F4BC3 /* PerformanceKeyboardView.swift */; };
+		55F09C61158A51B7ED577509 /* R50PatchJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EB26307DCD6ADCD536F2BC /* R50PatchJSON.swift */; };
+		65A1B089F1BBDB1774C34C21 /* factory_presets in Resources */ = {isa = PBXBuildFile; fileRef = A516E498728F3C6B440ED5E8 /* factory_presets */; };
 		6875C8DE26DA8E611737B311 /* AudioUnitHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3032319806890090FD341B50 /* AudioUnitHost.swift */; };
 		6A03304627D01F357CFD14DA /* R50Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 43741427DD1185348DACAEA1 /* R50Extension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6E67E81BCA7DE5C0E773DB5D /* R50SampleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112FD104BE725349BC5B06E2 /* R50SampleStore.swift */; };
@@ -47,6 +50,7 @@
 		C3C2917FCEACF97697615F27 /* R50View.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD9BD8CBC130F448D3ADF1F9 /* R50View.swift */; };
 		C72F5D3039604622BED6A6D5 /* SynthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F516362934563D869871E8AC /* SynthView.swift */; };
 		CDE2EC993B1F94D33AA916DD /* Samples in Resources */ = {isa = PBXBuildFile; fileRef = AC7BBBEE25EBADC5B1680F6A /* Samples */; };
+		CE31887F73BC852E62B0B5FB /* MIDIEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81DE5D8AC0351437DC2CE76B /* MIDIEvent.swift */; };
 		E390439AC633AF0DC2673CAC /* MusicalTypingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E121C11D557B938C66F5F0E /* MusicalTypingController.swift */; };
 		E5FB2B9FE0FA79A414081107 /* PerformanceKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D27DAF314B0D8B1899F4BC3 /* PerformanceKeyboardView.swift */; };
 		E8D6963CF636921BF9F37976 /* R50ParametersTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772DF3A82502AEDD6C9C552E /* R50ParametersTree.swift */; };
@@ -147,6 +151,7 @@
 		97914D3D466CC0071C9535CD /* PresetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetStore.swift; sourceTree = "<group>"; };
 		9E62C37319F8EDDDC7A80985 /* R50PitchDetect.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50PitchDetect.hpp; sourceTree = "<group>"; };
 		A4EE673DC8E4D1CB2783E28A /* PresetDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetDocument.swift; sourceTree = "<group>"; };
+		A516E498728F3C6B440ED5E8 /* factory_presets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = factory_presets; path = Products/R50/factory_presets; sourceTree = SOURCE_ROOT; };
 		AA3098E2CA53815C28DFBDFF /* SynthTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynthTheme.swift; sourceTree = "<group>"; };
 		AA5A665188698ADB50316116 /* R50SamplePlayer.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50SamplePlayer.hpp; sourceTree = "<group>"; };
 		AC7BBBEE25EBADC5B1680F6A /* Samples */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Samples; path = Products/R50/Samples; sourceTree = SOURCE_ROOT; };
@@ -159,6 +164,7 @@
 		B552FFA0A3EC1055376BC7DF /* R50ParameterModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50ParameterModel.swift; sourceTree = "<group>"; };
 		B969D4EA2487259367B0EEB7 /* SynthDSPKernelAdapter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SynthDSPKernelAdapter.mm; sourceTree = "<group>"; };
 		C1767F6F1334E44D6F16411B /* R50Voice.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = R50Voice.hpp; sourceTree = "<group>"; };
+		C5EB26307DCD6ADCD536F2BC /* R50PatchJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50PatchJSON.swift; sourceTree = "<group>"; };
 		C6781E39A9B14C440E2237C3 /* Hybrid8Engine.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Hybrid8Engine.hpp; sourceTree = "<group>"; };
 		CC907F34AF0F106EAB6BD154 /* R50Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50Theme.swift; sourceTree = "<group>"; };
 		CF158EE98361F6B7CC2CD80E /* R50App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R50App.swift; sourceTree = "<group>"; };
@@ -245,6 +251,7 @@
 				9A4CB970AD05718C18D4D63E /* App */,
 				9DB5BC8D930E5764A991C44B /* DSP */,
 				D3476A314BB9BA063E33890F /* Extension */,
+				A516E498728F3C6B440ED5E8 /* factory_presets */,
 				1A29DF6BB2B6903AAAF4CF46 /* factory_samples */,
 				AC7BBBEE25EBADC5B1680F6A /* Samples */,
 			);
@@ -391,6 +398,7 @@
 				858F1E9DA80548BB0FC91928 /* R50FactoryPresets.swift */,
 				8FB5F915331861EE4ED079E0 /* R50Parameters.h */,
 				772DF3A82502AEDD6C9C552E /* R50ParametersTree.swift */,
+				C5EB26307DCD6ADCD536F2BC /* R50PatchJSON.swift */,
 			);
 			path = Extension;
 			sourceTree = "<group>";
@@ -546,6 +554,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CDE2EC993B1F94D33AA916DD /* Samples in Resources */,
+				65A1B089F1BBDB1774C34C21 /* factory_presets in Resources */,
 				43FBC657F39D95336B7D9936 /* factory_samples in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -611,12 +620,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A9693C6A3A8BEA2A3E22D8E /* AudioUnitViewController.swift in Sources */,
+				CE31887F73BC852E62B0B5FB /* MIDIEvent.swift in Sources */,
+				0A57810F0215EDF591C3BE88 /* MusicalTypingController.swift in Sources */,
 				98D1B05C89A39DE00B9E3CA8 /* MusicalTypingStateMachine.swift in Sources */,
 				FE5405DBC5635039F2C5E4C1 /* R50AudioUnit.swift in Sources */,
 				256B448D2247C0A6C12E78F5 /* R50DSPKernelAdapter.mm in Sources */,
 				40E305DBE7FE4C5436CFD61E /* R50FactoryPresets.swift in Sources */,
 				14360062978DE98839567A6C /* R50ParameterModel.swift in Sources */,
 				E8D6963CF636921BF9F37976 /* R50ParametersTree.swift in Sources */,
+				55F09C61158A51B7ED577509 /* R50PatchJSON.swift in Sources */,
 				6E67E81BCA7DE5C0E773DB5D /* R50SampleStore.swift in Sources */,
 				2A1BCEA56988EF92C3E12C6F /* R50Theme.swift in Sources */,
 				C3C2917FCEACF97697615F27 /* R50View.swift in Sources */,

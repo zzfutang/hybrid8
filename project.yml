@@ -143,6 +143,10 @@ targets:
         type: folder
       - path: Products/R50/factory_samples
         type: folder
+      # Factory presets as JSON patch documents; when non-empty this IS the
+      # factory bank (see R50FactoryPresets.fileBank).
+      - path: Products/R50/factory_presets
+        type: folder
     settings:
       base:
         PRODUCT_NAME: R50Extension

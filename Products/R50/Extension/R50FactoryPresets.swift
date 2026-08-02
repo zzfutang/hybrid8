@@ -22,7 +22,40 @@ struct R50FactoryPreset {
 
 enum R50FactoryPresets {
 
-    static let all: [R50FactoryPreset] = buildBank()
+    static let all: [R50FactoryPreset] = fileBank() ?? buildBank()
+
+    /// The shipped bank as JSON patch documents in the bundle's
+    /// factory_presets directory, in bytewise filename order. The Swift
+    /// recipes below remain the origin of the content and the fallback when
+    /// the directory is absent or unreadable — the same contract the factory
+    /// samples use: once files exist they are what ships and what gets
+    /// edited, and scripts/export-r50-presets.sh regenerates them. All or
+    /// nothing: one unreadable document falls back to the recipes rather
+    /// than shipping a hole where a preset number used to be.
+    private static func fileBank() -> [R50FactoryPreset]? {
+        guard let root = Bundle(for: R50AudioUnit.self)
+            .url(forResource: "factory_presets", withExtension: nil) else {
+            return nil
+        }
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: nil)) ?? []
+        let ordered = files.filter { $0.pathExtension == "json" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        guard !ordered.isEmpty else { return nil }
+
+        let tree = R50Parameters.buildTree()
+        var bank: [R50FactoryPreset] = []
+        for url in ordered {
+            guard let data = try? Data(contentsOf: url),
+                  let patch = try? R50PatchJSON.decode(data, tree: tree) else {
+                return nil
+            }
+            bank.append(R50FactoryPreset(name: patch.name,
+                                         values: patch.values,
+                                         sampleAssets: patch.sampleAssets))
+        }
+        return bank
+    }
 
     private static func buildBank() -> [R50FactoryPreset] {
         var bank: [R50FactoryPreset] = []

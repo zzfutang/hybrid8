@@ -91,20 +91,38 @@ public final class R50AudioUnit: AUAudioUnit {
     /// AU parameter state still contains the numeric selector for host
     /// automation. This sidecar makes saved documents and user presets robust
     /// when directory discovery changes runtime indices.
+    /// Partial -> persistent instrument ID for whatever samples are selected
+    /// right now. This is the identity that survives library reordering; the
+    /// numeric selector parameters are runtime indices. Only partials whose
+    /// source is actually a sample are stated — a wave partial's selector is
+    /// an inert bootstrap value, not a selection worth preserving.
+    func currentSampleAssets() -> [Int: String] {
+        var sampleAssets: [Int: String] = [:]
+        for partial in 0..<4 {
+            guard let source = parameterTree?.parameter(
+                withAddress: r50PartialParam(Int32(partial),
+                                             R50FieldSourceType).rawValue),
+                  source.value >= 0.5
+            else { continue }
+            let address = r50PartialParam(Int32(partial),
+                                          R50FieldSampleInstrument)
+            guard let parameter = parameterTree?.parameter(
+                withAddress: address.rawValue)
+            else { continue }
+            let index = Int(parameter.value.rounded())
+            if let assetId = sampleInfo(at: index)?["assetId"] as? String {
+                sampleAssets[partial] = assetId
+            }
+        }
+        return sampleAssets
+    }
+
     public override var fullState: [String: Any]? {
         get {
             var state = super.fullState ?? [:]
             var sampleAssets: [String: String] = [:]
-            for partial in 0..<4 {
-                let address = r50PartialParam(Int32(partial),
-                                              R50FieldSampleInstrument)
-                guard let parameter = parameterTree?.parameter(
-                    withAddress: address.rawValue)
-                else { continue }
-                let index = Int(parameter.value.rounded())
-                if let assetId = sampleInfo(at: index)?["assetId"] as? String {
-                    sampleAssets[String(partial)] = assetId
-                }
+            for (partial, assetId) in currentSampleAssets() {
+                sampleAssets[String(partial)] = assetId
             }
             state["R50SampleAssetIDs"] = sampleAssets
             return state
@@ -140,15 +158,23 @@ public final class R50AudioUnit: AUAudioUnit {
     }
 
     func applyFactoryPreset(_ index: Int) {
-        guard let tree = parameterTree,
-              index >= 0, index < R50FactoryPresets.all.count else { return }
+        guard index >= 0, index < R50FactoryPresets.all.count else { return }
         let preset = R50FactoryPresets.all[index]
-        let overrides = preset.values
+        applyPatch(preset.values, sampleAssets: preset.sampleAssets)
+    }
+
+    /// Reset the whole tree to defaults overlaid with `values`, then resolve
+    /// the persistent sample IDs to whatever runtime indices they hold in
+    /// this library. Every way of applying a complete sound — factory preset,
+    /// imported patch document — funnels through here.
+    func applyPatch(_ values: [AUParameterAddress: AUValue],
+                    sampleAssets: [Int: String]) {
+        guard let tree = parameterTree else { return }
         for param in tree.allParameters {
-            let v = overrides[param.address] ?? defaultState[param.address] ?? param.value
+            let v = values[param.address] ?? defaultState[param.address] ?? param.value
             param.setValue(v, originator: nil) // nil -> UI + DSP both refresh
         }
-        for (partial, assetID) in preset.sampleAssets {
+        for (partial, assetID) in sampleAssets {
             let instrument = kernel.instrumentIndex(forAssetId: assetID)
             let address = r50PartialParam(Int32(partial),
                                           R50FieldSampleInstrument)
@@ -158,6 +184,28 @@ public final class R50AudioUnit: AUAudioUnit {
                   ) else { continue }
             parameter.setValue(AUValue(instrument), originator: nil)
         }
+    }
+
+    // MARK: - Patch documents
+
+    /// The complete current sound as a human-editable JSON document.
+    func exportPatchJSON(name: String) throws -> Data {
+        guard let tree = parameterTree else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return try R50PatchJSON.encode(tree: tree, name: name,
+                                       sampleAssets: currentSampleAssets())
+    }
+
+    /// Apply a JSON patch document. Returns its name and any keyPaths this
+    /// build did not recognise (so the UI can report a stale or typoed file).
+    func importPatchJSON(_ data: Data) throws -> (name: String, unknownKeys: [String]) {
+        guard let tree = parameterTree else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        let patch = try R50PatchJSON.decode(data, tree: tree)
+        applyPatch(patch.values, sampleAssets: patch.sampleAssets)
+        return (patch.name, patch.unknownKeys)
     }
 
     // MARK: - Buses

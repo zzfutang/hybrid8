@@ -185,6 +185,18 @@ struct R50View: View {
                 browserButtonLabel("SAVE", width: 46)
             }
             .buttonStyle(.plain)
+
+            Button { exportPatch() } label: {
+                browserButtonLabel("EXP", width: 36)
+            }
+            .buttonStyle(.plain)
+            .help("Export the complete current sound as an editable JSON patch document.")
+
+            Button { importPatch() } label: {
+                browserButtonLabel("IMP", width: 36)
+            }
+            .buttonStyle(.plain)
+            .help("Import a JSON patch document and apply it.")
         }
         .alert("Save Patch", isPresented: $showingSavePatch) {
             TextField("Patch name", text: $newPatchName)
@@ -220,6 +232,42 @@ struct R50View: View {
                 .stroke(Color(white: 0.30), lineWidth: 1))
     }
 
+    private func exportPatch() {
+        let panel = NSSavePanel()
+        panel.title = "Export Patch"
+        panel.nameFieldStringValue = model.presetName + ".json"
+        if let jsonType = UTType(filenameExtension: "json") {
+            panel.allowedContentTypes = [jsonType]
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try model.exportPatchJSON().write(to: url, options: .atomic)
+        } catch {
+            patchSaveError = error.localizedDescription
+            showingPatchSaveError = true
+        }
+    }
+
+    private func importPatch() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Patch"
+        panel.allowsMultipleSelection = false
+        if let jsonType = UTType(filenameExtension: "json") {
+            panel.allowedContentTypes = [jsonType]
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let unknown = try model.importPatchJSON(try Data(contentsOf: url))
+            if !unknown.isEmpty {
+                patchSaveError = "Applied, but these keys are not parameters "
+                    + "of this build: " + unknown.joined(separator: ", ")
+                showingPatchSaveError = true
+            }
+        } catch {
+            patchSaveError = error.localizedDescription
+            showingPatchSaveError = true
+        }
+    }
 
     private var presetList: some View {
         ScrollView {
