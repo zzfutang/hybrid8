@@ -4,10 +4,15 @@ import AppKit
 /// handling while it is active; Escape or Return explicitly returns ownership
 /// to the instrument.
 ///
-/// The controller is a process-local event monitor, so it works no matter
-/// which view currently has focus — there is no first responder to lose. It
-/// runs in the standalone host and in the AUv3 view service alike; `isActive`
-/// is where the appex declines the keyboard while a DAW is frontmost.
+/// The controller is a process-local event monitor: it observes key events no
+/// matter which view currently has focus and turns them into notes. It does
+/// NOT silence the alert beep — on current macOS, returning nil from a local
+/// monitor no longer suppresses dispatch (verified with a breakpoint on
+/// NSBeep: the event continues into -[NSWindow keyDown:] regardless), so the
+/// swallowing lives in the responder chain instead: MusicalTypingKeyCatcher
+/// in the host window, and the AU editor's container view in the appex.
+/// `isActive` is where the appex declines the keyboard while a DAW is
+/// frontmost.
 final class MusicalTypingController {
     private weak var sink: PerformanceEventSink?
     private let isActive: () -> Bool
@@ -64,11 +69,8 @@ final class MusicalTypingController {
         let result = machine.handle(
             character: character, isDown: isDown, isRepeat: event.isARepeat)
         guard result.0 else {
-            // Swallow unhandled key-downs so the responder chain does not play
-            // the macOS alert sound ("click") for keys the instrument doesn't
-            // use. Modifier combos and text-field keys were already returned
-            // above, so app/menu shortcuts are unaffected. Key-ups never beep,
-            // so pass them through to keep normal event flow.
+            // Returning nil is best-effort suppression; the responder-level
+            // catchers are what actually keep unhandled keys from beeping.
             return isDown ? nil : event
         }
         dispatch(result.1)

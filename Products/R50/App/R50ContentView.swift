@@ -6,6 +6,10 @@ struct R50ContentView: View {
 
     var body: some View {
         GeometryReader { geo in
+            // Invisible key sink: consumes the plain keys musical typing uses
+            // so the window's own keyDown never answers them with the beep.
+            MusicalTypingKeyCatcher()
+                .frame(width: 0, height: 0)
             // Mirror the AU editor's fixed canvas without importing extension
             // UI sources into the standalone host target.
             let editorAspect: CGFloat = 1180.0 / 470.0
