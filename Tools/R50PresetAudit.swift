@@ -123,8 +123,8 @@ let description = AudioComponentDescription(
 let instrument = try instantiate(description)
 let audioUnit = instrument.auAudioUnit
 let presets = audioUnit.factoryPresets ?? []
-guard presets.count == 100 else {
-    fatalError("Expected 100 R50 factory presets, found \(presets.count)")
+guard presets.count == 106 else {
+    fatalError("Expected 106 R50 factory presets, found \(presets.count)")
 }
 
 let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
@@ -201,8 +201,9 @@ for (index, preset) in presets.enumerated() {
     csv += String(format: "%d,%@,%.6f,%.6f,%.6f,%.6f,%.5f,%.4f,%.4f,%.4f,%@\n",
                   index, escapedName, metrics.peak, rms, dc, metrics.maxStep,
                   clipPercent, hf * 100, ultra * 100, flatness, status)
-    print(String(format: "[%3d/100] %-30@ peak %.3f  HF %.1f%%  %@",
-                 index + 1, preset.name as NSString, metrics.peak, hf * 100, status))
+    print(String(format: "[%3d/%d] %-30@ peak %.3f  HF %.1f%%  %@",
+                 index + 1, presets.count, preset.name as NSString,
+                 metrics.peak, hf * 100, status))
 }
 
 try csv.write(to: outputURL.appendingPathComponent("report.csv"),

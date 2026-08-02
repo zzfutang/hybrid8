@@ -361,6 +361,7 @@ struct SampleData {
 
     double   sourceSampleRate = 44100.0;
     int      rootKey          = 60;
+    float    tuneCents        = 0.0f; // playback correction from WAV metadata
     uint32_t loopStart        = 0;
     uint32_t loopEnd          = 0;
     LoopMode loopMode         = LoopMode::None;
@@ -377,6 +378,16 @@ struct SampleData {
 `SampleData` is built entirely on a background thread and is **immutable once
 published**. The render thread only ever holds a raw pointer to a published,
 never-mutated instance (§19).
+
+For RIFF/WAVE input the loader reads the `smpl` chunk's MIDI unity note, MIDI
+pitch fraction, and first supported loop record. The pitch fraction describes
+how far above the integer unity note the recording lies; R50 stores the inverse
+as its playback correction (`tuneCents`), so a sample declared 14 cents sharp
+is played 14 cents down. `smpl` loop ends are inclusive and must be converted
+once, at load time, to R50's exclusive `loopEnd`. Loop type 0 maps to Forward
+and type 1 to PingPong; unsupported loop types are diagnosed and treated as no
+loop rather than guessed. Malformed roots or loop bounds never reach the render
+thread.
 
 ### 5.4 Multisample regions
 
@@ -403,6 +414,91 @@ struct Multisample {
 
 Region lookup on note-on is a linear scan over `regionCount` — bounded, cheap,
 and allocation-free. Sort regions by key at load time so the scan exits early.
+
+A WAV `smpl` chunk describes one sample, not a multisample keyboard map.
+Therefore a multisample is formed by grouping WAV files into one instrument.
+The factory manifest supplies explicit key/velocity bounds; a future
+multi-file user import may derive key bounds from the midpoints between
+adjacent `smpl` roots, but must show the derived map before committing it.
+Explicit manifest/import values override embedded metadata; omitted root,
+tuning and loop values inherit from each WAV.
+
+#### 5.4.1 Directory-based factory instruments
+
+Factory content also needs a low-friction path that does not require editing
+the monolithic catalog for every ordinary multisample. Each immediate child
+directory of `factory_samples/` may represent one instrument:
+
+```text
+factory_samples/Flute/
+    instrument.json       # optional
+    flute-C3.wav
+    flute-F3.wav
+    flute-A3.wav
+    flute-C4.wav
+```
+
+With no `instrument.json`, this is an automatic root-zoned instrument. Every
+WAV must state a valid `smpl` unity note. Sort by `(rootKey, filename)` and put
+each boundary halfway between adjacent roots; the lower-root zone owns an exact
+tie, and the outside zones extend to keys 0 and 127. Embedded pitch fraction
+and loop data remain per-zone. Do not infer roots from filenames.
+
+Automatic mode supports exactly one velocity layer and one WAV per root.
+Duplicate/missing roots, malformed metadata, unsupported loop types, decode
+failure, or region-count overflow reject the complete directory atomically.
+These constraints prevent a convenient import convention from becoming an
+ambiguous sampler format.
+
+An optional versioned `instrument.json` supplies `id`, display `name`, and
+explicit zones. It is required for velocity layers, manual key bounds,
+intentional overlaps/gaps, or metadata overrides. Zone fields use the same
+precedence as the top-level manifest:
+
+```text
+explicit zone field
+    > embedded WAV smpl field
+    > loader fallback (only where explicitly allowed)
+```
+
+Only direct child WAV filenames are accepted in the directory manifest:
+absolute paths, `..`, symlinks escaping the directory, and recursive discovery
+are rejected.
+
+Identity and presentation are separate:
+
+```text
+Instrument display name:  "Concert Flute"             (shown in the selector)
+Instrument ID:            "factory.concert_flute"     (stored in patch/preset state)
+Zone ID:                  "factory.concert_flute/c4"  (loader/database identity)
+Source file:              "Flute C4 -45.wav"          (storage only)
+Render-thread slot:        integer             (resolved before note-on)
+```
+
+`instrument.json.name` defaults to the directory basename. Its explicit `id`
+is globally unique. Each zone has an `id` unique within that instrument; the
+complete zone asset ID is `instrument-id + "/" + zone-id`. Renaming the browser
+label or WAV file therefore does not break a preset when the IDs and mapping
+remain unchanged. Patch state stores only the instrument ID. The selected
+region carries a pre-resolved integer slot, so no strings or paths enter the
+render thread.
+
+For zero-manifest auditioning, canonical IDs are derived from the relative
+directory path and WAV filename stem under `factory.auto.*`. Loose WAVs use
+`factory.loose.*`. These IDs are rename-sensitive and must not be used by
+released presets. Explicit IDs accept lowercase ASCII letters, digits, `.`,
+`-`, and `_`; collisions at any scope reject the instrument. The legacy
+top-level manifest gains the same instrument/zone `id` fields, with temporary
+compatibility IDs only during migration.
+
+Discovery is deterministic: load the existing ordered top-level manifest, then
+append immediate child directories sorted bytewise by relative path. Loose WAV
+handling remains separate. Every instrument needs a globally unique persistent
+ID; an automatic directory temporarily derives one from its relative path,
+while factory content used by presets should declare one explicitly. AU
+automation retains the numeric selector, but `fullState` stores an
+`R50SampleAssetIDs` sidecar for all four Partials and resolves those IDs on
+restore, so adding a directory cannot silently repoint saved sound.
 
 Note the asset reference is an **index**, not a `std::string`. String comparison
 and `std::string` copies must not occur on the render thread; asset IDs are
@@ -1177,6 +1273,17 @@ Required new coverage:
 - region selection by key and velocity, including boundaries;
 - root-key and fine-tune offsets.
 
+**WAV / `smpl` ingestion**
+- unity note and 32-bit MIDI pitch fraction, including sign conversion to the
+  playback correction;
+- root/tuning inheritance and explicit zone override precedence;
+- inclusive RIFF loop end converted exactly once to exclusive engine form;
+- forward and alternating loop types; unsupported types fail safely;
+- malformed/truncated chunks, invalid roots, invalid loop bounds, and multiple
+  loop records (the first supported valid loop wins);
+- a multi-zone instrument selects the correct sample at every key boundary,
+  starts it once, and retains it for the voice lifetime.
+
 **Mip pyramid**
 - level selection matches playback increment;
 - crossfade between adjacent levels is continuous;
@@ -1218,6 +1325,40 @@ validates the hardest technical risk (§5.2) first.
 ### Phase 2 — Sample assets
 Multisample regions, key/velocity mapping, one-shot transients, loop modes and
 crossfades, the background sample manager, and the bundled factory set.
+
+Multisampled WAV instruments are explicitly back in the plan. The loader,
+directory format, identity mapping, and core playback path described in steps
+1–4 and 6 are implemented; multi-file user import in step 5 remains:
+
+1. Extend `LoadedWav`/`decodeWav` to retain `smpl` MIDI pitch fraction as a
+   fine-tuning correction, validate unity note and loop records, and preserve
+   the existing inclusive-to-exclusive loop conversion.
+2. Let manifest zones inherit root, tuning, loop points and loop mode from the
+   WAV when those fields are omitted. Explicit zone metadata remains the final
+   authority.
+3. Publish all zones as one immutable `Multisample`, sorted and validated for
+   deterministic key/velocity lookup. Resolve the region once at note-on,
+   start its `SamplePlayer`, and retain the sample/region for the voice.
+4. Verify forward and ping-pong sustain playback, one-shot termination,
+   loop-aware cubic interpolation, sample-start behavior, and tuning across
+   source/output sample rates.
+5. Add user-facing multi-file import and key-map review after the factory
+   manifest path is proven. Deriving key ranges from adjacent roots is a UI
+   convenience, not part of WAV decoding.
+6. Add atomic directory ingestion: optional `instrument.json`, automatic
+   midpoint zoning for unambiguous `smpl`-rooted WAV sets, deterministic
+   discovery, persistent instrument IDs, and diagnostics that reject a bad
+   directory without suppressing other instruments.
+
+Steps 1–4 and 6 are complete. The packaged set contains nine directory
+instruments and 79 looped zones, all covered by ingestion, full-keyboard,
+playback, loop, and persistent-ID tests. Step 5 remains future UI work.
+
+The 106-preset factory bank includes six direct multisample showcases. Another
+35 existing presets now substitute the new zoned piano, choir, violin, flute,
+nylon-guitar, pizzicato, and slap-bass instruments for their equivalent legacy
+sources. Preset recipes store per-Partial persistent IDs and resolve them only
+when applied; runtime DSP continues to operate entirely on integer slots.
 
 ### Phase 3 — Partial engine
 Multi-stage envelopes, per-Partial filter and pan, noise source, waveshaper, two

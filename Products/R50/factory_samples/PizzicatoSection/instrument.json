@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.pizzicato_celli",
+  "name": "Pizzicato Section",
+  "zones": [
+    {
+      "id": "c2",
+      "file": "Pizz C3.wav",
+      "rootKey": 36,
+      "lowKey": 0,
+      "highKey": 37
+    },
+    {
+      "id": "ds2",
+      "file": "Pizz D#3.wav",
+      "rootKey": 39,
+      "lowKey": 38,
+      "highKey": 42
+    },
+    {
+      "id": "a2",
+      "file": "Pizz A3.wav",
+      "rootKey": 45,
+      "lowKey": 43,
+      "highKey": 46
+    },
+    {
+      "id": "c3",
+      "file": "Pizz C4.wav",
+      "rootKey": 48,
+      "lowKey": 47,
+      "highKey": 50
+    },
+    {
+      "id": "e3",
+      "file": "Pizz E4.wav",
+      "rootKey": 52,
+      "lowKey": 51,
+      "highKey": 54
+    },
+    {
+      "id": "gs3",
+      "file": "Pizz G#4.wav",
+      "rootKey": 56,
+      "lowKey": 55,
+      "highKey": 57
+    },
+    {
+      "id": "b3",
+      "file": "Pizz B4.wav",
+      "rootKey": 59,
+      "lowKey": 58,
+      "highKey": 61
+    },
+    {
+      "id": "ds4",
+      "file": "Pizz D#5.wav",
+      "rootKey": 63,
+      "lowKey": 62,
+      "highKey": 64
+    },
+    {
+      "id": "fs4",
+      "file": "Pizz F#5.wav",
+      "rootKey": 66,
+      "lowKey": 65,
+      "highKey": 68
+    },
+    {
+      "id": "as4",
+      "file": "Pizz A#5.wav",
+      "rootKey": 70,
+      "lowKey": 69,
+      "highKey": 72
+    },
+    {
+      "id": "d5",
+      "file": "Pizz D6.wav",
+      "rootKey": 74,
+      "lowKey": 73,
+      "highKey": 76
+    },
+    {
+      "id": "fs5",
+      "file": "Pizz F#6.wav",
+      "rootKey": 78,
+      "lowKey": 77,
+      "highKey": 80
+    },
+    {
+      "id": "b5",
+      "file": "Pizz B6.wav",
+      "rootKey": 83,
+      "lowKey": 81,
+      "highKey": 85
+    },
+    {
+      "id": "e6",
+      "file": "Pizz E7.wav",
+      "rootKey": 88,
+      "lowKey": 86,
+      "highKey": 127
+    }
+  ]
+}

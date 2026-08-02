@@ -88,6 +88,43 @@ public final class R50AudioUnit: AUAudioUnit {
 
     public override var supportsUserPresets: Bool { true }
 
+    /// AU parameter state still contains the numeric selector for host
+    /// automation. This sidecar makes saved documents and user presets robust
+    /// when directory discovery changes runtime indices.
+    public override var fullState: [String: Any]? {
+        get {
+            var state = super.fullState ?? [:]
+            var sampleAssets: [String: String] = [:]
+            for partial in 0..<4 {
+                let address = r50PartialParam(Int32(partial),
+                                              R50FieldSampleInstrument)
+                guard let parameter = parameterTree?.parameter(
+                    withAddress: address.rawValue)
+                else { continue }
+                let index = Int(parameter.value.rounded())
+                if let assetId = sampleInfo(at: index)?["assetId"] as? String {
+                    sampleAssets[String(partial)] = assetId
+                }
+            }
+            state["R50SampleAssetIDs"] = sampleAssets
+            return state
+        }
+        set {
+            super.fullState = newValue
+            guard let sampleAssets = newValue?["R50SampleAssetIDs"]
+                    as? [String: String] else { return }
+            for partial in 0..<4 {
+                guard let assetId = sampleAssets[String(partial)] else { continue }
+                let index = kernel.instrumentIndex(forAssetId: assetId)
+                guard index >= 0 else { continue }
+                let address = r50PartialParam(Int32(partial),
+                                              R50FieldSampleInstrument)
+                parameterTree?.parameter(withAddress: address.rawValue)?
+                    .setValue(AUValue(index), originator: nil)
+            }
+        }
+    }
+
     public override var currentPreset: AUAudioUnitPreset? {
         get { _currentPreset }
         set {
@@ -105,10 +142,21 @@ public final class R50AudioUnit: AUAudioUnit {
     func applyFactoryPreset(_ index: Int) {
         guard let tree = parameterTree,
               index >= 0, index < R50FactoryPresets.all.count else { return }
-        let overrides = R50FactoryPresets.all[index].values
+        let preset = R50FactoryPresets.all[index]
+        let overrides = preset.values
         for param in tree.allParameters {
             let v = overrides[param.address] ?? defaultState[param.address] ?? param.value
             param.setValue(v, originator: nil) // nil -> UI + DSP both refresh
+        }
+        for (partial, assetID) in preset.sampleAssets {
+            let instrument = kernel.instrumentIndex(forAssetId: assetID)
+            let address = r50PartialParam(Int32(partial),
+                                          R50FieldSampleInstrument)
+            guard instrument >= 0,
+                  let parameter = tree.parameter(
+                    withAddress: address.rawValue
+                  ) else { continue }
+            parameter.setValue(AUValue(instrument), originator: nil)
         }
     }
 

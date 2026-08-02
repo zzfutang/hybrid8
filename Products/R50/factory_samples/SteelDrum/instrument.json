@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.steel_drum",
+  "name": "Steel Drum",
+  "zones": [
+    {
+      "id": "fs4",
+      "file": "Steel Drum F# 5.wav",
+      "rootKey": 66,
+      "lowKey": 0,
+      "highKey": 69
+    },
+    {
+      "id": "c5",
+      "file": "Steel Drum C 6.wav",
+      "rootKey": 72,
+      "lowKey": 70,
+      "highKey": 75
+    },
+    {
+      "id": "fs5",
+      "file": "Steel Drum F# 6.wav",
+      "rootKey": 78,
+      "lowKey": 76,
+      "highKey": 81
+    },
+    {
+      "id": "c6",
+      "file": "Steel Drum C 7.wav",
+      "rootKey": 84,
+      "lowKey": 82,
+      "highKey": 127
+    }
+  ]
+}

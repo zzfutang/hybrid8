@@ -15,6 +15,7 @@ import SwiftUI
 
 struct SampleEntry: Identifiable {
     let index: Int
+    let assetId: String
     let name: String
     let isFactory: Bool
     let zones: Int
@@ -28,7 +29,7 @@ struct SampleEntry: Identifiable {
     let retunable: Bool
     let seconds: Double        // duration of the zone covering middle C
     let bytes: Int             // total audio held by every zone
-    var id: Int { index }
+    var id: String { assetId }
 
     var loopLabel: String {
         switch loopMode {
@@ -186,6 +187,7 @@ final class R50SampleStore: ObservableObject {
             let rate = info?["sampleRate"] as? Double ?? 44100
             return SampleEntry(
                 index: index,
+                assetId: info?["assetId"] as? String ?? "legacy.\(index)",
                 name: info?["name"] as? String
                     ?? audioUnit.instrumentName(at: index) ?? "—",
                 isFactory: index < factoryCount,

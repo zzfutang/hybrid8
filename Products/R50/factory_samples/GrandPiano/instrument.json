@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.piano_multisample",
+  "name": "Grand Piano",
+  "zones": [
+    {
+      "id": "d1",
+      "file": "P200 Piano D2.wav",
+      "rootKey": 26,
+      "lowKey": 0,
+      "highKey": 28
+    },
+    {
+      "id": "fs1",
+      "file": "P200 Piano F#2.wav",
+      "rootKey": 30,
+      "lowKey": 29,
+      "highKey": 32
+    },
+    {
+      "id": "as1",
+      "file": "P200 Piano A#2.wav",
+      "rootKey": 34,
+      "lowKey": 33,
+      "highKey": 36
+    },
+    {
+      "id": "d2",
+      "file": "P200 Piano D3.wav",
+      "rootKey": 38,
+      "lowKey": 37,
+      "highKey": 40
+    },
+    {
+      "id": "fs2",
+      "file": "P200 Piano F#3.wav",
+      "rootKey": 42,
+      "lowKey": 41,
+      "highKey": 44
+    },
+    {
+      "id": "as2",
+      "file": "P200 Piano A#3.wav",
+      "rootKey": 46,
+      "lowKey": 45,
+      "highKey": 48
+    },
+    {
+      "id": "d3",
+      "file": "P200 Piano D4.wav",
+      "rootKey": 50,
+      "lowKey": 49,
+      "highKey": 52
+    },
+    {
+      "id": "fs3",
+      "file": "P200 Piano F#4.wav",
+      "rootKey": 54,
+      "lowKey": 53,
+      "highKey": 56
+    },
+    {
+      "id": "as3",
+      "file": "P200 Piano A#4.wav",
+      "rootKey": 58,
+      "lowKey": 57,
+      "highKey": 60
+    },
+    {
+      "id": "d4",
+      "file": "P200 Piano D5.wav",
+      "rootKey": 62,
+      "lowKey": 61,
+      "highKey": 64
+    },
+    {
+      "id": "fs4",
+      "file": "P200 Piano F#5.wav",
+      "rootKey": 66,
+      "lowKey": 65,
+      "highKey": 68
+    },
+    {
+      "id": "as4",
+      "file": "P200 Piano A#5.wav",
+      "rootKey": 70,
+      "lowKey": 69,
+      "highKey": 72
+    },
+    {
+      "id": "d5",
+      "file": "P200 Piano D6.wav",
+      "rootKey": 74,
+      "lowKey": 73,
+      "highKey": 76
+    },
+    {
+      "id": "fs5",
+      "file": "P200 Piano F#6.wav",
+      "rootKey": 78,
+      "lowKey": 77,
+      "highKey": 81
+    },
+    {
+      "id": "c6",
+      "file": "P200 Piano C7.wav",
+      "rootKey": 84,
+      "lowKey": 82,
+      "highKey": 87
+    },
+    {
+      "id": "fs6",
+      "file": "P200 Piano F#7.wav",
+      "rootKey": 90,
+      "lowKey": 88,
+      "highKey": 127
+    }
+  ]
+}

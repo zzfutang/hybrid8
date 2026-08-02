@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.ooh_choir",
+  "name": "Ohh Choir",
+  "zones": [
+    {
+      "id": "c3",
+      "file": "Ohh Voices C 4.wav",
+      "rootKey": 48,
+      "lowKey": 0,
+      "highKey": 51
+    },
+    {
+      "id": "fs3",
+      "file": "Ohh Voices F# 4.wav",
+      "rootKey": 54,
+      "lowKey": 52,
+      "highKey": 57
+    },
+    {
+      "id": "c4",
+      "file": "Ohh Voices C 5.wav",
+      "rootKey": 60,
+      "lowKey": 58,
+      "highKey": 63
+    },
+    {
+      "id": "fs4",
+      "file": "Ohh Voices F# 5.wav",
+      "rootKey": 66,
+      "lowKey": 64,
+      "highKey": 69
+    },
+    {
+      "id": "c5",
+      "file": "Ohh Voices C 6.wav",
+      "rootKey": 72,
+      "lowKey": 70,
+      "highKey": 75
+    },
+    {
+      "id": "fs5",
+      "file": "Ohh Voices F# 6.wav",
+      "rootKey": 78,
+      "lowKey": 76,
+      "highKey": 81
+    },
+    {
+      "id": "c6",
+      "file": "Ohh Voices C 7.wav",
+      "rootKey": 84,
+      "lowKey": 82,
+      "highKey": 127
+    }
+  ]
+}

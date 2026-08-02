@@ -15,9 +15,11 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <thread>
 #include <tuple>
+#include <unistd.h>
 #include <vector>
 
 static int g_failures = 0;
@@ -3455,6 +3457,235 @@ int main() {
             check(!r50::loadFactoryManifest(empty, "/tmp/r50_no_manifest_here"),
                   "a missing manifest fails so the generator can take over");
         }
+    }
+
+    // --- Directory-based factory multisamples ------------------------------
+    {
+        const std::string root = "/tmp/r50_factory_directories_"
+                               + std::to_string(static_cast<long long>(::getpid()));
+        const bool created = ::mkdir(root.c_str(), 0755) == 0;
+        check(created, "a temporary factory directory is available");
+        if (created) {
+            ::mkdir((root + "/AExplicit").c_str(), 0755);
+            ::mkdir((root + "/BadDuplicate").c_str(), 0755);
+            ::mkdir((root + "/Zebra").c_str(), 0755);
+
+            std::vector<float> tone(4000);
+            for (size_t n = 0; n < tone.size(); ++n)
+                tone[n] = static_cast<float>(
+                    0.4 * std::sin(synth::kTwoPi * 220.0 * n / kSR));
+
+            auto wavWithFraction = [&](int rootKey, uint32_t fraction) {
+                std::vector<uint8_t> wav =
+                    r50::encodeWav(tone.data(), static_cast<int>(tone.size()),
+                                   kSR, rootKey, 500, 3500, true);
+                for (size_t at = 12; at + 8 <= wav.size();) {
+                    const uint32_t size = r50::detail::readU32(wav, at + 4);
+                    if (r50::detail::tagAt(wav, at, "smpl") && size >= 36) {
+                        const size_t pitch = at + 8 + 16;
+                        wav[pitch]     = static_cast<uint8_t>(fraction);
+                        wav[pitch + 1] = static_cast<uint8_t>(fraction >> 8);
+                        wav[pitch + 2] = static_cast<uint8_t>(fraction >> 16);
+                        wav[pitch + 3] = static_cast<uint8_t>(fraction >> 24);
+                        break;
+                    }
+                    at += 8 + size + (size & 1u);
+                }
+                return wav;
+            };
+            auto write = [&](const std::string &path, int key,
+                             uint32_t fraction = 0) {
+                return r50::writeWholeFile(path, wavWithFraction(key, fraction));
+            };
+
+            write(root + "/Zebra/low.wav", 48);
+            write(root + "/Zebra/middle.wav", 52, 0x40000000u); // 25 cents sharp
+            write(root + "/Zebra/high.wav", 60);
+
+            // Duplicate automatic roots are ambiguous and reject this directory
+            // without preventing its neighbours from loading.
+            write(root + "/BadDuplicate/a.wav", 48);
+            write(root + "/BadDuplicate/b.wav", 48);
+
+            write(root + "/AExplicit/storage-name.wav", 67);
+            const std::string explicitJson = R"({
+                "schemaVersion": 1,
+                "id": "factory.flute",
+                "name": "Concert Flute",
+                "zones": [{
+                    "id": "g4",
+                    "file": "storage-name.wav",
+                    "rootKey": 69,
+                    "tuneCents": -12.5,
+                    "lowKey": 0,
+                    "highKey": 127,
+                    "lowVelocity": 1,
+                    "highVelocity": 127
+                }]
+            })";
+            r50::writeWholeFile(root + "/AExplicit/instrument.json",
+                std::vector<uint8_t>(explicitJson.begin(), explicitJson.end()));
+
+            r50::SampleLibrary library{r50::SampleLibrary::Empty{}};
+            check(r50::loadFactoryDirectories(library, root) == 2,
+                  "valid child directories load while an invalid one is isolated");
+            check(library.instrumentCount() == 2,
+                  "a rejected directory publishes no partial instrument");
+
+            const r50::Multisample *explicitInstrument = library.instrument(0);
+            check(explicitInstrument != nullptr
+               && std::string(explicitInstrument->name) == "Concert Flute"
+               && std::string(explicitInstrument->id) == "factory.flute",
+                  "explicit name and persistent instrument ID reach the library");
+            check(explicitInstrument != nullptr
+               && std::string(explicitInstrument->regions[0].id) == "g4"
+               && explicitInstrument->regions[0].rootKey == 69
+               && std::fabs(explicitInstrument->regions[0].tuneCents + 12.5f) < 0.01f,
+                  "zone ID and metadata override are independent of the WAV filename");
+            check(library.instrumentIndex("factory.flute") == 0,
+                  "a persistent instrument ID resolves to its runtime index");
+
+            const r50::Multisample *automatic = library.instrument(1);
+            check(automatic != nullptr
+               && std::string(automatic->name) == "Zebra"
+               && std::string(automatic->id) == "factory.auto.zebra"
+               && automatic->regionCount == 3,
+                  "an unmanifested directory becomes one named multisample");
+            check(automatic != nullptr
+               && automatic->regions[0].rootKey == 48
+               && automatic->regions[0].lowKey == 0
+               && automatic->regions[0].highKey == 50
+               && automatic->regions[1].rootKey == 52
+               && automatic->regions[1].lowKey == 51
+               && automatic->regions[1].highKey == 56
+               && automatic->regions[2].rootKey == 60
+               && automatic->regions[2].lowKey == 57
+               && automatic->regions[2].highKey == 127,
+                  "automatic zones meet at deterministic root midpoints");
+            check(automatic != nullptr
+               && automatic->find(50, 100)->rootKey == 48
+               && automatic->find(51, 100)->rootKey == 52
+               && automatic->find(57, 100)->rootKey == 60,
+                  "midpoint boundaries select the intended WAV");
+            check(automatic != nullptr
+               && std::fabs(automatic->regions[1].tuneCents + 25.0f) < 0.01f,
+                  "smpl MIDI pitch fraction becomes playback correction");
+            check(automatic != nullptr
+               && std::string(automatic->regions[0].id) == "low"
+               && std::string(automatic->regions[1].id) == "middle",
+                  "automatic zone asset IDs derive from canonical file stems");
+        }
+    }
+
+    // --- Shipped factory multisample directories ---------------------------
+    {
+        const std::string root = "Products/R50/factory_samples";
+        DIR *handle = ::opendir(root.c_str());
+        check(handle != nullptr, "the shipped factory sample tree is readable");
+        int discovered = 0;
+        int loaded = 0;
+        int loopedZones = 0;
+        int oneShotZones = 0;
+        float worstLoopSeam = 0.0f;
+        bool allPlayable = true;
+        bool allMapped = true;
+
+        if (handle != nullptr) {
+            std::vector<std::string> directories;
+            while (dirent *entry = ::readdir(handle)) {
+                const std::string name = entry->d_name;
+                if (name.empty() || name[0] == '.') continue;
+                struct stat info {};
+                if (::lstat((root + "/" + name).c_str(), &info) == 0
+                 && S_ISDIR(info.st_mode)) directories.push_back(name);
+            }
+            ::closedir(handle);
+            std::sort(directories.begin(), directories.end());
+            discovered = static_cast<int>(directories.size());
+
+            for (const std::string &directory : directories) {
+                r50::SampleLibrary library{r50::SampleLibrary::Empty{}};
+                const bool ok = r50::loadFactoryInstrumentDirectory(
+                    library, root + "/" + directory, directory);
+                check(ok, ("factory directory ingests: " + directory).c_str());
+                if (!ok) continue;
+                ++loaded;
+
+                const r50::Multisample *instrument = library.instrument(0);
+                if (instrument == nullptr) {
+                    allPlayable = false;
+                    continue;
+                }
+                for (int key = 0; key < 128; ++key)
+                    if (instrument->find(key, 100) == nullptr) allMapped = false;
+
+                for (int zone = 0; zone < instrument->regionCount; ++zone) {
+                    const r50::SampleRegion &region = instrument->regions[zone];
+                    const r50::SampleData *data = library.sample(region.slot);
+                    if (data == nullptr || data->samples.empty()
+                     || data->sourceSampleRate <= 0.0
+                     || region.rootKey < 0 || region.rootKey > 127
+                     || !std::isfinite(region.tuneCents)
+                     || data->loopEnd > static_cast<uint32_t>(data->length())
+                     || data->loopStart >= data->loopEnd) {
+                        allPlayable = false;
+                        continue;
+                    }
+
+                    r50::SamplePlayer player;
+                    player.start(data, &region, 0.0f);
+                    player.setPlaybackRatio(1.0, data->sourceSampleRate);
+                    const int extra = data->loopMode == r50::LoopMode::None
+                        ? 8 : static_cast<int>(data->loopEnd - data->loopStart) + 8;
+                    for (int frame = 0; frame < data->length() + extra; ++frame) {
+                        const float value = player.process();
+                        if (!std::isfinite(value)) allPlayable = false;
+                    }
+                    if (data->loopMode == r50::LoopMode::None) {
+                        ++oneShotZones;
+                        if (player.isActive()) allPlayable = false;
+                    } else {
+                        ++loopedZones;
+                        if (!player.isActive()) allPlayable = false;
+                        float peak = 0.0f;
+                        for (const float sample : data->samples)
+                            peak = std::max(peak, std::fabs(sample));
+                        const float seam = std::fabs(
+                            data->samples[data->loopStart]
+                          - data->samples[data->loopEnd - 1]);
+                        if (peak > 1.0e-6f)
+                            worstLoopSeam = std::max(worstLoopSeam, seam / peak);
+                    }
+                }
+            }
+        }
+
+        check(discovered > 0 && loaded == discovered,
+              "every shipped multisample directory is parsed and ingested");
+        check(allMapped, "every shipped multisample covers the MIDI keyboard");
+        check(allPlayable,
+              "every shipped zone plays through its end or sustains its loop");
+        check(loopedZones > 0, "shipped multisamples exercise looped playback");
+        check(worstLoopSeam < 0.30f,
+              "shipped loop joins have no gross full-scale discontinuity");
+        r50::SampleLibrary integrated{r50::SampleLibrary::Empty{}};
+        const bool manifestLoaded = r50::loadFactoryManifest(integrated, root);
+        const int manifestInstruments = integrated.instrumentCount();
+        const int integratedDirectories =
+            manifestLoaded ? r50::loadFactoryDirectories(integrated, root) : 0;
+        check(manifestLoaded && integratedDirectories == discovered
+           && integrated.instrumentCount() == manifestInstruments + discovered,
+              "factory manifest and directory instruments coexist within capacity");
+        check(integrated.instrumentIndex("factory.acoustic_guitar") >= 0
+           && integrated.instrumentIndex("factory.nylon_guitar_multisample") >= 0
+           && integrated.instrumentIndex("factory.ooh_choir") >= 0
+           && integrated.instrumentIndex("factory.piano_multisample") >= 0
+           && integrated.instrumentIndex("factory.cello") >= 0
+           && integrated.instrumentIndex("factory.pizzicato_celli") >= 0,
+              "all shipped multisamples resolve by persistent asset ID");
+        printf("       shipped multisamples: %d instruments, %d looped zones, "
+               "%d one-shot zones, worst seam %.1f%% of peak\n",
+               loaded, loopedZones, oneShotZones, worstLoopSeam * 100.0f);
     }
 
     printf(g_failures == 0 ? "\nAll R50 tests passed.\n"

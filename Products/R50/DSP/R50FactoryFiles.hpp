@@ -19,10 +19,12 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cmath>
 #include <string>
 #include <algorithm>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <set>
 #include <vector>
 
 #include "R50Json.hpp"
@@ -39,12 +41,15 @@ struct LoadedWav {
     std::vector<float> samples;
     double             sampleRate = 44100.0;
     int                rootKey    = 60;
+    float              tuneCents  = 0.0f;
     /// Whether the root above was stated by the file or is just the default.
     /// A one-shot now carries a `smpl` chunk with no loop in it, so "has a
     /// root" and "has a loop" are no longer the same question.
     bool               hasRoot    = false;
     bool               hasLoop    = false;
     bool               pingPong   = false;
+    bool               unsupportedLoop = false;
+    bool               validSmpl  = true;
     uint32_t           loopStart  = 0;
     uint32_t           loopEnd    = 0;   // exclusive, as everywhere else in R50
 };
@@ -65,6 +70,51 @@ inline bool tagAt(const std::vector<uint8_t> &b, size_t at, const char *tag) {
     return at + 4 <= b.size()
         && b[at] == static_cast<uint8_t>(tag[0]) && b[at + 1] == static_cast<uint8_t>(tag[1])
         && b[at + 2] == static_cast<uint8_t>(tag[2]) && b[at + 3] == static_cast<uint8_t>(tag[3]);
+}
+
+inline bool isWavName(const std::string &name) {
+    if (name.size() < 5) return false;
+    const std::string extension = name.substr(name.size() - 4);
+    return extension == ".wav" || extension == ".WAV";
+}
+
+inline bool isSafeLeafName(const std::string &name) {
+    return !name.empty() && name != "." && name != ".."
+        && name.find('/') == std::string::npos
+        && name.find('\\') == std::string::npos;
+}
+
+inline bool validExplicitId(const std::string &id) {
+    if (id.empty()) return false;
+    for (const unsigned char c : id) {
+        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+         || c == '.' || c == '-' || c == '_') continue;
+        return false;
+    }
+    return true;
+}
+
+inline std::string canonicalIdPart(const std::string &text) {
+    std::string out;
+    bool dash = false;
+    for (const unsigned char c : text) {
+        const bool alpha = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        const bool digit = c >= '0' && c <= '9';
+        if (alpha || digit || c == '.' || c == '_' || c == '-') {
+            out += static_cast<char>(c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c);
+            dash = false;
+        } else if (!dash && !out.empty()) {
+            out += '-';
+            dash = true;
+        }
+    }
+    while (!out.empty() && out.back() == '-') out.pop_back();
+    return out.empty() ? "unnamed" : out;
+}
+
+inline std::string fileStem(const std::string &name) {
+    const size_t dot = name.find_last_of('.');
+    return dot == std::string::npos ? name : name.substr(0, dot);
 }
 
 } // namespace detail
@@ -130,14 +180,43 @@ inline LoadedWav decodeWav(const std::vector<uint8_t> &bytes) {
         } else if (detail::tagAt(bytes, at, "smpl") && size >= 36) {
             // 36 is the chunk without any loop record, which is how a one-shot
             // states its root key. Requiring 60 threw those away entirely.
-            out.rootKey = static_cast<int>(detail::readU32(bytes, body + 12));
-            out.hasRoot = true;
-            if (detail::readU32(bytes, body + 28) >= 1 && size >= 60) {
-                out.hasLoop   = true;
-                out.pingPong  = detail::readU32(bytes, body + 40) == 1;
-                out.loopStart = detail::readU32(bytes, body + 44);
-                // smpl stores the last played frame; R50's loopEnd is exclusive.
-                out.loopEnd   = detail::readU32(bytes, body + 48) + 1;
+            const uint32_t root = detail::readU32(bytes, body + 12);
+            if (root > 127) {
+                out.validSmpl = false;
+            } else {
+                out.rootKey = static_cast<int>(root);
+                out.hasRoot = true;
+                const double fraction = detail::readU32(bytes, body + 16)
+                                      / 4294967296.0;
+                // `smpl` describes the recording above its integer root. The
+                // engine field is the correction applied during playback.
+                out.tuneCents = static_cast<float>(-100.0 * fraction);
+            }
+            const uint32_t loopCount = detail::readU32(bytes, body + 28);
+            if (loopCount > 0) {
+                const uint64_t recordsEnd = static_cast<uint64_t>(36)
+                                          + static_cast<uint64_t>(loopCount) * 24u;
+                if (recordsEnd > size) {
+                    out.validSmpl = false;
+                } else {
+                    for (uint32_t loop = 0; loop < loopCount; ++loop) {
+                        const size_t record = body + 36 + loop * 24;
+                        const uint32_t type = detail::readU32(bytes, record + 4);
+                        if (type > 1) continue;
+                        const uint32_t start = detail::readU32(bytes, record + 8);
+                        const uint32_t inclusiveEnd =
+                            detail::readU32(bytes, record + 12);
+                        if (inclusiveEnd == UINT32_MAX || inclusiveEnd <= start) {
+                            continue;
+                        }
+                        out.hasLoop   = true;
+                        out.pingPong  = type == 1;
+                        out.loopStart = start;
+                        out.loopEnd   = inclusiveEnd + 1;
+                        break;
+                    }
+                    out.unsupportedLoop = !out.hasLoop;
+                }
             }
         }
         at = body + size + (size & 1u);
@@ -146,7 +225,8 @@ inline LoadedWav decodeWav(const std::vector<uint8_t> &bytes) {
     // No `haveFormat` here: the data chunk refuses to decode without one, so
     // haveData already implies it. Carrying both meant neither could be tested
     // — each masked the other, and a mutation of either still passed.
-    out.ok = haveData && !out.samples.empty() && out.sampleRate > 0.0;
+    out.ok = haveData && !out.samples.empty() && out.sampleRate > 0.0
+          && out.validSmpl;
     return out;
 }
 
@@ -205,12 +285,7 @@ inline int loadSampleDirectory(SampleLibrary &library, const std::string &direct
     std::vector<std::string> names;
     while (dirent *entry = ::readdir(handle)) {
         const std::string name = entry->d_name;
-        if (name.size() < 5 || name[0] == '.') continue;
-        const std::string extension = name.substr(name.size() - 4);
-        if (extension != ".wav" && extension != ".WAV"
-         && extension != ".aif" && extension != ".AIF") {
-            continue;
-        }
+        if (name[0] == '.' || !detail::isWavName(name)) continue;
         names.push_back(name);
     }
     ::closedir(handle);
@@ -258,8 +333,13 @@ inline int loadSampleDirectory(SampleLibrary &library, const std::string &direct
 
         Multisample instrument;
         instrument.setName(name.substr(0, name.size() - 4).c_str());
+        const std::string instrumentId =
+            "factory.loose." + detail::canonicalIdPart(detail::fileStem(name));
+        instrument.setId(instrumentId.c_str());
         SampleRegion region;
         region.rootKey = rootKey;
+        region.tuneCents = wav.tuneCents;
+        region.setId(detail::canonicalIdPart(detail::fileStem(name)).c_str());
         region.slot    = slot;
         instrument.regions[0] = region;
         instrument.regionCount = 1;
@@ -319,12 +399,18 @@ inline bool loadFactoryManifest(SampleLibrary &library, const std::string &direc
     // Decode everything before publishing anything.
     struct PendingZone {
         SampleData data;
-        int   rootKey, lowKey, highKey;
+        std::string id;
+        int   rootKey, lowKey, highKey, lowVelocity, highVelocity;
         float tuneCents;
     };
-    struct Pending { std::string name; std::vector<PendingZone> zones; };
+    struct Pending {
+        std::string id;
+        std::string name;
+        std::vector<PendingZone> zones;
+    };
     std::vector<Pending> pending;
 
+    int manifestIndex = 0;
     for (const JsonValue &entry : instruments.items) {
         if (!entry.isObject()) return false;
         const JsonValue &zones = entry["zones"];
@@ -334,10 +420,13 @@ inline bool loadFactoryManifest(SampleLibrary &library, const std::string &direc
         Pending instrument;
         instrument.name = entry["name"].stringOr("");
         if (instrument.name.empty()) return false;
+        instrument.id = entry["id"].stringOr(
+            "factory.manifest." + std::to_string(manifestIndex));
+        if (!detail::validExplicitId(instrument.id)) return false;
 
         for (const JsonValue &zone : zones.items) {
             const std::string file = zone["file"].stringOr("");
-            if (file.empty()) return false;
+            if (!detail::isSafeLeafName(file)) return false;
 
             std::vector<uint8_t> bytes;
             if (!readWholeFile(directory + "/" + file, bytes)) return false;
@@ -345,6 +434,9 @@ inline bool loadFactoryManifest(SampleLibrary &library, const std::string &direc
             if (!wav.ok) return false;
 
             PendingZone out;
+            out.id = zone["id"].stringOr(
+                detail::canonicalIdPart(detail::fileStem(file)));
+            if (!detail::validExplicitId(out.id)) return false;
             out.rootKey = zone["rootKey"].intOr(wav.rootKey);
             // Rejected, not clamped — unlike the loop points above. A root key
             // is a stated fact about what the recording *is*, so one outside
@@ -362,6 +454,12 @@ inline bool loadFactoryManifest(SampleLibrary &library, const std::string &direc
                     zone["tuneCents"].doubleOr(0.0))));
             out.lowKey  = zone["lowKey"].intOr(0);
             out.highKey = zone["highKey"].intOr(127);
+            out.lowVelocity  = zone["lowVelocity"].intOr(1);
+            out.highVelocity = zone["highVelocity"].intOr(127);
+            if (out.lowKey < 0 || out.highKey > 127 || out.lowKey > out.highKey
+             || out.lowVelocity < 1 || out.highVelocity > 127
+             || out.lowVelocity > out.highVelocity) return false;
+            if (!zone["tuneCents"].exists()) out.tuneCents = wav.tuneCents;
             out.data.samples          = wav.samples;
             out.data.sourceSampleRate = wav.sampleRate;
             out.data.rootKey          = out.rootKey;
@@ -401,25 +499,254 @@ inline bool loadFactoryManifest(SampleLibrary &library, const std::string &direc
             instrument.zones.push_back(std::move(out));
         }
         pending.push_back(std::move(instrument));
+        ++manifestIndex;
+    }
+
+    if (library.sampleCount() + static_cast<int>([&] {
+            size_t count = 0;
+            for (const Pending &instrument : pending) count += instrument.zones.size();
+            return count;
+        }()) > kMaxSampleSlots
+     || library.instrumentCount() + static_cast<int>(pending.size()) > kMaxInstruments) {
+        return false;
+    }
+    std::set<std::string> instrumentIds;
+    for (const Pending &instrument : pending) {
+        if (!instrumentIds.insert(instrument.id).second
+         || library.instrumentIndex(instrument.id.c_str()) >= 0) return false;
+        std::set<std::string> zoneIds;
+        for (const PendingZone &zone : instrument.zones) {
+            if (!zoneIds.insert(zone.id).second) return false;
+        }
     }
 
     for (Pending &instrument : pending) {
         Multisample published;
         published.setName(instrument.name.c_str());
+        published.setId(instrument.id.c_str());
         for (PendingZone &zone : instrument.zones) {
             const int slot = library.addSample(std::move(zone.data));
             if (slot < 0) return false;
             SampleRegion region;
             region.lowKey  = zone.lowKey;
             region.highKey = zone.highKey;
+            region.lowVelocity  = zone.lowVelocity;
+            region.highVelocity = zone.highVelocity;
             region.rootKey   = zone.rootKey;
             region.tuneCents = zone.tuneCents;
+            region.setId(zone.id.c_str());
             region.slot    = slot;
             published.regions[published.regionCount++] = region;
         }
         if (library.addInstrument(published) < 0) return false;
     }
     return true;
+}
+
+/// Load one immediate child directory as one multisampled instrument.
+///
+/// With `instrument.json`, key/velocity bounds and IDs are explicit. Without
+/// it, every WAV must carry a unique `smpl` root and key bounds are derived at
+/// the midpoint between adjacent roots. Everything is decoded and validated
+/// before any slot is published.
+inline bool loadFactoryInstrumentDirectory(SampleLibrary &library,
+                                           const std::string &directory,
+                                           const std::string &directoryName) {
+    struct PendingZone {
+        std::string id;
+        std::string file;
+        SampleData data;
+        int rootKey = 60;
+        float tuneCents = 0.0f;
+        int lowKey = 0, highKey = 127;
+        int lowVelocity = 1, highVelocity = 127;
+    };
+
+    std::vector<uint8_t> raw;
+    const bool hasManifest =
+        readWholeFile(directory + "/instrument.json", raw);
+    JsonValue manifest;
+    if (hasManifest
+     && !parseJson(std::string(raw.begin(), raw.end()), manifest)) return false;
+    if (hasManifest && (!manifest.isObject()
+                     || manifest["schemaVersion"].intOr(0) != 1)) return false;
+
+    std::string name = hasManifest
+        ? manifest["name"].stringOr(directoryName) : directoryName;
+    std::string instrumentId = hasManifest
+        ? manifest["id"].stringOr("")
+        : "factory.auto." + detail::canonicalIdPart(directoryName);
+    if (name.empty() || !detail::validExplicitId(instrumentId)
+     || instrumentId.size() >= kAssetIdLength
+     || library.instrumentIndex(instrumentId.c_str()) >= 0) return false;
+
+    std::vector<std::pair<std::string, const JsonValue *>> files;
+    if (hasManifest) {
+        const JsonValue &zones = manifest["zones"];
+        if (!zones.isArray() || zones.items.empty()
+         || zones.items.size() > static_cast<size_t>(kMaxRegions)) return false;
+        for (const JsonValue &zone : zones.items) {
+            if (!zone.isObject()) return false;
+            const std::string file = zone["file"].stringOr("");
+            if (!detail::isSafeLeafName(file) || !detail::isWavName(file))
+                return false;
+            files.push_back({file, &zone});
+        }
+    } else {
+        DIR *handle = ::opendir(directory.c_str());
+        if (handle == nullptr) return false;
+        while (dirent *entry = ::readdir(handle)) {
+            const std::string file = entry->d_name;
+            if (file.empty() || file[0] == '.' || !detail::isWavName(file))
+                continue;
+            struct stat info {};
+            const std::string path = directory + "/" + file;
+            if (::lstat(path.c_str(), &info) != 0 || !S_ISREG(info.st_mode))
+                continue;
+            files.push_back({file, nullptr});
+        }
+        ::closedir(handle);
+        if (files.empty() || files.size() > static_cast<size_t>(kMaxRegions))
+            return false;
+        std::sort(files.begin(), files.end(),
+                  [](const auto &a, const auto &b) { return a.first < b.first; });
+    }
+
+    std::vector<PendingZone> pending;
+    std::set<std::string> zoneIds;
+    for (const auto &source : files) {
+        std::vector<uint8_t> bytes;
+        if (!readWholeFile(directory + "/" + source.first, bytes)) return false;
+        const LoadedWav wav = decodeWav(bytes);
+        if (!wav.ok) return false;
+        if (!hasManifest && wav.unsupportedLoop) return false;
+
+        const JsonValue *zone = source.second;
+        PendingZone out;
+        out.file = source.first;
+        out.id = zone ? (*zone)["id"].stringOr("") :
+                        detail::canonicalIdPart(detail::fileStem(source.first));
+        if (!detail::validExplicitId(out.id) || out.id.size() >= kZoneIdLength
+         || !zoneIds.insert(out.id).second) return false;
+
+        const bool explicitRoot = zone && (*zone)["rootKey"].exists();
+        if (!explicitRoot && !wav.hasRoot) return false;
+        out.rootKey = explicitRoot ? (*zone)["rootKey"].intOr(-1) : wav.rootKey;
+        if (out.rootKey < 0 || out.rootKey > 127) return false;
+
+        out.tuneCents = zone && (*zone)["tuneCents"].exists()
+            ? static_cast<float>(std::min(100.0, std::max(-100.0,
+                  (*zone)["tuneCents"].doubleOr(0.0))))
+            : wav.tuneCents;
+        if (zone) {
+            out.lowKey = (*zone)["lowKey"].intOr(0);
+            out.highKey = (*zone)["highKey"].intOr(127);
+            out.lowVelocity = (*zone)["lowVelocity"].intOr(1);
+            out.highVelocity = (*zone)["highVelocity"].intOr(127);
+        }
+        if (out.lowKey < 0 || out.highKey > 127 || out.lowKey > out.highKey
+         || out.lowVelocity < 1 || out.highVelocity > 127
+         || out.lowVelocity > out.highVelocity) return false;
+
+        out.data.samples = wav.samples;
+        out.data.sourceSampleRate = wav.sampleRate;
+        out.data.rootKey = out.rootKey;
+        const uint32_t frames = static_cast<uint32_t>(out.data.length());
+        const bool wavLoops = wav.hasLoop && wav.loopEnd > wav.loopStart + 1
+                           && wav.loopEnd <= frames;
+        const JsonValue *loopFlag = zone ? &(*zone)["loop"] : nullptr;
+        const bool looped = loopFlag && loopFlag->exists()
+            ? loopFlag->boolOr(false) : wavLoops;
+        uint32_t start = zone ? (*zone)["loopStart"].intOr(
+            wavLoops ? static_cast<int>(wav.loopStart) : 0)
+            : (wavLoops ? wav.loopStart : 0);
+        uint32_t end = zone ? (*zone)["loopEnd"].intOr(
+            wavLoops ? static_cast<int>(wav.loopEnd) : static_cast<int>(frames))
+            : (wavLoops ? wav.loopEnd : frames);
+        if (end > frames) end = frames;
+        if (end <= start + 1) {
+            if (zone && (looped || (*zone)["loopStart"].exists()
+                              || (*zone)["loopEnd"].exists())) return false;
+            start = 0;
+            end = frames;
+        }
+        const std::string mode = zone
+            ? (*zone)["loopMode"].stringOr(
+                  wavLoops && wav.pingPong ? "pingpong" : "forward")
+            : (wav.pingPong ? "pingpong" : "forward");
+        if (mode != "forward" && mode != "pingpong") return false;
+        out.data.loopStart = looped ? start : 0;
+        out.data.loopEnd = looped ? end : frames;
+        out.data.loopMode = !looped ? LoopMode::None
+                          : mode == "pingpong" ? LoopMode::PingPong
+                                               : LoopMode::Forward;
+        pending.push_back(std::move(out));
+    }
+
+    if (!hasManifest) {
+        std::sort(pending.begin(), pending.end(),
+                  [](const PendingZone &a, const PendingZone &b) {
+                      return a.rootKey != b.rootKey ? a.rootKey < b.rootKey
+                                                    : a.file < b.file;
+                  });
+        for (size_t i = 1; i < pending.size(); ++i)
+            if (pending[i - 1].rootKey == pending[i].rootKey) return false;
+        for (size_t i = 0; i < pending.size(); ++i) {
+            pending[i].lowKey = i == 0 ? 0
+                : (pending[i - 1].rootKey + pending[i].rootKey) / 2 + 1;
+            pending[i].highKey = i + 1 == pending.size() ? 127
+                : (pending[i].rootKey + pending[i + 1].rootKey) / 2;
+        }
+    }
+
+    if (library.sampleCount() + static_cast<int>(pending.size()) > kMaxSampleSlots
+     || library.instrumentCount() >= kMaxInstruments) return false;
+
+    Multisample instrument;
+    instrument.setName(name.c_str());
+    instrument.setId(instrumentId.c_str());
+    for (PendingZone &zone : pending) {
+        const int slot = library.addSample(std::move(zone.data));
+        if (slot < 0) return false; // capacities were checked above
+        SampleRegion region;
+        region.lowKey = zone.lowKey;
+        region.highKey = zone.highKey;
+        region.lowVelocity = zone.lowVelocity;
+        region.highVelocity = zone.highVelocity;
+        region.rootKey = zone.rootKey;
+        region.tuneCents = zone.tuneCents;
+        region.slot = slot;
+        region.setId(zone.id.c_str());
+        instrument.regions[instrument.regionCount++] = region;
+    }
+    return library.addInstrument(instrument) >= 0;
+}
+
+/// Discover immediate child directories in deterministic bytewise order.
+/// Invalid instruments are isolated: they are skipped without preventing other
+/// directories from loading.
+inline int loadFactoryDirectories(SampleLibrary &library,
+                                  const std::string &rootDirectory) {
+    DIR *handle = ::opendir(rootDirectory.c_str());
+    if (handle == nullptr) return 0;
+    std::vector<std::string> directories;
+    while (dirent *entry = ::readdir(handle)) {
+        const std::string name = entry->d_name;
+        if (name.empty() || name[0] == '.') continue;
+        struct stat info {};
+        const std::string path = rootDirectory + "/" + name;
+        if (::lstat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode))
+            directories.push_back(name);
+    }
+    ::closedir(handle);
+    std::sort(directories.begin(), directories.end());
+
+    int loaded = 0;
+    for (const std::string &name : directories) {
+        if (loadFactoryInstrumentDirectory(library, rootDirectory + "/" + name,
+                                           name)) ++loaded;
+    }
+    return loaded;
 }
 
 } // namespace r50

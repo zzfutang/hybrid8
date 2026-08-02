@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.pan_flute",
+  "name": "Pan Flute",
+  "zones": [
+    {
+      "id": "fs3",
+      "file": "pan flute f#4.wav",
+      "rootKey": 54,
+      "lowKey": 0,
+      "highKey": 57
+    },
+    {
+      "id": "c4",
+      "file": "pan flute c5.wav",
+      "rootKey": 60,
+      "lowKey": 58,
+      "highKey": 63
+    },
+    {
+      "id": "fs4",
+      "file": "pan flute f#5.wav",
+      "rootKey": 66,
+      "lowKey": 64,
+      "highKey": 69
+    },
+    {
+      "id": "c5",
+      "file": "pan flute c6.wav",
+      "rootKey": 72,
+      "lowKey": 70,
+      "highKey": 75
+    },
+    {
+      "id": "fs5",
+      "file": "pan flute f#6.wav",
+      "rootKey": 78,
+      "lowKey": 76,
+      "highKey": 81
+    },
+    {
+      "id": "c6",
+      "file": "pan flute c7.wav",
+      "rootKey": 84,
+      "lowKey": 82,
+      "highKey": 87
+    },
+    {
+      "id": "fs6",
+      "file": "pan flute f#7.wav",
+      "rootKey": 90,
+      "lowKey": 88,
+      "highKey": 93
+    },
+    {
+      "id": "c7",
+      "file": "pan flute c8.wav",
+      "rootKey": 96,
+      "lowKey": 94,
+      "highKey": 127,
+      "loopStart": 7645,
+      "loopEnd": 16459
+    }
+  ]
+}

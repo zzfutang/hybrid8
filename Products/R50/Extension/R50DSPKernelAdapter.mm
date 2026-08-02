@@ -143,9 +143,11 @@
                        data->loopStart, data->loopEnd,
                        data->loopMode != r50::LoopMode::None,
                        data->loopMode == r50::LoopMode::PingPong);
+    const std::string assetId = std::string(instrument->id) + "/" + region.id;
 
     return @{
         @"name":       [NSString stringWithUTF8String:instrument->name],
+        @"assetId":    [NSString stringWithUTF8String:assetId.c_str()],
         @"wav":        [NSData dataWithBytes:wav.data() length:wav.size()],
         @"sampleRate": @(data->sourceSampleRate),
         @"rootKey":    @(region.rootKey),
@@ -213,6 +215,10 @@
     return [NSString stringWithUTF8String:instrument->name];
 }
 
+- (NSInteger)instrumentIndexForAssetId:(NSString *)assetId {
+    return r50::SampleLibrary::shared().instrumentIndex(assetId.UTF8String);
+}
+
 - (NSDictionary<NSString *, id> *)sampleInfoAtIndex:(NSInteger)index {
     r50::SampleLibrary &library = r50::SampleLibrary::shared();
     const r50::Multisample *instrument = library.instrument((int)index);
@@ -253,6 +259,7 @@
 
     return @{
         @"name":       [NSString stringWithUTF8String:instrument->name],
+        @"assetId":    [NSString stringWithUTF8String:instrument->id],
         @"zones":      @(instrument->regionCount),
         @"rootKey":    @(rootKey),
         @"tuneCents":  @(tuneCents),

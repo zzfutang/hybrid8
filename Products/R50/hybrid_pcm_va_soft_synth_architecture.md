@@ -1763,18 +1763,52 @@ eight-voice instrument and the fascia says so.
 Built. Interpolation is Catmull-Rom cubic; loops are forward and ping-pong,
 both reachable from the factory manifest's `loopMode`.
 
-**Multisamples were removed after the fact.** Every instrument is now one
-sample stretched across the whole keyboard, which is what the D-50 did — it has
-no per-Partial key range at all, and its waves break up at the extremes as part
-of the sound rather than in spite of it. `SampleRegion` keeps its key range and
-the loader still reads multi-zone manifests, so the machinery is intact and a
-zoned instrument would still work; nothing in the factory set uses it.
+**Multisamples are back and the factory-directory loader is built.** The loose
+drop-in path still turns
+each WAV into a one-zone instrument stretched across the keyboard, but
+`SampleRegion`, note-on region selection, and multi-zone factory manifests are
+supported alongside automatic root-zoned directories and explicit
+`instrument.json` maps.
+
+Each zone WAV may carry a RIFF `smpl` chunk. The loader ingests its MIDI
+unity note, MIDI pitch fraction as a fine-tuning correction, and the first
+supported loop's points and type. RIFF's inclusive loop end is converted to
+R50's exclusive convention at load time. Manifest values override embedded
+metadata; otherwise the zone inherits it. At note-on the engine selects the
+matching key/velocity zone once, starts that sample at the requested sample
+start, applies root plus tuning correction, and either stops at the end or
+loops forward/ping-pong as declared.
+
+`smpl` contains no key map. Factory multisamples therefore group WAVs in
+`factory_samples.json` or a directory-level `instrument.json`. Automatic
+directories derive midpoint ranges from distinct embedded roots. A later
+multi-file user import may expose the same derivation with an editable review
+step.
+
+Factory content also gains directory ingestion. An immediate child directory
+of `factory_samples/` is one instrument. If it contains only WAVs, each file
+must carry a unique valid `smpl` root and the loader derives key zones at the
+midpoints between sorted roots. An optional versioned `instrument.json` gives
+the instrument a persistent ID/name and defines explicit key/velocity zones or
+overrides. Automatic mode deliberately rejects duplicate or missing roots and
+does not infer musical facts from filenames. The existing ordered manifest is
+loaded first; directories follow in deterministic relative-path order.
+
+The selector shows the instrument `name` (falling back to the directory
+basename), while presets store its persistent `id`, for example
+`factory.concert_flute`. Each zone has its own stable ID, producing an asset ID
+such as `factory.concert_flute/c4`, which `instrument.json` maps to a WAV. WAV
+filenames are storage details and are never shown as the multisample's identity
+or compared on the render thread. Automatic folders receive rename-sensitive
+derived IDs for auditioning; released factory instruments require explicit
+instrument and zone IDs.
 
 The compensating control is the Partial's **Key Follow**
 (`R50FieldPitchKeyFollow`), which scales how far the key's distance from middle
 C reaches the pitch. It is the D-50's own answer to the same problem: rather
 than restricting where a sample sounds, it asks the extremes to travel less
-far.
+far. It remains useful for deliberately stretched one-zone waves; it is not a
+replacement for multisampling.
 
 ## Phase 3 — Tone engine
 
@@ -1867,6 +1901,20 @@ of preset migration, asset hashing, missing-sample resolution, SIMD or signing
 exists yet. Targeted 4x oversampling is now built for the nonlinear effects and
 per-Partial waveshaper, but there is no engine-wide oversampling mode.
 
+The multisample loader slice is complete for factory content: `smpl` metadata,
+inheritance and overrides, atomic directory ingestion, automatic midpoint
+zoning, explicit maps, persistent identity, region selection, tuning,
+one-shot/loop playback, and loop-boundary interpolation are covered by tests.
+The shipped set is currently nine instruments and 79 looped zones.
+
+The bank contains 106 factory presets. Six directly showcase the new
+multisamples, while 35 established presets resolve musically equivalent new
+assets by persistent ID. Numeric AU parameters remain host-automatable, but
+factory application and the `fullState` sidecar prevent directory ordering
+from silently changing a sound.
+
+Multi-file user import with an editable key-map preview remains future work.
+
 ---
 
 # 35. Version-one feature boundary
@@ -1878,7 +1926,7 @@ Ship version one with:
 - 2 Tones;
 - 1 Patch;
 - Mix, RingMod, Attack/Sustain, and Crossfade structures;
-- ~~multisamples~~ — dropped, see phase 2;
+- multisamples, with key/velocity regions and per-zone WAV `smpl` metadata;
 - forward and ping-pong loops;
 - linear and cubic interpolation;
 - saw, pulse, triangle, sine, and noise;

@@ -881,6 +881,7 @@ inline SampleLibrary::SampleLibrary() {
     // generating a set only to throw it away costs 280 ms of every launch.
     if (!factoryContentDirectory().empty()
      && loadFactoryManifest(*this, factoryContentDirectory())) {
+        loadFactoryDirectories(*this, factoryContentDirectory());
         return;
     }
     buildFactoryContent(*this);

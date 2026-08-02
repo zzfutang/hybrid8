@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.acoustic_bass",
+  "name": "Acoustic Bass",
+  "zones": [
+    {
+      "id": "e1",
+      "file": "Acoustic Bass E2.wav",
+      "rootKey": 28,
+      "lowKey": 0,
+      "highKey": 28
+    },
+    {
+      "id": "f1",
+      "file": "Acoustic Bass F2.wav",
+      "rootKey": 29,
+      "lowKey": 29,
+      "highKey": 32
+    },
+    {
+      "id": "c2",
+      "file": "Acoustic Bass C3.wav",
+      "rootKey": 36,
+      "lowKey": 33,
+      "highKey": 38
+    },
+    {
+      "id": "f2",
+      "file": "Acoustic Bass F3.wav",
+      "rootKey": 41,
+      "lowKey": 39,
+      "highKey": 43
+    },
+    {
+      "id": "as2",
+      "file": "Acoustic Bass A#3.wav",
+      "rootKey": 46,
+      "lowKey": 44,
+      "highKey": 50
+    },
+    {
+      "id": "fs3",
+      "file": "Acoustic Bass F#4.wav",
+      "rootKey": 54,
+      "lowKey": 51,
+      "highKey": 57
+    },
+    {
+      "id": "c4",
+      "file": "Acoustic Bass C5.wav",
+      "rootKey": 60,
+      "lowKey": 58,
+      "highKey": 63
+    },
+    {
+      "id": "fs4",
+      "file": "Acoustic Bass F#5.wav",
+      "rootKey": 66,
+      "lowKey": 64,
+      "highKey": 69
+    },
+    {
+      "id": "c5",
+      "file": "Acoustic Bass C6.wav",
+      "rootKey": 72,
+      "lowKey": 70,
+      "highKey": 127
+    }
+  ]
+}

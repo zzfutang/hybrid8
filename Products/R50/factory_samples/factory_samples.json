@@ -1,271 +1,157 @@
 {
-    "instruments": [
-
-
-	
-    { "name": "Choir",
+  "instruments": [
+    {
+      "name": "Glass Pad",
+      "id": "factory.glass_pad",
       "zones": [
-        { "file": "airvox_f3.wav", "rootKey": 54, "lowKey": 0, "highKey": 127,
-          "loop": true }
+        {
+          "id": "z1",
+          "file": "glass_pad_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
       ]
     },
-    { "name": "Strings",
+    {
+      "name": "Spectrum 1",
+      "id": "factory.spectrum_1",
       "zones": [
-        { "file": "strings_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
+        {
+          "id": "z1",
+          "file": "spectrum_1_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
       ]
     },
-    { "name": "Warm Pad",
+    {
+      "name": "Spectrum 2",
+      "id": "factory.spectrum_2",
       "zones": [
-
-        { "file": "warm_pad_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
+        {
+          "id": "z1",
+          "file": "spectrum_2_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
       ]
     },
-    { "name": "Glass Pad",
+    {
+      "name": "Spectrum 3",
+      "id": "factory.spectrum_3",
       "zones": [
-        { "file": "glass_pad_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
+        {
+          "id": "z1",
+          "file": "spectrum_3_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
       ]
     },
-    { "name": "Voice Ooh",
+    {
+      "name": "Spectrum 4",
+      "id": "factory.spectrum_4",
       "zones": [
-        { "file": "voice_ooh_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
+        {
+          "id": "z1",
+          "file": "spectrum_4_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
       ]
     },
-    { "name": "Flute",
+    {
+      "name": "Spectrum 5",
+      "id": "factory.spectrum_5",
       "zones": [
-          { "file": "flute_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
+        {
+          "id": "z1",
+          "file": "spectrum_5_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
       ]
     },
-    { "name": "Trumpet",
+    {
+      "name": "Spectrum 6",
+      "id": "factory.spectrum_6",
       "zones": [
-        { "file": "trumpet_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
+        {
+          "id": "z1",
+          "file": "spectrum_6_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
       ]
     },
-    { "name": "Organ",
+    {
+      "name": "Spectrum 7",
+      "id": "factory.spectrum_7",
       "zones": [
-        { "file": "organ_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
+        {
+          "id": "z1",
+          "file": "spectrum_7_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
       ]
     },
-    { "name": "Nylon Guitar",
+    {
+      "name": "Spectrum 8",
+      "id": "factory.spectrum_8",
       "zones": [
-        { "file": "nylon_guitar_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
+        {
+          "id": "z1",
+          "file": "spectrum_8_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
       ]
     },
-    { "name": "Piano",
+    {
+      "name": "Spectrum 9",
+      "id": "factory.spectrum_9",
       "zones": [
-        { "file": "piano_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
+        {
+          "id": "z1",
+          "file": "spectrum_9_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
       ]
     },
-    { "name": "Gong",
+    {
+      "name": "Anvil",
+      "id": "factory.anvil",
       "zones": [
-        { "file": "gong_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Nasty",
-      "zones": [
-        { "file": "nasty_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Fat Block",
-      "zones": [
-        { "file": "fat_block_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Mallet",
-      "zones": [
-        { "file": "mallet.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Pluck",
-      "zones": [
-        { "file": "pluck.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Chiff",
-      "zones": [
-        { "file": "chiff.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Noise Burst",
-      "zones": [
-        { "file": "noise_burst.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Tine Strike",
-      "zones": [
-        { "file": "tine_strike.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Marimba",
-      "zones": [
-        { "file": "marimba.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Vibraphone",
-      "zones": [
-        { "file": "vibraphone.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Xylophone",
-      "zones": [
-        { "file": "xylophone.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Kalimba",
-      "zones": [
-        { "file": "kalimba.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Slap Bass",
-      "zones": [
-        { "file": "slap_bass.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Pull Bass",
-      "zones": [
-        { "file": "pull_bass.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Pick",
-      "zones": [
-        { "file": "pick.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Piano Hammer",
-      "zones": [
-        { "file": "piano_hammer.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Anvil",
-      "zones": [
-        { "file": "anvil.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Taiko Drum",
-      "zones": [
-        { "file": "taiko_drum.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Lip Buzz",
-      "zones": [
-        { "file": "lip_buzz.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Breath",
-      "zones": [
-        { "file": "breath.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Bow Scrape",
-      "zones": [
-        { "file": "bow_scrape.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Spectrum 1",
-      "zones": [
-        { "file": "spectrum_1_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Spectrum 2",
-      "zones": [
-        { "file": "spectrum_2_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Spectrum 3",
-      "zones": [
-        { "file": "spectrum_3_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Spectrum 4",
-      "zones": [
-        { "file": "spectrum_4_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Spectrum 5",
-      "zones": [
-        { "file": "spectrum_5_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Spectrum 6",
-      "zones": [
-        { "file": "spectrum_6_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Spectrum 7",
-      "zones": [
-        { "file": "spectrum_7_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-    { "name": "Spectrum 8",
-      "zones": [
-        { "file": "spectrum_8_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127}
-      ]
-    },
-    { "name": "Spectrum 9",
-      "zones": [
-        { "file": "spectrum_9_z1.wav", "rootKey": 54, "lowKey": 0, "highKey": 127 }
-
-      ]
-    },
-    { "name": "Pizzicato",
-      "zones": [
-        { "file": "pizzicato.wav", "rootKey": 60, "lowKey": 0, "highKey": 127 }
-      ]
-    },
-
-    { "name": "Bassoon",
-      "zones": [
-        { "file": "BASSOON-B2.wav", "rootKey": 47, "lowKey": 0, "highKey": 127,
-          "loop": true,
-          "tuneCents": -14.6 }
-      ]
-    },
-    { "name": "Clarinet",
-      "zones": [
-        { "file": "CLARINET D4.wav", "rootKey": 74, "lowKey": 0, "highKey": 127,
-          "loop": true,
-          "tuneCents": -2.0 }
-      ]
-    },
-    { "name": "Sax",
-      "zones": [
-        { "file": "sax-C2.wav", "rootKey": 60, "lowKey": 0, "highKey": 127,
-          "loop": true,
-          "tuneCents": 1.9 }
-      ]
-    },
-    { "name": "Tenor Sax",
-      "zones": [
-        { "file": "tenorsax-D#2.wav", "rootKey": 51, "lowKey": 0, "highKey": 127,
-          "loop": true,
-          "tuneCents": -17.3 }
-      ]
-    },
-    { "name": "Low Brass",
-      "zones": [
-        { "file": "lowbrass-C2.wav", "rootKey": 36, "lowKey": 0, "highKey": 127,
-          "loop": true,
-          "tuneCents": -6.7 }
-      ]
-    },
-    { "name": "Male Choir",
-      "zones": [
-        { "file": "male-choir-C2.wav", "rootKey": 48, "lowKey": 0, "highKey": 127,
-          "loop": true,
-          "tuneCents": 13.2 }
-      ]
-    },
-    { "name": "Flute Air",
-      "zones": [
-        { "file": "flute-C#4.wav", "rootKey": 73, "lowKey": 0, "highKey": 127,
-          "loop": true,
-          "tuneCents": 10.6 }
-      ]
-    },
-    { "name": "Flute Wave",
-      "zones": [
-        { "file": "FLUTE G4.wav", "rootKey": 79, "lowKey": 0, "highKey": 127,
-          "loop": true,
-          "tuneCents": -7.7 }
+        {
+          "id": "z1",
+          "file": "anvil.wav",
+          "rootKey": 60,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": false
+        }
       ]
     }
   ]

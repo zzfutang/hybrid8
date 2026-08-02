@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.harp",
+  "name": "Harp",
+  "zones": [
+    {
+      "id": "as1",
+      "file": "Harp A#1.wav",
+      "rootKey": 34,
+      "lowKey": 0,
+      "highKey": 39
+    },
+    {
+      "id": "gs2",
+      "file": "Harp G#2.wav",
+      "rootKey": 44,
+      "lowKey": 40,
+      "highKey": 46
+    },
+    {
+      "id": "cs3",
+      "file": "Harp C#3.wav",
+      "rootKey": 49,
+      "lowKey": 47,
+      "highKey": 51
+    },
+    {
+      "id": "fs3",
+      "file": "Harp F#3.wav",
+      "rootKey": 54,
+      "lowKey": 52,
+      "highKey": 55
+    },
+    {
+      "id": "gs3",
+      "file": "Harp G#3.wav",
+      "rootKey": 56,
+      "lowKey": 56,
+      "highKey": 58
+    },
+    {
+      "id": "cs4",
+      "file": "Harp C#4.wav",
+      "rootKey": 61,
+      "lowKey": 59,
+      "highKey": 62
+    },
+    {
+      "id": "ds4",
+      "file": "Harp D#4.wav",
+      "rootKey": 63,
+      "lowKey": 63,
+      "highKey": 65
+    },
+    {
+      "id": "gs4",
+      "file": "Harp G#4.wav",
+      "rootKey": 68,
+      "lowKey": 66,
+      "highKey": 69
+    },
+    {
+      "id": "as4",
+      "file": "Harp A#4.wav",
+      "rootKey": 70,
+      "lowKey": 70,
+      "highKey": 70
+    },
+    {
+      "id": "b4",
+      "file": "Harp B5.wav",
+      "rootKey": 71,
+      "lowKey": 71,
+      "highKey": 72
+    },
+    {
+      "id": "cs5",
+      "file": "Harp C#5.wav",
+      "rootKey": 73,
+      "lowKey": 73,
+      "highKey": 75
+    },
+    {
+      "id": "fs5",
+      "file": "Harp F#5.wav",
+      "rootKey": 78,
+      "lowKey": 76,
+      "highKey": 88
+    },
+    {
+      "id": "ds7",
+      "file": "Harp D#7.wav",
+      "rootKey": 99,
+      "lowKey": 89,
+      "highKey": 100,
+      "tuneCents": 12
+    },
+    {
+      "id": "fs7",
+      "file": "Harp F#7.wav",
+      "rootKey": 102,
+      "lowKey": 101,
+      "highKey": 127,
+      "tuneCents": -13
+    }
+  ]
+}

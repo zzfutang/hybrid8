@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.slap_bass_multisample",
+  "name": "Slap Bass",
+  "zones": [
+    {
+      "id": "e1",
+      "file": "Slap Bass E0.wav",
+      "rootKey": 28,
+      "lowKey": 0,
+      "highKey": 29
+    },
+    {
+      "id": "fs1",
+      "file": "Slap Bass E2.wav",
+      "rootKey": 30,
+      "lowKey": 30,
+      "highKey": 31
+    },
+    {
+      "id": "gs1",
+      "file": "Slap Bass E4.wav",
+      "rootKey": 32,
+      "lowKey": 32,
+      "highKey": 33
+    },
+    {
+      "id": "b1",
+      "file": "Slap Bass A1.wav",
+      "rootKey": 35,
+      "lowKey": 34,
+      "highKey": 35
+    },
+    {
+      "id": "c2",
+      "file": "Slap Bass A3.wav",
+      "rootKey": 36,
+      "lowKey": 36,
+      "highKey": 37
+    },
+    {
+      "id": "ds2",
+      "file": "Slap Bass D1.wav",
+      "rootKey": 39,
+      "lowKey": 38,
+      "highKey": 40
+    },
+    {
+      "id": "f2",
+      "file": "Slap Bass D3.wav",
+      "rootKey": 41,
+      "lowKey": 41,
+      "highKey": 42
+    },
+    {
+      "id": "g2",
+      "file": "Slap Bass G0.wav",
+      "rootKey": 43,
+      "lowKey": 43,
+      "highKey": 45
+    },
+    {
+      "id": "c3",
+      "file": "Slap Bass G5.wav",
+      "rootKey": 48,
+      "lowKey": 46,
+      "highKey": 127
+    }
+  ]
+}

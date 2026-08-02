@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.oboe",
+  "name": "Oboe",
+  "zones": [
+    {
+      "id": "ds4",
+      "file": "Oboe D#4.wav",
+      "rootKey": 63,
+      "lowKey": 0,
+      "highKey": 63
+    },
+    {
+      "id": "e4",
+      "file": "Oboe E4.wav",
+      "rootKey": 64,
+      "lowKey": 64,
+      "highKey": 65,
+      "tuneCents": -24
+    },
+    {
+      "id": "g4",
+      "file": "Oboe G4.wav",
+      "rootKey": 67,
+      "lowKey": 66,
+      "highKey": 68,
+      "tuneCents": -26
+    },
+    {
+      "id": "as4",
+      "file": "Oboe A#4.wav",
+      "rootKey": 70,
+      "lowKey": 69,
+      "highKey": 72,
+      "tuneCents": -21
+    },
+    {
+      "id": "d5",
+      "file": "Oboe D5.wav",
+      "rootKey": 74,
+      "lowKey": 73,
+      "highKey": 76,
+      "tuneCents": -25
+    },
+    {
+      "id": "g5",
+      "file": "Oboe G5.wav",
+      "rootKey": 79,
+      "lowKey": 77,
+      "highKey": 80,
+      "tuneCents": -32
+    },
+    {
+      "id": "as5",
+      "file": "Oboe A#5.wav",
+      "rootKey": 82,
+      "lowKey": 81,
+      "highKey": 127
+    }
+  ]
+}

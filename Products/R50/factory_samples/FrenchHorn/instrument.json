@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.french_horn",
+  "name": "French Horn",
+  "zones": [
+    {
+      "id": "ds2",
+      "file": "French Horns D#3.wav",
+      "rootKey": 39,
+      "lowKey": 0,
+      "highKey": 42
+    },
+    {
+      "id": "a2",
+      "file": "French Horns A3.wav",
+      "rootKey": 45,
+      "lowKey": 43,
+      "highKey": 48
+    },
+    {
+      "id": "ds3",
+      "file": "French Horns D#4.wav",
+      "rootKey": 51,
+      "lowKey": 49,
+      "highKey": 54
+    },
+    {
+      "id": "a3",
+      "file": "French Horns A4.wav",
+      "rootKey": 57,
+      "lowKey": 55,
+      "highKey": 60
+    },
+    {
+      "id": "ds4",
+      "file": "French Horns D#5.wav",
+      "rootKey": 63,
+      "lowKey": 61,
+      "highKey": 66
+    },
+    {
+      "id": "a4",
+      "file": "French Horns A5.wav",
+      "rootKey": 69,
+      "lowKey": 67,
+      "highKey": 72
+    },
+    {
+      "id": "ds5",
+      "file": "French Horns D#6.wav",
+      "rootKey": 75,
+      "lowKey": 73,
+      "highKey": 127
+    }
+  ]
+}

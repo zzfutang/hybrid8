@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.strings",
+  "name": "Strings",
+  "zones": [
+    {
+      "id": "g1",
+      "file": "Strings G2L.wav",
+      "rootKey": 31,
+      "lowKey": 0,
+      "highKey": 32
+    },
+    {
+      "id": "as1",
+      "file": "Strings A#2L.wav",
+      "rootKey": 34,
+      "lowKey": 33,
+      "highKey": 35
+    },
+    {
+      "id": "cs2",
+      "file": "Strings C#3L.wav",
+      "rootKey": 37,
+      "lowKey": 36,
+      "highKey": 38
+    },
+    {
+      "id": "e2",
+      "file": "Strings E3L.wav",
+      "rootKey": 40,
+      "lowKey": 39,
+      "highKey": 41
+    },
+    {
+      "id": "g2",
+      "file": "Strings G3L.wav",
+      "rootKey": 43,
+      "lowKey": 42,
+      "highKey": 45
+    },
+    {
+      "id": "b2",
+      "file": "Strings B3L.wav",
+      "rootKey": 47,
+      "lowKey": 46,
+      "highKey": 49
+    },
+    {
+      "id": "e3",
+      "file": "Strings E4L.wav",
+      "rootKey": 52,
+      "lowKey": 50,
+      "highKey": 55
+    },
+    {
+      "id": "as3",
+      "file": "Strings A#4L.wav",
+      "rootKey": 58,
+      "lowKey": 56,
+      "highKey": 59
+    },
+    {
+      "id": "cs4",
+      "file": "Strings C#5L.wav",
+      "rootKey": 61,
+      "lowKey": 60,
+      "highKey": 62
+    },
+    {
+      "id": "e4",
+      "file": "Strings E5L.wav",
+      "rootKey": 64,
+      "lowKey": 63,
+      "highKey": 65
+    },
+    {
+      "id": "g4",
+      "file": "Strings G5L.wav",
+      "rootKey": 67,
+      "lowKey": 66,
+      "highKey": 68
+    },
+    {
+      "id": "as4",
+      "file": "Strings A#5L.wav",
+      "rootKey": 70,
+      "lowKey": 69,
+      "highKey": 71
+    },
+    {
+      "id": "cs5",
+      "file": "Strings C#6L.wav",
+      "rootKey": 73,
+      "lowKey": 72,
+      "highKey": 74
+    },
+    {
+      "id": "e5",
+      "file": "Strings E6L.wav",
+      "rootKey": 76,
+      "lowKey": 75,
+      "highKey": 77
+    },
+    {
+      "id": "g5",
+      "file": "Strings G6 L.wav",
+      "rootKey": 79,
+      "lowKey": 78,
+      "highKey": 81
+    },
+    {
+      "id": "b5",
+      "file": "Strings B6L.wav",
+      "rootKey": 83,
+      "lowKey": 82,
+      "highKey": 127
+    }
+  ]
+}

@@ -44,6 +44,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Catalog for the editor's sample browser.
 - (NSInteger)instrumentCount;
 - (nullable NSString *)instrumentNameAtIndex:(NSInteger)index;
+- (NSInteger)instrumentIndexForAssetId:(NSString *)assetId;
 
 /// Everything the browser table shows about one entry: name, zone count, key
 /// span, loop mode, the duration of the zone covering middle C, and the total

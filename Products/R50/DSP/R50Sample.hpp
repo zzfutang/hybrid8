@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -41,11 +42,15 @@ enum class LoopMode { None = 0, Forward, PingPong };
 // silent: addSample returns -1, the region is skipped, and an instrument simply
 // does not appear. Adding the nine Spectrum waves took the count to 129 against
 // a limit of 128, and the casualty was the last attack in the list rather than
-// anything to do with what had just been added.
-static constexpr int kMaxSampleSlots = 256;
+// anything to do with what had just been added. The multisampled factory
+// directories load 271 zones, so 256 was next; slots are one pointer each, and
+// the headroom is what user imports land in.
+static constexpr int kMaxSampleSlots = 512;
 static constexpr int kMaxRegions     = 16;
 static constexpr int kMaxInstruments = 96;
 static constexpr int kInstrumentNameLength = 32;
+static constexpr int kAssetIdLength = 64;
+static constexpr int kZoneIdLength = 32;
 
 /// One immutable block of audio. Mono: the voice is mono until the pan stage.
 struct SampleData {
@@ -67,6 +72,12 @@ struct SampleRegion {
     float tuneCents   = 0.0f;
     float gainDb      = 0.0f;
     int   slot        = -1;
+    char  id[kZoneIdLength] = {0}; // local ID; full asset ID is instrument/id
+
+    void setId(const char *text) {
+        std::strncpy(id, text, kZoneIdLength - 1);
+        id[kZoneIdLength - 1] = '\0';
+    }
 };
 
 /// A playable instrument: a bounded set of regions. Fixed capacity — nothing
@@ -75,6 +86,7 @@ struct Multisample {
     SampleRegion regions[kMaxRegions];
     int          regionCount = 0;
     char         name[kInstrumentNameLength] = {0};
+    char         id[kAssetIdLength] = {0};
 
     /// First region covering this key and velocity, or null. A linear scan is
     /// bounded by kMaxRegions and runs once per note-on, not per sample.
@@ -92,6 +104,11 @@ struct Multisample {
     void setName(const char *text) {
         std::strncpy(name, text, kInstrumentNameLength - 1);
         name[kInstrumentNameLength - 1] = '\0';
+    }
+
+    void setId(const char *text) {
+        std::strncpy(id, text, kAssetIdLength - 1);
+        id[kAssetIdLength - 1] = '\0';
     }
 };
 
@@ -170,7 +187,27 @@ public:
     int addInstrument(const Multisample &instrument) {
         const int index = instrumentCount_.load(std::memory_order_relaxed);
         if (index >= kMaxInstruments || instrument.regionCount <= 0) return -1;
-        instruments_[index] = instrument;
+        Multisample published = instrument;
+        if (published.id[0] == '\0') {
+            char fallback[kAssetIdLength];
+            std::snprintf(fallback, sizeof fallback, "legacy.%d", index);
+            published.setId(fallback);
+        }
+        if (instrumentIndex(published.id) >= 0) return -1;
+        for (int zone = 0; zone < published.regionCount; ++zone) {
+            if (published.regions[zone].id[0] == '\0') {
+                char fallback[kZoneIdLength];
+                std::snprintf(fallback, sizeof fallback, "z%d", zone);
+                published.regions[zone].setId(fallback);
+            }
+            for (int previous = 0; previous < zone; ++previous) {
+                if (std::strcmp(published.regions[previous].id,
+                                published.regions[zone].id) == 0) {
+                    return -1;
+                }
+            }
+        }
+        instruments_[index] = published;
         instrumentCount_.store(index + 1, std::memory_order_release);
         return index;
     }
@@ -190,6 +227,19 @@ public:
 
     int instrumentCount() const {
         return instrumentCount_.load(std::memory_order_acquire);
+    }
+
+    int sampleCount() const {
+        return slotCount_.load(std::memory_order_acquire);
+    }
+
+    int instrumentIndex(const char *id) const {
+        if (id == nullptr || id[0] == '\0') return -1;
+        const int count = instrumentCount_.load(std::memory_order_acquire);
+        for (int i = 0; i < count; ++i) {
+            if (std::strcmp(instruments_[i].id, id) == 0) return i;
+        }
+        return -1;
     }
 
     /// Retune an instrument. Safe from the UI thread while audio is running:

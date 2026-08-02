@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.solo_violin",
+  "name": "Violin",
+  "zones": [
+    {
+      "id": "gs3",
+      "file": "Violin G#4.wav",
+      "rootKey": 56,
+      "lowKey": 0,
+      "highKey": 57
+    },
+    {
+      "id": "b3",
+      "file": "Violin B4.wav",
+      "rootKey": 59,
+      "lowKey": 58,
+      "highKey": 60
+    },
+    {
+      "id": "d4",
+      "file": "Violin D5.wav",
+      "rootKey": 62,
+      "lowKey": 61,
+      "highKey": 63
+    },
+    {
+      "id": "f4",
+      "file": "Violin F5.wav",
+      "rootKey": 65,
+      "lowKey": 64,
+      "highKey": 66
+    },
+    {
+      "id": "gs4",
+      "file": "Violin G#5.wav",
+      "rootKey": 68,
+      "lowKey": 67,
+      "highKey": 71
+    },
+    {
+      "id": "d5",
+      "file": "Violin D6.wav",
+      "rootKey": 74,
+      "lowKey": 72,
+      "highKey": 75
+    },
+    {
+      "id": "f5",
+      "file": "Violin F6.wav",
+      "rootKey": 77,
+      "lowKey": 76,
+      "highKey": 78
+    },
+    {
+      "id": "gs5",
+      "file": "Violin G#6.wav",
+      "rootKey": 80,
+      "lowKey": 79,
+      "highKey": 81
+    },
+    {
+      "id": "b5",
+      "file": "Violin B6.wav",
+      "rootKey": 83,
+      "lowKey": 82,
+      "highKey": 84
+    },
+    {
+      "id": "d6",
+      "file": "Violin D7.wav",
+      "rootKey": 86,
+      "lowKey": 85,
+      "highKey": 87
+    },
+    {
+      "id": "f6",
+      "file": "Violin F7.wav",
+      "rootKey": 89,
+      "lowKey": 88,
+      "highKey": 90
+    },
+    {
+      "id": "gs6",
+      "file": "Violin G#7.wav",
+      "rootKey": 92,
+      "lowKey": 91,
+      "highKey": 93
+    },
+    {
+      "id": "b6",
+      "file": "Violin B7.wav",
+      "rootKey": 95,
+      "lowKey": 94,
+      "highKey": 96
+    },
+    {
+      "id": "d7",
+      "file": "Violin D8.wav",
+      "rootKey": 98,
+      "lowKey": 97,
+      "highKey": 127
+    }
+  ]
+}
