@@ -1,11 +1,9 @@
 # R50 factory presets
 
 One JSON patch document per factory preset, in bank order by filename. The
-whole directory is bundled into the AUv3, and when it holds any documents it
-**is** the factory bank; the Swift recipes in `R50FactoryPresets.swift` are
-the origin of the content and the fallback when it is empty. Loading is all
-or nothing — one unreadable document falls back to the recipes rather than
-shipping a hole where a preset number used to be.
+whole directory is bundled into the AUv3 and **is the factory bank** — there
+is no other source. The Swift recipes that generated the original 106 were
+deleted once this export landed; git history has them.
 
 A document carries `schemaVersion`, the display `name`, every parameter by
 its tree keyPath, and a `sampleAssets` map of partial index to persistent
@@ -14,14 +12,17 @@ missing from a document stay at their defaults; unknown keys are reported on
 import rather than silently ignored, so a typo cannot quietly shape a
 different sound.
 
+A document that fails to parse does not vanish and does not crash: it holds
+its preset number as the default patch named `BROKEN <filename>`, because
+saved songs store preset numbers and a hand-edit gone wrong should be heard
+about immediately, not renumber the rest of the bank.
+
 Workflow:
 
-- edit a factory patch in the app, export it with the browser's EXP button,
-  and replace its file here (keep the ordering prefix); or
-- change the Swift recipes and regenerate the whole set with
-  `scripts/export-r50-presets.sh` (requires the current build installed via
-  `scripts/install-r50.sh` **without** these files bundled, or with files
-  matching the recipes — the exporter dumps whatever bank the installed AU
-  reports).
+- edit a document here directly; or
+- edit the patch in the app, export it with the browser's EXP button, and
+  replace its file (keep the ordering prefix); or
+- `scripts/export-r50-presets.sh` re-dumps the whole bank from the installed
+  AU — useful for normalising documents after a parameter is added.
 
-Rebuild + install after either, since the appex bundles this directory.
+Rebuild + install after any change, since the appex bundles this directory.

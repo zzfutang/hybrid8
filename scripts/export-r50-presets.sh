@@ -1,9 +1,10 @@
 #!/bin/bash
 #
-# export-r50-presets.sh — dump the installed R50 AU's factory bank as JSON
-# patch documents into Products/R50/factory_presets/. Run after changing the
-# Swift recipes (or after editing patches in the app and exporting the ones
-# you want to keep), then rebuild: the bundled files are the shipping bank.
+# export-r50-presets.sh — re-dump the installed R50 AU's factory bank as JSON
+# patch documents into Products/R50/factory_presets/. The documents are the
+# only source of the bank, so this is a normalisation pass: it round-trips
+# every preset through the installed AU, which refreshes defaults for newly
+# added parameters and rewrites files in canonical sorted-key form.
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."

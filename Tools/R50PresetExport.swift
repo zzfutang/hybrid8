@@ -4,11 +4,11 @@
 // per preset in bank order, into Products/R50/factory_presets (or the
 // directory given as the first argument).
 //
-// This is how the repo's factory patch files are (re)generated: the app
-// bundles that directory, and once files exist they ARE the factory bank —
-// the Swift recipes stay behind as the origin and the fallback. The format
-// matches R50PatchJSON.swift: schemaVersion, name, every parameter by tree
-// keyPath, and the partial -> persistent sample instrument ID map.
+// This is how the repo's factory patch files are (re)normalised: the app
+// bundles that directory, and it IS the factory bank — there is no other
+// source. The format matches R50PatchJSON.swift: schemaVersion, name, every
+// parameter by tree keyPath, and the partial -> persistent sample instrument
+// ID map.
 //
 
 import AVFoundation

@@ -180,11 +180,10 @@ edge zones stretched across the keyboard), and a few zones dropped from
 folders that exceed the 16-region limit or measured badly out of tune
 (`Cello C#7`, the piano's top tinkle octave, duplicate-pitch organ pipes).
 
-Preset recipes reference samples **only** through a `partial -> persistent
+Preset documents reference samples **only** through a `partial -> persistent
 instrument ID` map; `R50AudioUnit` resolves it after the ordinary numeric
-parameter reset, so no recipe stores a library index and discovery-order
-changes cannot repoint a sound. The numeric selector parameter a recipe
-writes is a bootstrap zero. `factory.arco_basses` and `factory.concert_flute`
+parameter reset, so no document's numeric selector value can repoint a sound
+when discovery order changes. `factory.arco_basses` and `factory.concert_flute`
 were retired with the old sample set; presets now name `factory.cello` and
 `factory.pan_flute`. The retired generated instruments (warm pad, the attack
 transients, gong, …) map to their closest sampled successors in the preset
