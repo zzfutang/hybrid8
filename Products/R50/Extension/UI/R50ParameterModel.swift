@@ -28,8 +28,9 @@ final class R50ParameterModel: ObservableObject {
     private let headroomProvider: (() -> Float)?
     private let presetApplier: ((Int) -> Void)?
     private weak var audioUnit: AUAudioUnit?
-    /// The output limiter's knee: above this the sound is being coloured.
-    private static let limiterKnee: Float = 0.75
+    /// The output stage's ceiling (kLimiterCeiling in R50Engine.hpp): above
+    /// this the gain rider is pulling the level down.
+    private static let limiterKnee: Float = 0.92
     private var clipHoldTicks = 0
 
     init(tree: AUParameterTree,

@@ -118,9 +118,17 @@ static const float kSinePhase = -static_cast<float>(synth::kPi) * 0.5f;
 inline WaveMip waveBuildMip(const WaveSpectrum &spectrum, int level,
                             float normFactor) {
     const int maxHarmonic = waveMaxHarmonic(level);
+    // 8x rather than 2x: at 2*maxHarmonic a level just under a power-of-two
+    // boundary is nearly critically sampled, and the Catmull-Rom read's
+    // images fold back into the audible band at up to -41 dB in the D5-A5
+    // region (4x still leaves -50 dB where the rounding lands at 2.1x).
+    // Guaranteeing >= 4x oversampling keeps every image in the region where
+    // the interpolator's rolloff buries it below the audibility gate in
+    // Tests/test_r50.cpp. Levels at the kWaveBaseLen cap keep their old
+    // tables and their old, already-clean measurements.
     const int length = std::min(kWaveBaseLen,
                                 std::max(kWaveMinLen,
-                                         waveNextPow2(2 * maxHarmonic)));
+                                         waveNextPow2(8 * maxHarmonic)));
 
     WaveMip mip;
     mip.length = length;

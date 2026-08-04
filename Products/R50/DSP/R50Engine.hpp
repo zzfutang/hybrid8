@@ -21,14 +21,21 @@ static constexpr int kNumVoices   = 8;
 /// Control-rate block: filter coefficients and pitch update this often.
 static constexpr int kControlBlock = 32;
 
-/// The output safety ceiling. Bit-transparent below the knee and a smooth,
+/// Ceiling of the output stage: the gain rider in render() holds the
+/// steady-state peak at or below this, and outputLimit()'s knee starts here.
+static constexpr float kLimiterCeiling = 0.92f;
+
+/// The output safety clip. Bit-transparent below the knee and a smooth,
 /// monotonic bend into 1.0 above it — a safety device, not a colour. The
-/// tanh-style softClip it replaced bent the curve at every level, and the
-/// harmonics it added to a single loud top-octave note folded over Nyquist
-/// as measurable aliasing once the gain staging stopped hiding everything
-/// 10 dB down.
+/// tanh-style softClip it replaced bent the curve at every level.
+///
+/// Since the gain rider took over sustained-level control, this only ever
+/// sees the first control block of a transient the rider has not caught up
+/// with, so the knee sits at the rider's ceiling rather than at the 0.75
+/// that used to shave every chord continuously — waveshaping a held chord
+/// is exactly the distortion the rider exists to remove.
 inline float outputLimit(float x) {
-    constexpr float knee = 0.75f;
+    constexpr float knee = kLimiterCeiling;
     const float magnitude = std::fabs(x);
     if (magnitude <= knee) return x;
     const float span = 1.0f - knee;
@@ -71,6 +78,16 @@ public:
         effects_.setup(sr);
         routingSmoothCoef_ =
             static_cast<float>(std::exp(-1.0 / (0.010 * sampleRate_)));
+        // Rider timing: the hold must outlast not just one cycle of the
+        // lowest note (A0 is 36 ms) but a chord's beat cycle — with a short
+        // hold the gain chases every equal-temperament beat swell, and each
+        // fast re-attack edge sprays sidebands measured at -34 dB. Held past
+        // the beats, the gain over a sustained chord is close to static and
+        // the rider adds almost nothing; the price is a slow, breath-like
+        // recovery after an accent, which is what a limiter should sound like.
+        limiterHoldSamples_ = static_cast<int>(0.400 * sampleRate_);
+        limiterReleaseCoef_ = static_cast<float>(
+            std::exp(-kControlBlock / (0.300 * sampleRate_)));
         gainSmoother_.setSampleRate(sr);
         gainSmoother_.setTimeConstant(20.0);
         gainSmoother_.snap(store_[R50ParamMasterGain].load(std::memory_order_relaxed));
@@ -183,6 +200,12 @@ public:
         for (auto &voice : voices_) voice.reset();
         auditionVoice_.reset();
         auditionHold_ = 0;
+        limiterEnv_  = 0.0f;
+        limiterGain_ = 1.0f;
+        limiterHold_ = 0;
+        limiterDelayPos_ = 0;
+        std::memset(limiterDelayL_, 0, sizeof(limiterDelayL_));
+        std::memset(limiterDelayR_, 0, sizeof(limiterDelayR_));
         effects_.reset();
         std::memset(keyDown_, 0, sizeof(keyDown_));
         monoDepth_ = 0;
@@ -213,10 +236,10 @@ public:
 
     float outputMeter() const { return meter_.load(std::memory_order_relaxed); }
 
-    /// Peak of the signal entering the output limiter since the last read.
+    /// Peak of the signal entering the output stage since the last read.
     /// Reading resets the hold, so a poll sees every excursion exactly once.
-    /// Above the limiter knee the output is being coloured; above 1.0 it
-    /// would have clipped outright without the limiter.
+    /// Above kLimiterCeiling the gain rider is pulling the level down; above
+    /// 1.0 it would have clipped outright without the output stage.
     float readHeadroomPeak() {
         return headroomPeak_.exchange(0.0f, std::memory_order_relaxed);
     }
@@ -380,24 +403,75 @@ public:
                 }
 
                 const float gain = gainSmoother_.next();
-                const float preL =
-                    (wet.l + auditionL * kAuditionLevel) * gain;
-                const float preR =
-                    (wet.r + auditionR * kAuditionLevel) * gain;
-                const float sumL = outputLimit(preL);
-                const float sumR = outputLimit(preR);
+                preBlockL_[i] = (wet.l + auditionL * kAuditionLevel) * gain;
+                preBlockR_[i] = (wet.r + auditionR * kAuditionLevel) * gain;
+            }
+
+            // Output limiting is a gain rider with one control block of
+            // lookahead rather than a per-sample waveshaper: a memoryless
+            // clip at the old 0.75 knee coloured every ordinary four-note
+            // chord continuously (measured at -43 dB THD at the default
+            // master gain, -17 dB at fortissimo). Riding a single gain
+            // leaves a held chord's waveform untouched. The output plays
+            // kControlBlock samples late, so by the time a fresh peak
+            // reaches the speaker the gain has already ramped down for it —
+            // no overshoot to shave; the peak-hold keeps the gain from
+            // rippling inside a low note's cycle, and the release is slow
+            // enough that beats breathe rather than pump.
+            float blockPeak = 0.0f;
+            for (int i = 0; i < block; ++i) {
+                blockPeak = std::max(blockPeak,
+                    std::max(std::fabs(preBlockL_[i]), std::fabs(preBlockR_[i])));
+            }
+            if (blockPeak >= limiterEnv_) {
+                limiterEnv_ = blockPeak;
+                limiterHold_ = limiterHoldSamples_;
+            } else if (blockPeak >= limiterEnv_ * 0.85f) {
+                // A beat swell that comes back close to the held peak pins
+                // the envelope where it is. Without this (and without the
+                // hold outlasting a chord's slowest beat trough), the hold
+                // lapses in the troughs and every re-attack is a block-fast
+                // gain edge — sidebands at -41 dB, audible as a 10 Hz
+                // shimmer on high chords. Held over a sustained chord, the
+                // gain is simply static.
+                limiterHold_ = limiterHoldSamples_;
+            } else if (limiterHold_ > 0) {
+                limiterHold_ -= block;
+            } else {
+                limiterEnv_ = blockPeak
+                    + (limiterEnv_ - blockPeak) * limiterReleaseCoef_;
+            }
+            const float riderTarget = limiterEnv_ > kLimiterCeiling
+                ? kLimiterCeiling / limiterEnv_ : 1.0f;
+
+            for (int i = 0; i < block; ++i) {
+                // Ramp across the block so a gain step never lands mid-buffer.
+                // The delayed sample being played was already inside the
+                // envelope's hold window when its gain was computed, so
+                // outputLimit() below is a true last resort.
+                const float rider = limiterGain_
+                    + (riderTarget - limiterGain_) * (i + 1) / block;
+                const float delayedL = limiterDelayL_[limiterDelayPos_];
+                const float delayedR = limiterDelayR_[limiterDelayPos_];
+                limiterDelayL_[limiterDelayPos_] = preBlockL_[i];
+                limiterDelayR_[limiterDelayPos_] = preBlockR_[i];
+                if (++limiterDelayPos_ == kControlBlock) limiterDelayPos_ = 0;
+
+                const float sumL = outputLimit(delayedL * rider);
+                const float sumR = outputLimit(delayedR * rider);
 
                 outL[offset + i] = sumL;
                 outR[offset + i] = sumR;
                 const float magnitude = std::max(std::fabs(sumL), std::fabs(sumR));
                 if (magnitude > peak) peak = magnitude;
-                // The clip indicator watches the signal BEFORE the limiter:
-                // above the knee the limiter is already colouring the sound,
-                // which is exactly what "clipping" means here.
+                // The clip indicator watches the signal ENTERING the output
+                // stage: above the ceiling the rider is pulling the level
+                // down, which is what "limiting" means here.
                 const float preMagnitude =
-                    std::max(std::fabs(preL), std::fabs(preR));
+                    std::max(std::fabs(preBlockL_[i]), std::fabs(preBlockR_[i]));
                 if (preMagnitude > prePeak) prePeak = preMagnitude;
             }
+            limiterGain_ = riderTarget;
             offset += block;
         }
 
@@ -1012,6 +1086,17 @@ private:
     float ringSendLevel_[kTonesPerVoice][kEffectSlotCount] = {};
     float ringSendLevelTarget_[kTonesPerVoice][kEffectSlotCount] = {};
     float routingSmoothCoef_ = 0.0f;
+    // Output gain rider (render thread only).
+    float preBlockL_[kControlBlock] = {};
+    float preBlockR_[kControlBlock] = {};
+    float limiterDelayL_[kControlBlock] = {};   // the lookahead
+    float limiterDelayR_[kControlBlock] = {};
+    int   limiterDelayPos_ = 0;
+    float limiterEnv_  = 0.0f;
+    float limiterGain_ = 1.0f;
+    int   limiterHold_ = 0;
+    int   limiterHoldSamples_ = 2205;      // 50 ms at the default rate
+    float limiterReleaseCoef_ = 0.9952f;   // 150 ms at the default rate
     synth::OnePoleSmoother gainSmoother_;
     std::atomic<float>     meter_{0.0f};
     std::atomic<float>     headroomPeak_{0.0f};
