@@ -670,11 +670,14 @@ public:
                 mixR += sample * std::sin(angle) * 1.41421356f;
             }
             // Equal-power scaling for eight voices, followed by a bounded soft
-            // ceiling for correlated stacks and resonant transients.
+            // ceiling for correlated stacks and resonant transients. The clip
+            // sits AFTER the master gain: with it before, the volume control
+            // could not back the bus out of saturation, and every four-note
+            // chord measured -30 dB of intermodulation at any volume.
             StereoSample fx = effects_.process(mixL * kVoiceSumGain,
                                                mixR * kVoiceSumGain);
-            outL[n] = softClip(fx.l) * gain;
-            if (outR != outL) outR[n] = softClip(fx.r) * gain;
+            outL[n] = softClip(fx.l * gain);
+            if (outR != outL) outR[n] = softClip(fx.r * gain);
             blockPeakL = std::max(blockPeakL, std::fabs(outL[n]));
             blockPeakR = std::max(blockPeakR, std::fabs(outR[n]));
         }

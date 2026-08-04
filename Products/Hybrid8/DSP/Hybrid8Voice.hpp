@@ -49,19 +49,25 @@ struct VoiceTelemetry {
 
 class Voice {
 public:
-    static constexpr int kOversample = 2; // oscillator/FM/sync run at 2x
+    // Oscillator/FM/sync/filter rate. 2x left PolyBLEP's residual aliasing at
+    // -32 dB in the audible band on top-octave notes (the correction only
+    // handles the first-order discontinuity, and the half-band decimator
+    // stops just -45 dB). At 4x the residual both shrinks and folds far
+    // above the audible band before the two-stage decimation removes it.
+    static constexpr int kOversample = 4;
 
     void setSampleRate(double sr) {
         sampleRate_ = sr;
         // Oscillators and the complete nonlinear filter path run oversampled.
-        // The decimator band-limits their combined output before returning to
-        // the host rate.
+        // Two cascaded half-band decimators (4x -> 2x -> 1x) band-limit their
+        // combined output before returning to the host rate.
         osc_.setSampleRate(sr * kOversample);
         osc2_.setSampleRate(sr * kOversample);
         wtOsc1_.setSampleRate(sr * kOversample);
         wtOsc2_.setSampleRate(sr * kOversample);
         wtLibrary();           // force factory construction off the audio thread
-        decimator_.setup(sr);
+        decimator_.setup(sr * 2.0);
+        decimator2_.setup(sr);
         ampEnv_.setSampleRate(sr);
         filtEnv_.setSampleRate(sr);
         filter_.setSampleRate(sr * kOversample);
@@ -127,6 +133,7 @@ public:
         wtOsc1_.reset(rng_.nextUnipolar() * phaseSpread, rng_.nextUnipolar());
         wtOsc2_.reset(rng_.nextUnipolar() * phaseSpread, rng_.nextUnipolar());
         decimator_.reset();
+        decimator2_.reset();
         filter_.reset();
         lfoLocal_.reset();      // start LFO phase at 0 (used when key-triggered)
         lfo2Local_.reset();
@@ -159,6 +166,7 @@ public:
         filtEnv_.resetHard();
         filter_.reset();
         decimator_.reset();
+        decimator2_.reset();
         pendingNote_ = false;
         stealFadeRemaining_ = 0;
     }
@@ -406,6 +414,10 @@ public:
         const float noiseLevel = clampf(
             p.noiseLevel + md[ModDstNoiseLevel], 0.0f, 1.0f);
 
+        // Half-band decimation removes half the band of white noise per
+        // stage; the extra sqrt(2) keeps the audible noise level where the
+        // original 2x tuning put it now that the path runs at 4x.
+        const float noiseGain = noiseLevel * 1.41421356f;
         float filtered = 0.0f;
         for (int os = 0; os < kOversample; ++os) {
             // Process the modulator (osc 2) first so its sine can FM the carrier.
@@ -435,9 +447,12 @@ public:
             if (doSync && osc_.justWrapped()) osc2_.syncReset();
 
             float m = o1 * osc1Level + o2 * osc2Level;
-            // Noise and every nonlinear filter operation also run at 2x.
-            float src = m + rng_.nextBipolar() * noiseLevel;
-            filtered = decimator_.process(filter_.process(src));
+            // Noise and every nonlinear filter operation also run at 4x.
+            float src = m + rng_.nextBipolar() * noiseGain;
+            // First half-band runs at 4x (valid output every 2nd feed); its
+            // valid outputs feed the second half-band down to the host rate.
+            const float half = decimator_.process(filter_.process(src));
+            if (os & 1) filtered = decimator2_.process(half);
         }
 
         // --- VCA (velocity depth + matrix amplitude modulation / tremolo) ----
@@ -480,7 +495,8 @@ private:
     Oscillator osc2_;
     WavetableOscillator wtOsc1_;
     WavetableOscillator wtOsc2_;
-    Decimator2x decimator_;
+    Decimator2x      decimator_;    // 4x -> 2x: short filter, stage B cleans up
+    Decimator2xSharp decimator2_;   // 2x -> 1x: nothing after it — sharp
     ADSR       ampEnv_;
     ADSR       filtEnv_;
     LadderFilter filter_;
