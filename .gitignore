@@ -17,14 +17,14 @@ xcuserdata/
 *.wav
 *.zip
 
-# ...except R50's sample folder, which is source: those files are built into
-# the plugin and are meant to be edited and reviewed like any other asset.
-# The factory tree nests one directory per multisampled instrument, so the
-# exception has to reach into subdirectories too — but not into
-# old_factory_samples, which is a local archive of the retired content.
-!Products/R50/Samples/*.wav
-!Products/R50/factory_samples/*.wav
-!Products/R50/factory_samples/**/*.wav
+# R50's factory audio is deliberately NOT tracked. It was ~68 MB across 378
+# WAVs, which every clone would pay for forever, so it was removed from
+# history. The JSON manifests that map and tune the samples are still source
+# and still tracked -- only the audio itself lives outside the repository.
+#
+# Consequence: a fresh clone has the manifests but no audio, so R50's shipped
+# multisample tests in Tests/test_r50.cpp will fail until the sample tree is
+# restored into Products/R50/factory_samples and Products/R50/Samples.
 
 # Editor backup files
 *~
