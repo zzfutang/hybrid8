@@ -17,14 +17,15 @@ xcuserdata/
 *.wav
 *.zip
 
-# R50's factory audio is deliberately NOT tracked. It was ~68 MB across 378
-# WAVs, which every clone would pay for forever, so it was removed from
-# history. The JSON manifests that map and tune the samples are still source
-# and still tracked -- only the audio itself lives outside the repository.
+# ...except R50's factory audio, which ships with the plugin and is tracked
+# through Git LFS -- see .gitattributes. Git itself only carries a pointer per
+# sample, so the ~68 MB of audio never enters the repository's history.
 #
-# Consequence: a fresh clone has the manifests but no audio, so R50's shipped
-# multisample tests in Tests/test_r50.cpp will fail until the sample tree is
-# restored into Products/R50/factory_samples and Products/R50/Samples.
+# old_factory_samples is deliberately left out: it is a local archive of
+# retired content, not something the build or the tests read.
+!Products/R50/Samples/*.wav
+!Products/R50/factory_samples/*.wav
+!Products/R50/factory_samples/**/*.wav
 
 # Editor backup files
 *~

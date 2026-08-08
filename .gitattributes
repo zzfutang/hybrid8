@@ -1,0 +1,11 @@
+# R50's factory audio is stored in Git LFS, not in the repository itself.
+# Git keeps a small pointer file per sample; the audio lives in the LFS store.
+# The scope is deliberately narrow -- only the two R50 sample trees that ship
+# with the plugin. Loose WAVs elsewhere stay ignored by .gitignore, and
+# old_factory_samples is a local archive that is not tracked at all.
+#
+# Cloning this repository requires git-lfs. Without it these paths arrive as
+# pointer text rather than audio, and R50's shipped-multisample tests fail on
+# files that look present but are not readable as WAVs.
+Products/R50/factory_samples/**/*.wav filter=lfs diff=lfs merge=lfs -text
+Products/R50/Samples/*.wav filter=lfs diff=lfs merge=lfs -text
