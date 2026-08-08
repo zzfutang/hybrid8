@@ -77,6 +77,15 @@ public:
         store_[SynthParamWavetable].store(0.0f);
         store_[SynthParamWTFrame].store(0.0f);
         store_[SynthParamWTLiveness].store(0.25f);
+        store_[SynthParamWTResolution].store(0.0f);
+        store_[SynthParamWTSmooth].store(1.0f);
+        store_[SynthParamWTFrame2].store(0.0f);
+        store_[SynthParamWTFrame2Link].store(1.0f);
+        store_[SynthParamSubOscLevel].store(0.0f);
+        store_[SynthParamRingModLevel].store(0.0f);
+        store_[SynthParamWTTable2].store(0.0f);
+        store_[SynthParamWTTable2Link].store(1.0f);
+        store_[SynthParamRingModCharacter].store(0.0f);
         store_[SynthParamLFOToWTFrame].store(0.0f);
         store_[SynthParamWTFrameEnv].store(0.0f);
         store_[SynthParamLFO2Waveform].store(0.0f);
@@ -159,10 +168,15 @@ public:
         pwSmoother_.setSampleRate(sr);       pwSmoother_.setTimeConstant(10.0);
         pw2Smoother_.setSampleRate(sr);      pw2Smoother_.setTimeConstant(10.0);
         wtFrameSmoother_.setSampleRate(sr);  wtFrameSmoother_.setTimeConstant(20.0);
+        wtFrame2Smoother_.setSampleRate(sr); wtFrame2Smoother_.setTimeConstant(20.0);
+        wtSmoothSmoother_.setSampleRate(sr); wtSmoothSmoother_.setTimeConstant(10.0);
         gainSmoother_.setSampleRate(sr);     gainSmoother_.setTimeConstant(10.0);
         osc1LevelSmoother_.setSampleRate(sr);  osc1LevelSmoother_.setTimeConstant(10.0);
         osc2LevelSmoother_.setSampleRate(sr);  osc2LevelSmoother_.setTimeConstant(10.0);
         noiseLevelSmoother_.setSampleRate(sr); noiseLevelSmoother_.setTimeConstant(10.0);
+        subOscLevelSmoother_.setSampleRate(sr); subOscLevelSmoother_.setTimeConstant(10.0);
+        ringModLevelSmoother_.setSampleRate(sr); ringModLevelSmoother_.setTimeConstant(10.0);
+        ringModCharacterSmoother_.setSampleRate(sr); ringModCharacterSmoother_.setTimeConstant(8.0);
         driveSmoother_.setSampleRate(sr);    driveSmoother_.setTimeConstant(12.0);
         crossModSmoother_.setSampleRate(sr); crossModSmoother_.setTimeConstant(12.0);
         slopeSmoother_.setSampleRate(sr);    slopeSmoother_.setTimeConstant(15.0);
@@ -482,16 +496,26 @@ public:
     void renderSlice(float* outL, float* outR, int frames) {
         // Snapshot discrete/enum params once per block.
         Params p;
-        int w1 = clampInt(store_[SynthParamOscWaveform].load(), 0, 3);
+        const auto analogWave = [](int index) {
+            if (index == 4) return OscWave::Sine;
+            if (index == 5) return OscWave::Triangle;
+            return static_cast<OscWave>(std::min(index, 2));
+        };
+        int w1 = clampInt(store_[SynthParamOscWaveform].load(), 0, 5);
         p.osc1IsWT = (w1 == 3);
-        p.oscWave  = static_cast<OscWave>(std::min(w1, 2));
+        p.oscWave  = analogWave(w1);
         p.octave    = clampInt(store_[SynthParamOctave].load(), -4, 4);
-        int w2 = clampInt(store_[SynthParamOsc2Waveform].load(), 0, 3);
+        int w2 = clampInt(store_[SynthParamOsc2Waveform].load(), 0, 5);
         p.osc2IsWT = (w2 == 3);
-        p.osc2Wave = static_cast<OscWave>(std::min(w2, 2));
+        p.osc2Wave = analogWave(w2);
         p.osc2Octave = clampInt(store_[SynthParamOsc2Octave].load(), -4, 4);
         p.wtTable      = clampInt(store_[SynthParamWavetable].load(), 0, WT_MAX_SLOTS - 1);
+        const bool wtTable2Link = store_[SynthParamWTTable2Link].load() >= 0.5f;
+        p.wtTable2 = wtTable2Link ? p.wtTable
+            : clampInt(store_[SynthParamWTTable2].load(), 0, WT_MAX_SLOTS - 1);
         p.wtLiveness   = store_[SynthParamWTLiveness].load();
+        p.wtResolution = clampInt(store_[SynthParamWTResolution].load(), 0, 3);
+        p.wtFrame2Link = store_[SynthParamWTFrame2Link].load() >= 0.5f;
         p.lfoToWTFrame = store_[SynthParamLFOToWTFrame].load();
         p.wtFrameEnv   = store_[SynthParamWTFrameEnv].load();
         p.osc2Semitone = store_[SynthParamOsc2Semitone].load();
@@ -600,10 +624,15 @@ public:
         pwSmoother_.setTarget(store_[SynthParamOscPulseWidth].load());
         pw2Smoother_.setTarget(store_[SynthParamOsc2PulseWidth].load());
         wtFrameSmoother_.setTarget(store_[SynthParamWTFrame].load());
+        wtFrame2Smoother_.setTarget(store_[SynthParamWTFrame2].load());
+        wtSmoothSmoother_.setTarget(store_[SynthParamWTSmooth].load());
         gainSmoother_.setTarget(store_[SynthParamMasterGain].load());
         osc1LevelSmoother_.setTarget(store_[SynthParamOsc1Level].load());
         osc2LevelSmoother_.setTarget(store_[SynthParamOsc2Level].load());
         noiseLevelSmoother_.setTarget(store_[SynthParamNoiseLevel].load());
+        subOscLevelSmoother_.setTarget(store_[SynthParamSubOscLevel].load());
+        ringModLevelSmoother_.setTarget(store_[SynthParamRingModLevel].load());
+        ringModCharacterSmoother_.setTarget(store_[SynthParamRingModCharacter].load());
         driveSmoother_.setTarget(store_[SynthParamFilterDrive].load());
         crossModSmoother_.setTarget(store_[SynthParamOscCrossMod].load());
         slopeSmoother_.setTarget(store_[SynthParamFilterSlope].load());
@@ -635,9 +664,14 @@ public:
             p.pulseWidth = pwSmoother_.next();
             p.osc2PulseWidth = pw2Smoother_.next();
             p.wtFrame    = wtFrameSmoother_.next();
+            p.wtFrame2   = wtFrame2Smoother_.next();
+            p.wtSmooth   = wtSmoothSmoother_.next();
             p.osc1Level  = osc1LevelSmoother_.next();
             p.osc2Level  = osc2LevelSmoother_.next();
             p.noiseLevel = noiseLevelSmoother_.next();
+            p.subOscLevel = subOscLevelSmoother_.next();
+            p.ringModLevel = ringModLevelSmoother_.next();
+            p.ringModCharacter = ringModCharacterSmoother_.next();
             p.filterDrive = driveSmoother_.next();
             p.crossMod   = crossModSmoother_.next();
             p.filterSlopeMix = slopeSmoother_.next();
@@ -711,7 +745,9 @@ public:
             effective_[SynthParamOscPulseWidth].store(t.pulseWidth);
             effective_[SynthParamOsc2PulseWidth].store(t.osc2PulseWidth);
             effective_[SynthParamWTFrame].store(t.wtFrame);
+            effective_[SynthParamWTFrame2].store(t.wtFrame2);
             effective_[SynthParamWTLiveness].store(t.wtLiveness);
+            effective_[SynthParamWTSmooth].store(t.wtSmooth);
             effective_[SynthParamOscCrossMod].store(t.crossMod);
             effective_[SynthParamFilterCutoff].store(t.cutoff);
             effective_[SynthParamFilterResonance].store(t.resonance);
@@ -720,6 +756,8 @@ public:
             effective_[SynthParamOsc1Level].store(t.osc1Level);
             effective_[SynthParamOsc2Level].store(t.osc2Level);
             effective_[SynthParamNoiseLevel].store(t.noiseLevel);
+            effective_[SynthParamSubOscLevel].store(t.subOscLevel);
+            effective_[SynthParamRingModLevel].store(t.ringModLevel);
             effective_[SynthParamFilterSlope].store(t.filterSlope);
             effective_[SynthParamFilterMode].store(t.filterMode);
         }
@@ -862,10 +900,15 @@ private:
         pwSmoother_.snap(store_[SynthParamOscPulseWidth].load());
         pw2Smoother_.snap(store_[SynthParamOsc2PulseWidth].load());
         wtFrameSmoother_.snap(store_[SynthParamWTFrame].load());
+        wtFrame2Smoother_.snap(store_[SynthParamWTFrame2].load());
+        wtSmoothSmoother_.snap(store_[SynthParamWTSmooth].load());
         gainSmoother_.snap(store_[SynthParamMasterGain].load());
         osc1LevelSmoother_.snap(store_[SynthParamOsc1Level].load());
         osc2LevelSmoother_.snap(store_[SynthParamOsc2Level].load());
         noiseLevelSmoother_.snap(store_[SynthParamNoiseLevel].load());
+        subOscLevelSmoother_.snap(store_[SynthParamSubOscLevel].load());
+        ringModLevelSmoother_.snap(store_[SynthParamRingModLevel].load());
+        ringModCharacterSmoother_.snap(store_[SynthParamRingModCharacter].load());
         driveSmoother_.snap(store_[SynthParamFilterDrive].load());
         crossModSmoother_.snap(store_[SynthParamOscCrossMod].load());
         slopeSmoother_.snap(store_[SynthParamFilterSlope].load());
@@ -899,8 +942,11 @@ private:
     std::atomic<float> outputMeterR_{0.0f};
 
     OnePoleSmoother cutoffSmoother_, resoSmoother_, pwSmoother_, gainSmoother_;
-    OnePoleSmoother pw2Smoother_, wtFrameSmoother_;
+    OnePoleSmoother pw2Smoother_, wtFrameSmoother_, wtFrame2Smoother_;
+    OnePoleSmoother wtSmoothSmoother_;
     OnePoleSmoother osc1LevelSmoother_, osc2LevelSmoother_, noiseLevelSmoother_;
+    OnePoleSmoother subOscLevelSmoother_, ringModLevelSmoother_;
+    OnePoleSmoother ringModCharacterSmoother_;
     OnePoleSmoother driveSmoother_, crossModSmoother_, slopeSmoother_;
     OnePoleSmoother stereoSmoother_;
     OnePoleSmoother modeSmoother_;

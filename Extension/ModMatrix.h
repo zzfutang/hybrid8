@@ -50,6 +50,10 @@ typedef enum SynthModDest : int {
     ModDstFilterMode,    // continuous LP -> BP -> HP morph
     ModDstOsc1PW,        // oscillator 1 pulse width only
     ModDstOsc2PW,        // oscillator 2 pulse width only
+    ModDstWTSmooth,      // wavetable phase interpolation (negative = grainier)
+    ModDstWTFrame2,      // oscillator 2 wavetable frame when frame link is off
+    ModDstSubOscLevel,   // analog Osc 1 sub-oscillator mixer level
+    ModDstRingModLevel,  // analog Osc 1 * Osc 2 ring-mod mixer level
     ModDstCount
 } SynthModDest;
 

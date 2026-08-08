@@ -44,21 +44,21 @@ final class WavetableStore: ObservableObject {
         loadPersistentTables()
     }
 
-    var selectedSlot: Int {
-        Int((model.param(SynthParamWavetable)?.value ?? 0).rounded())
+    func selectedSlot(for parameter: SynthParam) -> Int {
+        Int((model.param(parameter)?.value ?? 0).rounded())
     }
 
     func entry(slot: Int) -> WavetableEntry {
         entries.first(where: { $0.slot == slot }) ?? Self.factoryEntries[0]
     }
 
-    func select(_ entry: WavetableEntry) {
-        model.set(SynthParamWavetable, Float(entry.slot))
+    func select(_ entry: WavetableEntry, for parameter: SynthParam) {
+        model.set(parameter, Float(entry.slot))
         model.forceRefresh()
         objectWillChange.send()
     }
 
-    func importAudioFile(at sourceURL: URL) {
+    func importAudioFile(at sourceURL: URL, selectFor parameter: SynthParam) {
         let access = sourceURL.startAccessingSecurityScopedResource()
         defer { if access { sourceURL.stopAccessingSecurityScopedResource() } }
 
@@ -68,7 +68,7 @@ final class WavetableStore: ObservableObject {
             guard let frameLength = chooseFrameLength(sampleCount: samples.count,
                                                       choices: choices) else { return }
             try persistAndInstall(sourceURL: sourceURL, samples: samples,
-                                  frameLength: frameLength)
+                                  frameLength: frameLength, selectFor: parameter)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -82,8 +82,11 @@ final class WavetableStore: ObservableObject {
             .appendingPathComponent(fileName))
         saveManifest()
         entries.removeAll { $0.slot == entry.slot }
-        if selectedSlot == entry.slot {
+        if selectedSlot(for: SynthParamWavetable) == entry.slot {
             model.set(SynthParamWavetable, 0)
+        }
+        if selectedSlot(for: SynthParamWTTable2) == entry.slot {
+            model.set(SynthParamWTTable2, 0)
         }
         // DSP memory is intentionally retained until process exit so an audio
         // callback can never observe freed table data.
@@ -175,7 +178,8 @@ final class WavetableStore: ObservableObject {
     }
 
     private func persistAndInstall(sourceURL: URL, samples: [Float],
-                                   frameLength: Int) throws {
+                                   frameLength: Int,
+                                   selectFor parameter: SynthParam) throws {
         guard let slot = (5..<256).first(where: { candidate in
             !manifests.contains(where: { $0.slot == candidate })
                 && !retiredSlots.contains(candidate)
@@ -203,7 +207,7 @@ final class WavetableStore: ObservableObject {
                 if installed {
                     self.entries.append(entry)
                     self.entries.sort { $0.slot < $1.slot }
-                    self.select(entry)
+                    self.select(entry, for: parameter)
                 } else {
                     self.manifests.removeAll { $0.slot == slot }
                     try? FileManager.default.removeItem(at: destination)

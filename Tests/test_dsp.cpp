@@ -949,6 +949,319 @@ int main() {
               "AB: liveness phase trajectory is coherent across frames");
     }
 
+    // ---- Test AC: wavetable resolution and phase interpolation ------------
+    {
+        WavetableOscillator clean, bit12, bit8, stepped, vintage;
+        auto configureWT = [&](WavetableOscillator& osc, int resolution,
+                               float smooth) {
+            osc.setSampleRate(sr);
+            osc.reset(0.137f, 0.0f);
+            osc.setTable(wtTableAt(1)); // harmonically rich FM table
+            osc.setFrame(0.43f);
+            osc.setLiveness(0.0f);
+            osc.setResolution(resolution);
+            osc.setSmooth(smooth);
+            osc.setFrequency(437.0); // deliberately non-integral table stride
+        };
+        configureWT(clean,   0, 1.0f);
+        configureWT(bit12,   1, 1.0f);
+        configureWT(bit8,    2, 1.0f);
+        configureWT(stepped, 0, 0.0f);
+        configureWT(vintage, 3, 1.0f);
+
+        double error12 = 0.0, error8 = 0.0, steppedDelta = 0.0;
+        float vintageError = 0.0f;
+        float gridError12 = 0.0f, gridError8 = 0.0f;
+        bool finite = true;
+        for (int i = 0; i < 4096; ++i) {
+            const float c = clean.process();
+            const float q12 = bit12.process();
+            const float q8 = bit8.process();
+            const float st = stepped.process();
+            const float vi = vintage.process();
+            finite &= std::isfinite(c) && std::isfinite(q12)
+                   && std::isfinite(q8) && std::isfinite(st)
+                   && std::isfinite(vi);
+            error12 += std::fabs(q12 - c);
+            error8 += std::fabs(q8 - c);
+            steppedDelta += std::fabs(st - c);
+            vintageError = std::max(vintageError, std::fabs(vi -
+                std::round(st * 127.0f) / 127.0f));
+            gridError12 = std::max(
+                gridError12, std::fabs(q12 * 2047.0f - std::round(q12 * 2047.0f)));
+            gridError8 = std::max(
+                gridError8, std::fabs(q8 * 127.0f - std::round(q8 * 127.0f)));
+        }
+        error12 /= 4096.0;
+        error8 /= 4096.0;
+        steppedDelta /= 4096.0;
+        printf("Test AC (WT resolution): err12=%.7f err8=%.7f step=%.7f grids=%.7g/%.7g\n",
+               error12, error8, steppedDelta, gridError12, gridError8);
+        check(finite && gridError12 < 1.0e-4f && gridError8 < 1.0e-4f,
+              "AC: 12-bit and 8-bit wavetable outputs stay finite and quantized");
+        check(error12 > 0.0 && error8 > error12 * 8.0,
+              "AC: 8-bit resolution is materially grainier than 12-bit");
+        check(steppedDelta > 1.0e-5,
+              "AC: stepped phase lookup differs from clean linear interpolation");
+        check(vintageError < 1.0e-6f,
+              "AC: Vintage combines 8-bit quantization with stepped lookup");
+        check(ModDstWTSmooth == ModDstOsc2PW + 1,
+              "AC: WT Smooth destination is appended without renumbering old destinations");
+        check(ModDstWTFrame2 == ModDstWTSmooth + 1,
+              "AC: Osc 2 WT Frame destination is append-only");
+    }
+
+    // ---- Test AD: Osc 2 wavetable frame link and independence ------------
+    {
+        SynthEngine e; e.setSampleRate(sr);
+        e.setParameter(SynthParamOscWaveform, 3.0f);
+        e.setParameter(SynthParamOsc2Waveform, 3.0f);
+        e.setParameter(SynthParamWTFrame, 0.2f);
+        e.setParameter(SynthParamWTFrame2, 0.8f);
+        e.setParameter(SynthParamWTFrame2Link, 1.0f);
+        e.setParameter(SynthParamAmpSustain, 1.0f);
+        e.noteOn(60, 100);
+        std::vector<float> L(64), R(64);
+        for (int block = 0; block < 128; ++block)
+            e.render(L.data(), R.data(), 64);
+        const float linked1 = e.getEffectiveParameter(SynthParamWTFrame);
+        const float linked2 = e.getEffectiveParameter(SynthParamWTFrame2);
+
+        e.setParameter(SynthParamWTFrame2Link, 0.0f);
+        for (int block = 0; block < 128; ++block)
+            e.render(L.data(), R.data(), 64);
+        const float split1 = e.getEffectiveParameter(SynthParamWTFrame);
+        const float split2 = e.getEffectiveParameter(SynthParamWTFrame2);
+        printf("Test AD (Osc2 WT frame): linked=%.4f/%.4f split=%.4f/%.4f\n",
+               linked1, linked2, split1, split2);
+        check(std::fabs(linked1 - linked2) < 1.0e-6f,
+              "AD: default link makes Osc 2 follow Osc 1's effective frame");
+        check(std::fabs(split1 - 0.2f) < 0.002f
+              && std::fabs(split2 - 0.8f) < 0.002f,
+              "AD: disabling link exposes independent Osc 1 and Osc 2 frames");
+    }
+
+    // ---- Test AE: sub oscillator and expanded ring-mod circuit -----------
+    {
+        auto renderSource = [&](int osc1Wave, int osc2Wave,
+                                float subLevel, float ringLevel,
+                                float character, float semitone = 7.0f) {
+            SynthEngine e; e.setSampleRate(sr);
+            e.setParameter(SynthParamOscWaveform, static_cast<float>(osc1Wave));
+            e.setParameter(SynthParamOsc2Waveform, static_cast<float>(osc2Wave));
+            e.setParameter(SynthParamOsc2Semitone, semitone);
+            e.setParameter(SynthParamOsc1Level, 0.0f);
+            e.setParameter(SynthParamOsc2Level, 0.0f);
+            e.setParameter(SynthParamNoiseLevel, 0.0f);
+            e.setParameter(SynthParamSubOscLevel, subLevel);
+            e.setParameter(SynthParamRingModLevel, ringLevel);
+            e.setParameter(SynthParamRingModCharacter, character);
+            e.setParameter(SynthParamWTLiveness, 0.0f);
+            e.setParameter(SynthParamFilterCutoff, 20000.0f);
+            e.setParameter(SynthParamFilterResonance, 0.0f);
+            e.setParameter(SynthParamFilterEnvAmount, 0.0f);
+            e.setParameter(SynthParamFilterDrive, 0.0f);
+            e.setParameter(SynthParamAnalogAmount, 0.0f);
+            e.setParameter(SynthParamAmpAttack, 0.0f);
+            e.setParameter(SynthParamAmpDecay, 0.0f);
+            e.setParameter(SynthParamAmpSustain, 1.0f);
+            e.setParameter(SynthParamVelToVolume, 0.0f);
+            e.setParameter(SynthParamOscPhaseSpread, 0.0f);
+            std::vector<float> settleL(64), settleR(64);
+            for (int block = 0; block < 128; ++block)
+                e.render(settleL.data(), settleR.data(), 64);
+            e.noteOn(69, 127); // A4; sub fundamental must be A3 (220 Hz)
+            std::vector<float> L(N), R(N);
+            e.render(L.data(), R.data(), N);
+            return L;
+        };
+        const auto sub = renderSource(0, 0, 1.0f, 0.0f, 0.0f);
+        const auto clean = renderSource(0, 0, 0.0f, 1.0f, 0.0f);
+        const auto diode = renderSource(0, 0, 0.0f, 1.0f, 1.0f);
+        const auto wtAnalog = renderSource(3, 4, 0.0f, 1.0f, 0.0f);
+        const auto wtPair = renderSource(3, 3, 0.0f, 1.0f, 0.0f);
+        const auto wtSub = renderSource(3, 0, 1.0f, 0.0f, 0.0f);
+        const auto equalSines = renderSource(4, 4, 0.0f, 1.0f, 0.0f, 0.0f);
+        const double sub220 = magAt(sub, 220.0, sr);
+        const double sub440 = magAt(sub, 440.0, sr);
+        double characterDelta = 0.0;
+        double dcMean = 0.0;
+        for (size_t i = clean.size() / 2; i < clean.size(); ++i) {
+            characterDelta += std::fabs(clean[i] - diode[i]);
+            dcMean += equalSines[i];
+        }
+        characterDelta /= clean.size() / 2;
+        dcMean /= equalSines.size() / 2;
+        const double sineSideband = magAt(equalSines, 880.0, sr);
+        printf("Test AE (Sub/Ring): sub=%.5f/%.5f clean=%.4f diodeDelta=%.5f "
+               "WT=%.4f/%.4f dc=%.7f side=%.5f\n",
+               sub220, sub440, peakAbs(clean), characterDelta,
+               peakAbs(wtAnalog), peakAbs(wtPair), dcMean, sineSideband);
+        check(allFinite(sub) && sub220 > 0.02 && sub220 > sub440 * 10.0,
+              "AE: Sub is a finite square source one octave below analog Osc 1");
+        check(allFinite(clean) && peakAbs(clean) > 0.02f,
+              "AE: Ring produces an independent Osc 1 x Osc 2 mixer signal");
+        check(peakAbs(wtAnalog) > 0.02f && peakAbs(wtPair) > 0.02f,
+              "AE: Ring supports analog/WT and WT/WT oscillator pairings");
+        check(peakAbs(wtSub) < 1.0e-6f,
+              "AE: Analog sub remains silent when Osc 1 is in wavetable mode");
+        check(characterDelta > 0.005,
+              "AE: Diode character is audibly distinct from Clean multiplication");
+        check(std::fabs(dcMean) < sineSideband * 0.002,
+              "AE: 7 Hz ring-path blocker removes equal-frequency DC");
+        check(ModDstSubOscLevel == ModDstWTFrame2 + 1
+              && ModDstRingModLevel == ModDstSubOscLevel + 1,
+              "AE: Sub and Ring matrix destinations are append-only");
+    }
+
+    // ---- Test AF: linked and independent Osc 2 wavetable selection -------
+    {
+        auto renderOsc2Table = [&](int table1, int table2, bool linked) {
+            SynthEngine e; e.setSampleRate(sr);
+            e.setParameter(SynthParamOscWaveform, 0.0f);
+            e.setParameter(SynthParamOsc2Waveform, 3.0f);
+            e.setParameter(SynthParamOsc1Level, 0.0f);
+            e.setParameter(SynthParamOsc2Level, 1.0f);
+            e.setParameter(SynthParamNoiseLevel, 0.0f);
+            e.setParameter(SynthParamWavetable, static_cast<float>(table1));
+            e.setParameter(SynthParamWTTable2, static_cast<float>(table2));
+            e.setParameter(SynthParamWTTable2Link, linked ? 1.0f : 0.0f);
+            e.setParameter(SynthParamWTFrame, 0.43f);
+            e.setParameter(SynthParamWTFrame2, 0.43f);
+            e.setParameter(SynthParamWTFrame2Link, 1.0f);
+            e.setParameter(SynthParamWTLiveness, 0.0f);
+            e.setParameter(SynthParamFilterCutoff, 20000.0f);
+            e.setParameter(SynthParamFilterResonance, 0.0f);
+            e.setParameter(SynthParamFilterEnvAmount, 0.0f);
+            e.setParameter(SynthParamFilterDrive, 0.0f);
+            e.setParameter(SynthParamAnalogAmount, 0.0f);
+            e.setParameter(SynthParamAmpAttack, 0.0f);
+            e.setParameter(SynthParamAmpDecay, 0.0f);
+            e.setParameter(SynthParamAmpSustain, 1.0f);
+            e.setParameter(SynthParamVelToVolume, 0.0f);
+            e.setParameter(SynthParamOscPhaseSpread, 0.0f);
+            std::vector<float> settleL(64), settleR(64);
+            for (int block = 0; block < 128; ++block)
+                e.render(settleL.data(), settleR.data(), 64);
+            e.noteOn(57, 127);
+            std::vector<float> L(4096), R(4096);
+            e.render(L.data(), R.data(), static_cast<int>(L.size()));
+            return L;
+        };
+        const auto linked = renderOsc2Table(0, 1, true);
+        const auto followsOsc1 = renderOsc2Table(0, 0, false);
+        const auto independent = renderOsc2Table(0, 1, false);
+        float linkedError = 0.0f;
+        double independentDelta = 0.0;
+        for (size_t i = 0; i < linked.size(); ++i) {
+            linkedError = std::max(linkedError,
+                                   std::fabs(linked[i] - followsOsc1[i]));
+            independentDelta += std::fabs(independent[i] - linked[i]);
+        }
+        independentDelta /= linked.size();
+        printf("Test AF (Osc2 WT table): linkError=%.8f splitDelta=%.6f\n",
+               linkedError, independentDelta);
+        check(linkedError < 1.0e-7f,
+              "AF: default Table Link makes Osc 2 use Osc 1's table");
+        check(independentDelta > 0.005,
+              "AF: disabling Table Link gives Osc 2 an independent wavetable");
+        check(SynthParamWTTable2 == SynthParamRingModLevel + 1
+              && SynthParamWTTable2Link == SynthParamWTTable2 + 1
+              && SynthParamRingModCharacter == SynthParamWTTable2Link + 1,
+              "AF: Osc 2 table and Ring Character parameters are append-only");
+    }
+
+    // ---- Test AG: appended sine and triangle VA waveforms ----------------
+    {
+        auto renderWave = [&](int waveform) {
+            SynthEngine e; e.setSampleRate(sr);
+            e.setParameter(SynthParamOscWaveform, static_cast<float>(waveform));
+            e.setParameter(SynthParamOsc1Level, 1.0f);
+            e.setParameter(SynthParamOsc2Level, 0.0f);
+            e.setParameter(SynthParamNoiseLevel, 0.0f);
+            e.setParameter(SynthParamFilterCutoff, 20000.0f);
+            e.setParameter(SynthParamFilterResonance, 0.0f);
+            e.setParameter(SynthParamFilterEnvAmount, 0.0f);
+            e.setParameter(SynthParamFilterDrive, 0.0f);
+            e.setParameter(SynthParamAnalogAmount, 0.0f);
+            e.setParameter(SynthParamAmpAttack, 0.0f);
+            e.setParameter(SynthParamAmpDecay, 0.0f);
+            e.setParameter(SynthParamAmpSustain, 1.0f);
+            e.setParameter(SynthParamVelToVolume, 0.0f);
+            e.setParameter(SynthParamOscPhaseSpread, 0.0f);
+            e.noteOn(69, 127);
+            std::vector<float> L(N), R(N);
+            e.render(L.data(), R.data(), N);
+            return L;
+        };
+        const auto sine = renderWave(4);
+        const auto triangle = renderWave(5);
+        const double sine1 = magAt(sine, 440.0, sr);
+        const double sine2 = magAt(sine, 880.0, sr);
+        const double tri1 = magAt(triangle, 440.0, sr);
+        const double tri2 = magAt(triangle, 880.0, sr);
+        const double tri3 = magAt(triangle, 1320.0, sr);
+        printf("Test AG (VA waves): sine=%.5f/%.7f tri=%.5f/%.7f/%.5f\n",
+               sine1, sine2, tri1, tri2, tri3);
+        check(allFinite(sine) && sine1 > 0.02 && sine2 < sine1 * 0.01,
+              "AG: appended Sine is tuned and spectrally pure");
+        check(allFinite(triangle) && tri1 > 0.02
+              && tri2 < tri1 * 0.01
+              && tri3 > tri1 * 0.07 && tri3 < tri1 * 0.15,
+              "AG: appended Triangle has the expected odd 1/n^2 spectrum");
+    }
+
+    // ---- Test AH: sub phase survives a level dip through zero ------------
+    {
+        // The sub only generates a PolyBLEP square while it is audible. Its
+        // phase must still advance while silent, or a matrix route that dips
+        // Sub Level through zero would shift the divider relationship with
+        // Osc 1 a little further on every cycle.
+        auto renderSub = [&](bool silentFirst) {
+            SynthEngine e; e.setSampleRate(sr);
+            e.setParameter(SynthParamOscWaveform, 0.0f);
+            e.setParameter(SynthParamOsc1Level, 0.0f);
+            e.setParameter(SynthParamOsc2Level, 0.0f);
+            e.setParameter(SynthParamNoiseLevel, 0.0f);
+            e.setParameter(SynthParamSubOscLevel, silentFirst ? 0.0f : 1.0f);
+            e.setParameter(SynthParamFilterCutoff, 20000.0f);
+            e.setParameter(SynthParamFilterResonance, 0.0f);
+            e.setParameter(SynthParamFilterEnvAmount, 0.0f);
+            e.setParameter(SynthParamFilterDrive, 0.0f);
+            e.setParameter(SynthParamAnalogAmount, 0.0f);
+            e.setParameter(SynthParamAmpAttack, 0.0f);
+            e.setParameter(SynthParamAmpDecay, 0.0f);
+            e.setParameter(SynthParamAmpSustain, 1.0f);
+            e.setParameter(SynthParamVelToVolume, 0.0f);
+            e.setParameter(SynthParamOscPhaseSpread, 0.0f);
+            std::vector<float> settleL(64), settleR(64);
+            for (int block = 0; block < 128; ++block)
+                e.render(settleL.data(), settleR.data(), 64);
+            e.noteOn(69, 127);
+            std::vector<float> L(N), R(N);
+            e.render(L.data(), R.data(), N / 2);
+            if (silentFirst) e.setParameter(SynthParamSubOscLevel, 1.0f);
+            e.render(L.data() + N / 2, R.data() + N / 2, N - N / 2);
+            return L;
+        };
+        const auto always = renderSub(false);
+        const auto reentered = renderSub(true);
+        // Compare only the last quarter, well past the level smoother's ramp.
+        float phaseError = 0.0f;
+        float tailPeak = 0.0f;
+        for (size_t i = always.size() * 3 / 4; i < always.size(); ++i) {
+            phaseError = std::max(phaseError,
+                                  std::fabs(always[i] - reentered[i]));
+            tailPeak = std::max(tailPeak, std::fabs(always[i]));
+        }
+        printf("Test AH (sub phase): tailPeak=%.5f phaseError=%.8f\n",
+               tailPeak, phaseError);
+        check(allFinite(reentered) && tailPeak > 0.02f,
+              "AH: sub is audible again after the level returns from zero");
+        check(phaseError < 1.0e-6f,
+              "AH: silent sub keeps advancing, preserving the divider phase");
+    }
+
     printf("\n%s (%d failure%s)\n",
            g_failures == 0 ? "ALL TESTS PASSED" : "TESTS FAILED",
            g_failures, g_failures == 1 ? "" : "s");

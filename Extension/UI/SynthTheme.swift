@@ -731,22 +731,24 @@ struct InlineWaveSelect: View {
     let model: ParameterModel
     let accent: Color
     @EnvironmentObject private var help: HelpModel
-    @State private var index: Int
 
     init(_ addr: SynthParam, _ options: [String], _ model: ParameterModel, accent: Color) {
         self.addr = addr; self.options = options; self.model = model; self.accent = accent
-        _index = State(initialValue: Int((model.param(addr)?.value ?? 0).rounded()))
     }
 
     var body: some View {
+        // Render from the parameter itself rather than duplicating it in @State.
+        // There are two selectors in the oscillator panel; local state can be
+        // retained under the wrong structural identity when that panel is
+        // rebuilt, making Osc 1 appear to follow an Osc 2 click.
+        let selectedIndex = Int((model.param(addr)?.value ?? 0).rounded())
         SegGroup {
             ForEach(options.indices, id: \.self) { i in
                 Button {
-                    index = i
                     model.set(addr, Float(i))
                     model.forceRefresh()   // re-evaluate which controls are dimmed
                 } label: {
-                    SegChip(text: options[i], on: i == index, accent: accent)
+                    SegChip(text: options[i], on: i == selectedIndex, accent: accent)
                 }
                 .buttonStyle(.plain)
             }

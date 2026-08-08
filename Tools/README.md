@@ -13,6 +13,7 @@ net).
 | `synth_match.cpp` | Grid-searches osc/filter params to match a target's **steady-state harmonic** vector (precise on the sustained timbre). |
 | `synth_match2.cpp` | The full matcher: minimises a **time-segmented log-magnitude spectrogram** distance (16 frames × log-freq bands) by coordinate descent over ~20 params — so the **envelope** (filter closing, amp decay) is matched too, not just one frame. Reads the target WAV directly; writes the best render to `/tmp/out.wav`. |
 | `wt_extract.cpp` | **Wavetable extractor.** Pitch-detects a recorded sample and samples `WT_NUM_FRAMES` single-cycle frames across the note's evolution (attack → decay), converting each to a harmonic-magnitude spectrum. Emits a C++ header that the synth compiles in as a **built-in** wavetable set (band-limited into mip pyramids at load, like the hand-designed tables). Used to build the **Piano** table from `piano.wav`. |
+| `hybrid8_wt_resolution_audit.cpp` | Renders matched Clean / 12-bit / 8-bit / Vintage wavetable tones through the raw oscillator and full engine, writes 24-bit listening WAVs, and reports null-residual distortion relative to Clean. |
 
 ### Regenerating the built-in Piano wavetable
 

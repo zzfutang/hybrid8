@@ -18,10 +18,15 @@ struct Params {
     float   pulseWidth    = 0.5f;
     int     octave        = 0;
 
-    // Wavetable (shared by both oscillators)
+    // Wavetable character is shared; each oscillator can select table and frame.
     int     wtTable       = 0;
+    int     wtTable2      = 0;
     float   wtFrame       = 0.0f;
+    float   wtFrame2      = 0.0f;
+    bool    wtFrame2Link  = true;
     float   wtLiveness    = 0.0f;
+    int     wtResolution  = 0;      // 0=clean, 1=12-bit, 2=8-bit, 3=vintage
+    float   wtSmooth      = 1.0f;   // 0=stepped lookup, 1=linear interpolation
     float   lfoToWTFrame  = 0.0f;   // LFO -> WT frame (animated morph)
     float   wtFrameEnv    = 0.0f;   // filter env -> WT frame (-1..1)
 
@@ -29,6 +34,9 @@ struct Params {
     float   osc1Level     = 1.0f;
     float   osc2Level     = 0.0f;
     float   noiseLevel    = 0.0f;
+    float   subOscLevel   = 0.0f;
+    float   ringModLevel  = 0.0f;
+    float   ringModCharacter = 0.0f; // 0=clean multiplier, 1=diode bridge
 
     // Oscillator 2
     OscWave osc2Wave      = OscWave::Saw;

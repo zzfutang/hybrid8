@@ -34,6 +34,7 @@ struct SynthView: View {
     @State private var saveName = ""
     @State private var effectsTab = 0
     @State private var showingWavetableBrowser = false
+    @State private var wavetableBrowserOscillator = 1
     @State private var mainTab = 0        // 0 = Synth, 1 = Performance
 
     init(model: ParameterModel, wavetables: WavetableStore) {
@@ -106,7 +107,7 @@ struct SynthView: View {
         VStack(spacing: 20) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(spacing: 12) {
-                    oscillatorsPanel.frame(height: 340)
+                    oscillatorsPanel.frame(height: 392)
                     mixerPanel.frame(height: 120)
                 }
                 VStack(spacing: 12) {
@@ -118,7 +119,7 @@ struct SynthView: View {
                     xModPanel.frame(height: 220)
                 }
             }
-            .frame(height: 472)
+            .frame(height: 524)
             modMatrixPanel.frame(height: 104)
         }
     }
@@ -130,7 +131,7 @@ struct SynthView: View {
             // Left 2/3: effects chain on top, then the rest of the panels.
             VStack(spacing: 20) {
                 fxPanel.frame(height: 180)
-                globalPanel.frame(height: 206)
+                mainPanel.frame(height: 206)
                 HStack(alignment: .top, spacing: 12) {
                     glidePanel.frame(maxWidth: .infinity)
                     arpPanel.frame(maxWidth: .infinity)
@@ -377,22 +378,32 @@ struct SynthView: View {
         let w2 = Int((model.param(SynthParamOsc2Waveform)?.value ?? 0).rounded())
         let isPulse1 = w1 == 2              // only Pulse uses the width knob
         let isPulse2 = w2 == 2
-        let anyWT = w1 == 3 || w2 == 3      // WT table/frame/live are shared
+        let isWT1 = w1 == 3
+        let isWT2 = w2 == 3
+        let anyWT = isWT1 || isWT2
+        let frame2Linked = (model.param(SynthParamWTFrame2Link)?.value ?? 1) >= 0.5
+        let table2Linked = (model.param(SynthParamWTTable2Link)?.value ?? 1) >= 0.5
+        let table1Slot = wavetables.selectedSlot(for: SynthParamWavetable)
+        let storedTable2Slot = wavetables.selectedSlot(for: SynthParamWTTable2)
+        let table2Slot = table2Linked ? table1Slot : storedTable2Slot
+        let table1Used = isWT1 || (isWT2 && table2Linked)
         return Panel(title: "Oscillators", accent: Palette.oscAccent) {
             VStack(alignment: .leading, spacing: 10) {
                 // --- Osc 1 ---
                 oscSectionHeader("Osc 1", accent: Palette.oscAccent,
                                  wave: SynthParamOscWaveform)
                 HStack(spacing: 8) {
-                    wavetablePickerButton
+                    wavetablePickerButton(slot: table1Slot, oscillator: 1)
+                        .dimmed(!table1Used)
                         .frame(maxWidth: .infinity)
                     LiveWavetablePreview(store: wavetables,
-                                         entry: wavetables.entry(slot: wavetables.selectedSlot),
-                                         initialFrame: model.param(SynthParamWTFrame)?.value ?? 0)
+                                         entry: wavetables.entry(slot: table1Slot),
+                                         initialFrame: model.param(SynthParamWTFrame)?.value ?? 0,
+                                         frameNotification: .hybrid8WavetableFrameChanged)
+                        .dimmed(!table1Used)
                         .frame(maxWidth: .infinity, maxHeight: 42)
                 }
                 .frame(height: 42)
-                .dimmed(!anyWT)
                 HStack(spacing: 0) {
                     Knob("Octave", SynthParamOctave, model,
                          accent: Palette.oscAccent, unit: "", integer: true)
@@ -400,8 +411,11 @@ struct SynthView: View {
                     Knob("P.Width", SynthParamOscPulseWidth, model, accent: Palette.oscAccent)
                         .dimmed(!isPulse1).frame(maxWidth: .infinity)
                     Knob("Frame", SynthParamWTFrame, model, accent: Palette.wtAccent)
-                        .dimmed(!anyWT).frame(maxWidth: .infinity)
+                        .dimmed(!(isWT1 || (isWT2 && frame2Linked)))
+                        .frame(maxWidth: .infinity)
                     Knob("Live", SynthParamWTLiveness, model, accent: Palette.wtAccent)
+                        .dimmed(!anyWT).frame(maxWidth: .infinity)
+                    Knob("Smooth", SynthParamWTSmooth, model, accent: Palette.wtAccent)
                         .dimmed(!anyWT).frame(maxWidth: .infinity)
                 }
                 Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
@@ -409,6 +423,26 @@ struct SynthView: View {
                 // --- Osc 2 ---
                 oscSectionHeader("Osc 2", accent: Palette.osc2Accent,
                                  wave: SynthParamOsc2Waveform)
+                HStack(spacing: 8) {
+                    wavetablePickerButton(slot: table2Slot, oscillator: 2)
+                        .dimmed(!isWT2 || table2Linked)
+                        .frame(maxWidth: .infinity)
+                    LiveWavetablePreview(store: wavetables,
+                                         entry: wavetables.entry(slot: table2Slot),
+                                         initialFrame: model.param(frame2Linked
+                                            ? SynthParamWTFrame
+                                            : SynthParamWTFrame2)?.value ?? 0,
+                                         frameNotification: frame2Linked
+                                            ? .hybrid8WavetableFrameChanged
+                                            : .hybrid8WavetableFrame2Changed)
+                        .id(frame2Linked)
+                        .dimmed(!isWT2)
+                        .frame(maxWidth: .infinity, maxHeight: 42)
+                    ToggleButton("Table Link", SynthParamWTTable2Link, model,
+                                 accent: Palette.wtAccent)
+                        .dimmed(!isWT2)
+                }
+                .frame(height: 42)
                 HStack(spacing: 0) {
                     Knob("Octave", SynthParamOsc2Octave, model,
                          accent: Palette.osc2Accent, unit: "", integer: true)
@@ -418,8 +452,24 @@ struct SynthView: View {
                     Knob("Detune", SynthParamOsc2Detune, model, accent: Palette.osc2Accent, unit: "c").frame(maxWidth: .infinity)
                     Knob("P.Width", SynthParamOsc2PulseWidth, model, accent: Palette.osc2Accent)
                         .dimmed(!isPulse2).frame(maxWidth: .infinity)
+                    Knob("Frame", SynthParamWTFrame2, model, accent: Palette.wtAccent)
+                        .dimmed(!isWT2 || frame2Linked).frame(maxWidth: .infinity)
+                    ToggleButton("Frame Link", SynthParamWTFrame2Link, model,
+                                 accent: Palette.wtAccent)
+                        .dimmed(!isWT2).frame(maxWidth: .infinity)
                 }
             }
+        }
+        .sheet(isPresented: $showingWavetableBrowser) {
+            WavetableBrowser(
+                store: wavetables, model: model,
+                tableParameter: wavetableBrowserOscillator == 2
+                    ? SynthParamWTTable2 : SynthParamWavetable,
+                frameParameter: wavetableBrowserOscillator == 2
+                    ? SynthParamWTFrame2 : SynthParamWTFrame,
+                oscillatorName: "OSC \(wavetableBrowserOscillator)",
+                isPresented: $showingWavetableBrowser)
+                .frame(width: 620, height: 500)
         }
     }
 
@@ -434,14 +484,15 @@ struct SynthView: View {
                 .tracking(1.0)
                 .foregroundColor(accent)
             Spacer(minLength: 8)
-            InlineWaveSelect(wave, ["Saw", "Squ", "Pls", "WT"],
+            InlineWaveSelect(wave, ["Saw", "Squ", "Pls", "WT", "Sin", "Tri"],
                              model, accent: accent)
         }
     }
 
-    private var wavetablePickerButton: some View {
-        let entry = wavetables.entry(slot: wavetables.selectedSlot)
+    private func wavetablePickerButton(slot: Int, oscillator: Int) -> some View {
+        let entry = wavetables.entry(slot: slot)
         return Button {
+            wavetableBrowserOscillator = oscillator
             showingWavetableBrowser = true
         } label: {
             HStack(spacing: 6) {
@@ -473,18 +524,16 @@ struct SynthView: View {
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showingWavetableBrowser) {
-            WavetableBrowser(store: wavetables, model: model,
-                             isPresented: $showingWavetableBrowser)
-                .frame(width: 620, height: 500)
-        }
     }
 
     private var mixerPanel: some View {
-        Panel(title: "Mixer", accent: Palette.mixerAccent) {
+        let w1 = Int((model.param(SynthParamOscWaveform)?.value ?? 0).rounded())
+        return Panel(title: "Mixer", accent: Palette.mixerAccent) {
             HStack(spacing: 0) {
                 Knob("Osc 1", SynthParamOsc1Level, model, accent: Palette.mixerAccent).frame(maxWidth: .infinity)
                 Knob("Osc 2", SynthParamOsc2Level, model, accent: Palette.mixerAccent).frame(maxWidth: .infinity)
+                Knob("Sub", SynthParamSubOscLevel, model, accent: Palette.mixerAccent)
+                    .dimmed(w1 == 3).frame(maxWidth: .infinity)
                 Knob("Noise", SynthParamNoiseLevel, model, accent: Palette.mixerAccent).frame(maxWidth: .infinity)
                 Knob("Stereo", SynthParamStereoSpread, model, accent: Palette.mixerAccent).frame(maxWidth: .infinity)
             }
@@ -615,8 +664,8 @@ struct SynthView: View {
         }
     }
 
-    private var globalPanel: some View {
-        Panel(title: "Global", accent: Palette.globalAccent) {
+    private var mainPanel: some View {
+        Panel(title: "Main", accent: Palette.globalAccent) {
             // Uniform 5-column grid so every knob lines up in rows and columns.
             VStack(spacing: 10) {
                 HStack(alignment: .top, spacing: 0) {
@@ -646,6 +695,20 @@ struct SynthView: View {
                             .frame(width: 70)
                     }
                         .frame(maxWidth: .infinity)
+                    VStack(alignment: .center, spacing: 3) {
+                        Text("WT RESOLUTION")
+                            .font(.system(size: 8, weight: .semibold,
+                                         design: .rounded))
+                            .foregroundColor(Palette.engrave)
+                        Dropdown(SynthParamWTResolution,
+                                 ["Clean", "12 Bit", "8 Bit", "Vintage"], model,
+                                 accent: Palette.wtAccent,
+                                 helpText: SynthHelp.text(for:
+                                    AUParameterAddress(
+                                        SynthParamWTResolution.rawValue)))
+                            .frame(width: 78)
+                    }
+                        .frame(maxWidth: .infinity)
                 }
             }
         }
@@ -669,22 +732,43 @@ struct SynthView: View {
         let w2 = Int((model.param(SynthParamOsc2Waveform)?.value ?? 0).rounded())
         let anyWT = w1 == 3 || w2 == 3
         return Panel(title: "X-MOD", accent: Palette.osc2Accent) {
-            HStack(alignment: .top, spacing: 8) {
-                ToggleButton("Sync", SynthParamOsc2Sync, model,
-                             accent: Palette.osc2Accent)
-                    .dimmed(anyWT)
-                ToggleButton("TZ", SynthParamOscCrossModTZ, model,
-                             accent: Palette.osc2Accent)
-                    .dimmed(anyWT)
-                Knob("Amount", SynthParamOscCrossMod, model,
-                     accent: Palette.osc2Accent)
-                    .dimmed(anyWT).frame(maxWidth: .infinity)
-                Knob("Env Pitch", SynthParamOsc2PitchEnv, model,
-                     accent: Palette.filtEnvAccent)
-                    .dimmed(anyWT).frame(maxWidth: .infinity)
-                Knob("LFO Amt", SynthParamLFOToCrossMod, model,
-                     accent: Palette.lfoAccent)
-                    .dimmed(anyWT).frame(maxWidth: .infinity)
+            VStack(spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
+                    ToggleButton("Sync", SynthParamOsc2Sync, model,
+                                 accent: Palette.osc2Accent)
+                        .dimmed(anyWT)
+                    ToggleButton("TZ", SynthParamOscCrossModTZ, model,
+                                 accent: Palette.osc2Accent)
+                        .dimmed(anyWT)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("CHARACTER")
+                            .font(.system(size: 9, weight: .semibold,
+                                         design: .rounded))
+                            .tracking(0.6)
+                            .foregroundColor(Palette.engrave)
+                        Dropdown(SynthParamRingModCharacter,
+                                 ["Clean", "Diode"], model,
+                                 accent: Palette.osc2Accent,
+                                 helpText: SynthHelp.text(for:
+                                    AUParameterAddress(
+                                        SynthParamRingModCharacter.rawValue)))
+                            .frame(width: 78)
+                    }
+                    Spacer(minLength: 0)
+                }
+                HStack(alignment: .top, spacing: 0) {
+                    Knob("Amount", SynthParamOscCrossMod, model,
+                         accent: Palette.osc2Accent)
+                        .dimmed(anyWT).frame(maxWidth: .infinity)
+                    Knob("Ring", SynthParamRingModLevel, model,
+                         accent: Palette.osc2Accent).frame(maxWidth: .infinity)
+                    Knob("Env Pitch", SynthParamOsc2PitchEnv, model,
+                         accent: Palette.filtEnvAccent)
+                        .dimmed(anyWT).frame(maxWidth: .infinity)
+                    Knob("LFO Amt", SynthParamLFOToCrossMod, model,
+                         accent: Palette.lfoAccent)
+                        .dimmed(anyWT).frame(maxWidth: .infinity)
+                }
             }
         }
     }
@@ -891,7 +975,8 @@ struct SynthView: View {
                              "Reso", "Drive", "WT Frame", "WT Live", "X-Mod", "Amp",
                              "Osc1 Pitch", "Osc1 Level", "Osc2 Level", "Noise",
                              "Voice Pan", "Filt Slope", "Filt Mode", "Osc1 PW",
-                             "Osc2 PW"]
+                             "Osc2 PW", "WT Smooth", "WT Frame2", "Sub Level",
+                             "Ring Level"]
 
     private func modSlot(_ n: Int, _ s: SynthParam, _ d: SynthParam, _ a: SynthParam) -> some View {
         HStack(spacing: 5) {
@@ -931,11 +1016,14 @@ struct SynthView: View {
 private struct LiveWavetablePreview: View {
     @ObservedObject var store: WavetableStore
     let entry: WavetableEntry
+    let frameNotification: Notification.Name
     @State private var frame: Float
 
-    init(store: WavetableStore, entry: WavetableEntry, initialFrame: Float) {
+    init(store: WavetableStore, entry: WavetableEntry, initialFrame: Float,
+         frameNotification: Notification.Name) {
         self.store = store
         self.entry = entry
+        self.frameNotification = frameNotification
         _frame = State(initialValue: initialFrame)
     }
 
@@ -954,7 +1042,7 @@ private struct LiveWavetablePreview: View {
                     .padding(.horizontal, 7).padding(.vertical, 5)
             }
         .onReceive(NotificationCenter.default.publisher(
-            for: .hybrid8WavetableFrameChanged)) { notification in
+            for: frameNotification)) { notification in
                 if let value = notification.object as? Float {
                     frame = value
                 }
@@ -965,6 +1053,9 @@ private struct LiveWavetablePreview: View {
 private struct WavetableBrowser: View {
     @ObservedObject var store: WavetableStore
     @ObservedObject var model: ParameterModel
+    let tableParameter: SynthParam
+    let frameParameter: SynthParam
+    let oscillatorName: String
     @Binding var isPresented: Bool
     @State private var search = ""
     @State private var pendingDelete: WavetableEntry?
@@ -981,7 +1072,7 @@ private struct WavetableBrowser: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Text("WAVETABLE LIBRARY")
+                Text("\(oscillatorName) WAVETABLE LIBRARY")
                     .font(.system(size: 14, weight: .heavy, design: .rounded))
                     .tracking(1.2)
                     .foregroundColor(Palette.engrave)
@@ -1044,7 +1135,7 @@ private struct WavetableBrowser: View {
             switch result {
             case .success(let urls):
                 if let url = urls.first {
-                    store.importAudioFile(at: url)
+                    store.importAudioFile(at: url, selectFor: tableParameter)
                 }
             case .failure(let error):
                 store.errorMessage = error.localizedDescription
@@ -1071,10 +1162,10 @@ private struct WavetableBrowser: View {
     }
 
     private func browserRow(_ entry: WavetableEntry) -> some View {
-        let selected = entry.slot == store.selectedSlot
-        let frame = model.param(SynthParamWTFrame)?.value ?? 0
+        let selected = entry.slot == store.selectedSlot(for: tableParameter)
+        let frame = model.param(frameParameter)?.value ?? 0
         return Button {
-            store.select(entry)
+            store.select(entry, for: tableParameter)
             isPresented = false
         } label: {
             HStack(spacing: 12) {

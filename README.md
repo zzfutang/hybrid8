@@ -13,10 +13,10 @@ Coding by claude and codex.
 | Section | Details |
 |---|---|
 | **Voices** | 8-voice polyphony with voice stealing; selectable 1–8 (mono ↔ poly), true legato, glide/portamento, two-card Unison with detune |
-| **Osc 1 / Osc 2** | Two oscillators, each Saw / Square / Pulse (band-limited PolyBLEP) **or Wavetable**; independent octave, pulse width; Osc 2 semitone + fine detune |
-| **Wavetable** | 2D wavetable osc: 5 built-in tables (Harmonic→guitar, FM, Choir, Metallic, **Piano** — extracted from a real sample), external 2048-sample WAV/AIFF tables can be imported, 32 morphable frames, "liveness" phase-drift; mip-pyramid band-limiting with per-octave crossfade |
-| **Osc interaction** | Hard sync, Roland-style cross-mod (osc 2 → osc 1 FM), exponential or through-zero FM (inharmonic ratios give struck-bell timbres) |
-| **Mixer** | Independent Osc 1 / Osc 2 / Noise levels, plus per-voice Stereo spread |
+| **Osc 1 / Osc 2** | Two oscillators, each Saw / Square / Pulse / Sine / Triangle **or Wavetable**; independent octave and pulse width plus linkable independent wavetable/table frame selection; analog Osc 1 has a square sub oscillator one octave down; Osc 2 semitone + fine detune |
+| **Wavetable** | 2D wavetable osc: 5 built-in tables (Harmonic→guitar, FM, Choir, Metallic, **Piano** — extracted from a real sample), external 2048-sample WAV/AIFF tables can be imported, 32 morphable frames, "liveness" phase-drift; selectable Clean / 12-bit / 8-bit resolution plus a Vintage 8-bit stepped-lookup mode; mip-pyramid band-limiting with per-octave crossfade |
+| **Osc interaction** | Hard sync; 7 Hz AC-coupled ring modulation across virtual-analogue and wavetable oscillators with Clean / Diode character; Roland-style cross-mod (osc 2 → osc 1 FM), exponential or through-zero FM |
+| **Mixer** | Independent Osc 1 / Osc 2 / Sub / Ring / Noise levels, plus per-voice Stereo spread |
 | **Filter** | Analogue-modelled **12 dB TPT state-variable** and **24 dB four-pole ladder** topologies; LP / BP / HP modes, stable self-oscillation, nonlinear Drive, key tracking and per-voice VCF tolerances; the ladder is passband-gain compensated so the two slopes stay level-matched |
 | **Envelopes** | Dedicated ADSR for the VCA and for the filter (bipolar filter-env amount) |
 | **LFO 1 / 2 / 3** | Three modulation sources with Sine, Square, Saw Up, Saw Down and Sample & Hold; independent rate, delay, bipolar/unipolar polarity and phase; per-LFO **run mode — Loop (free-running), Trig (key-synced restart) or One-Shot (single cycle then hold)**; selectable global vibrato source |
@@ -82,8 +82,8 @@ window. A row of pills next to the title switches between two tabs:
 - **Synth** — the sound-design engine: a combined **Oscillators** panel (Osc 1 with
   the wavetable display + Osc 2), **Mixer**, a combined **Envelopes** panel (Amp +
   Filter ADSR), **Filter**, **LFO** (LFO 1/2/3), **X-Mod**, and the **Mod Matrix**.
-- **Performance** — how the instrument plays: **Effects Chain**, **Global** (voicing,
-  unison, master, vibrato…), **Glide** (legato, portamento, glide start, pitch-bend
+- **Performance** — how the instrument plays: **Effects Chain**, **Main** (voicing,
+  unison, master, vibrato, WT resolution…), **Glide** (legato, portamento, glide start, pitch-bend
   range), **Arpeggiator**, **Chord Trigger**, and a searchable, category-filtered
   **Patch Navigator**.
 

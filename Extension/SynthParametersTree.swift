@@ -67,8 +67,9 @@ enum SynthParameters {
         let osc = AUParameterTree.createGroup(
             withIdentifier: "osc", name: "Oscillator", children: [
             param(SynthParamOscWaveform, "oscWave", "Waveform",
-                  min: 0, max: 3, value: 0, unit: .indexed,
-                  strings: ["Saw", "Square", "Pulse", "Wavetable"]),
+                  min: 0, max: 5, value: 0, unit: .indexed,
+                  strings: ["Saw", "Square", "Pulse", "Wavetable",
+                            "Sine", "Triangle"]),
             param(SynthParamOscPulseWidth, "pulseWidth", "Pulse Width",
                   min: 0.02, max: 0.98, value: 0.5),
             param(SynthParamWavetable, "wavetable", "Wavetable",
@@ -79,6 +80,11 @@ enum SynthParameters {
                   min: 0, max: 1, value: 0.25),
             param(SynthParamWTFrameEnv, "wtFrameEnv", "WT Frame Env",
                   min: -1, max: 1, value: 0),
+            param(SynthParamWTResolution, "wtResolution", "WT Resolution",
+                  min: 0, max: 3, value: 0, unit: .indexed,
+                  strings: ["Clean", "12-bit", "8-bit", "Vintage"]),
+            param(SynthParamWTSmooth, "wtSmooth", "WT Smooth",
+                  min: 0, max: 1, value: 1),
             param(SynthParamOctave, "octave", "Octave",
                   min: -2, max: 2, value: 0, unit: .indexed,
                   strings: ["-2", "-1", "0", "+1", "+2"]),
@@ -88,8 +94,9 @@ enum SynthParameters {
         let osc2 = AUParameterTree.createGroup(
             withIdentifier: "osc2", name: "Oscillator 2", children: [
             param(SynthParamOsc2Waveform, "osc2Wave", "Osc 2 Waveform",
-                  min: 0, max: 3, value: 0, unit: .indexed,
-                  strings: ["Saw", "Square", "Pulse", "Wavetable"]),
+                  min: 0, max: 5, value: 0, unit: .indexed,
+                  strings: ["Saw", "Square", "Pulse", "Wavetable",
+                            "Sine", "Triangle"]),
             param(SynthParamOsc2PulseWidth, "osc2PW", "Osc 2 Pulse Width",
                   min: 0.02, max: 0.98, value: 0.5),
             param(SynthParamOsc2Octave, "osc2Octave", "Osc 2 Octave",
@@ -109,6 +116,16 @@ enum SynthParameters {
                   strings: ["Exp", "TZ"]),
             param(SynthParamOsc2PitchEnv, "osc2PitchEnv", "Osc 2 Pitch Env",
                   min: -1, max: 1, value: 0),
+            param(SynthParamWTFrame2, "wtFrame2", "Osc 2 WT Frame",
+                  min: 0, max: 1, value: 0),
+            param(SynthParamWTFrame2Link, "wtFrame2Link", "Osc 2 WT Frame Link",
+                  min: 0, max: 1, value: 1, unit: .indexed,
+                  strings: ["Off", "On"]),
+            param(SynthParamWTTable2, "wtTable2", "Osc 2 Wavetable",
+                  min: 0, max: 255, value: 0, unit: .indexed),
+            param(SynthParamWTTable2Link, "wtTable2Link", "Osc 2 WT Table Link",
+                  min: 0, max: 1, value: 1, unit: .indexed,
+                  strings: ["Off", "On"]),
         ])
 
         // MARK: Mixer
@@ -120,6 +137,13 @@ enum SynthParameters {
                   min: 0, max: 1, value: 0),
             param(SynthParamNoiseLevel, "noiseLevel", "Noise Level",
                   min: 0, max: 1, value: 0),
+            param(SynthParamSubOscLevel, "subOscLevel", "Sub Osc Level",
+                  min: 0, max: 1, value: 0),
+            param(SynthParamRingModLevel, "ringModLevel", "Ring Mod Level",
+                  min: 0, max: 1, value: 0),
+            param(SynthParamRingModCharacter, "ringModCharacter",
+                  "Ring Mod Character", min: 0, max: 1, value: 0,
+                  unit: .indexed, strings: ["Clean", "Diode"]),
         ])
 
         // MARK: Amp envelope
@@ -242,7 +266,8 @@ enum SynthParameters {
                           "Reso", "Drive", "WT Frame", "WT Live", "X-Mod", "Amp",
                           "Osc1 Pitch", "Osc1 Level", "Osc2 Level", "Noise",
                           "Voice Pan", "Filt Slope", "Filt Mode", "Osc1 PW",
-                          "Osc2 PW"]
+                          "Osc2 PW", "WT Smooth", "WT Frame2", "Sub Level",
+                          "Ring Level"]
         func modSlot(_ n: Int, _ srcA: SynthParam, _ dstA: SynthParam, _ amtA: SynthParam) -> [AUParameter] {
             [param(srcA, "mod\(n)Src", "Mod \(n) Source",
                    min: 0, max: AUValue(modSources.count - 1), value: 0,

@@ -15,11 +15,17 @@ final class HelpModel: ObservableObject {
 
 enum SynthHelp {
     private static let table: [AUParameterAddress: String] = [
-        a(SynthParamOscWaveform):   "Oscillator 1 — saw, square, pulse, or WT (wavetable).",
-        a(SynthParamWavetable):     "Wavetable used by both oscillators in WT mode. Open the browser to search or import WAV/AIFF tables.",
-        a(SynthParamWTFrame):       "Wavetable timbre morph — sweeps through the frames of the table.",
+        a(SynthParamOscWaveform):   "Oscillator 1 waveform — saw, square, pulse, wavetable, sine, or triangle.",
+        a(SynthParamWavetable):     "Oscillator 1 wavetable. Oscillator 2 follows it while Table Link is on.",
+        a(SynthParamWTTable2):      "Oscillator 2 wavetable when Table Link is off.",
+        a(SynthParamWTTable2Link):  "Table Link — Oscillator 2 follows Oscillator 1's wavetable selection when on.",
+        a(SynthParamWTFrame):       "Oscillator 1 wavetable timbre morph — sweeps through the frames of the table.",
+        a(SynthParamWTFrame2):      "Oscillator 2 wavetable timbre morph when Frame Link is off.",
+        a(SynthParamWTFrame2Link):  "Frame Link — Oscillator 2 follows Oscillator 1's frame and frame modulation when on.",
         a(SynthParamWTLiveness):    "Wavetable liveness — slow phase drift so held notes shimmer",
         a(SynthParamWTFrameEnv):    "Filter envelope → WT frame (bipolar) — sweeps the wavetable timbre on each note.",
+        a(SynthParamWTResolution):  "Wavetable character — Clean, 12-bit or 8-bit amplitude grain, or Vintage 8-bit with stepped table lookup.",
+        a(SynthParamWTSmooth):      "Wavetable phase interpolation — 1 is clean and linear; 0 is a stepped vintage lookup.",
         a(SynthParamOscPulseWidth): "Oscillator 1 pulse width",
         a(SynthParamOsc2PulseWidth):"Oscillator 2 pulse width",
         a(SynthParamOscPhaseSpread):"Per-voice start-phase randomisation — 0 = tight/hard, 1 = loose analog.",
@@ -30,8 +36,11 @@ enum SynthHelp {
         a(SynthParamOsc1Level):     "Osc 1 level in the mixer",
         a(SynthParamOsc2Level):     "Osc 2 level in the mixer",
         a(SynthParamNoiseLevel):    "White-noise level in the mixer.",
+        a(SynthParamSubOscLevel):   "Analog Osc 1 sub oscillator — a band-limited square wave one octave below Osc 1.",
+        a(SynthParamRingModLevel):  "Ring modulation level — the AC-coupled bipolar product of Osc 1 and Osc 2, including wavetables.",
+        a(SynthParamRingModCharacter): "Ring-mod character — Clean is a precise multiplier; Diode adds the nonlinear response of a soft diode bridge.",
 
-        a(SynthParamOsc2Waveform):  "Oscillator 2 waveform (saw, square, pulse or WT). WT disables cross-mod & sync.",
+        a(SynthParamOsc2Waveform):  "Oscillator 2 waveform — saw, square, pulse, WT, sine, or triangle. WT disables cross-mod and sync, but supports ring modulation.",
         a(SynthParamOsc2Octave):    "Oscillator 2 octave.",
         a(SynthParamOsc2Semitone):  "Osc 2 coarse tune. Under cross-mod this sets the FM ratio",
         a(SynthParamOsc2Detune):    "Osc 2 fine detune, in cents — thickens layers, or fine-tunes the FM ratio.",

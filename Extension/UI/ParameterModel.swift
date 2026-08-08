@@ -11,6 +11,8 @@ import AudioToolbox
 extension Notification.Name {
     static let hybrid8WavetableFrameChanged =
         Notification.Name("Hybrid8WavetableFrameChanged")
+    static let hybrid8WavetableFrame2Changed =
+        Notification.Name("Hybrid8WavetableFrame2Changed")
 }
 
 final class ParameterModel: ObservableObject {
@@ -40,6 +42,10 @@ final class ParameterModel: ObservableObject {
                 if address == AUParameterAddress(SynthParamWTFrame.rawValue) {
                     NotificationCenter.default.post(
                         name: .hybrid8WavetableFrameChanged,
+                        object: Float(value))
+                } else if address == AUParameterAddress(SynthParamWTFrame2.rawValue) {
+                    NotificationCenter.default.post(
+                        name: .hybrid8WavetableFrame2Changed,
                         object: Float(value))
                 }
             }
@@ -80,11 +86,13 @@ final class ParameterModel: ObservableObject {
         switch address {
         case SynthParamOctave, SynthParamOsc2Octave,
              SynthParamOscPulseWidth, SynthParamOsc2PulseWidth,
-             SynthParamWTFrame, SynthParamWTLiveness,
+             SynthParamWTFrame, SynthParamWTFrame2,
+             SynthParamWTLiveness, SynthParamWTSmooth,
              SynthParamOscCrossMod, SynthParamFilterCutoff,
              SynthParamFilterResonance, SynthParamFilterDrive,
              SynthParamMasterGain, SynthParamOsc1Level,
              SynthParamOsc2Level, SynthParamNoiseLevel,
+             SynthParamSubOscLevel, SynthParamRingModLevel,
              SynthParamFilterSlope, SynthParamFilterMode:
             return true
         default:
@@ -103,6 +111,10 @@ final class ParameterModel: ObservableObject {
         if address == SynthParamWTFrame {
             NotificationCenter.default.post(
                 name: .hybrid8WavetableFrameChanged,
+                object: value)
+        } else if address == SynthParamWTFrame2 {
+            NotificationCenter.default.post(
+                name: .hybrid8WavetableFrame2Changed,
                 object: value)
         }
     }

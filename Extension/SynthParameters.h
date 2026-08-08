@@ -13,7 +13,7 @@
 // Fixed underlying type so the values match AUParameterAddress (UInt64) and
 // import cleanly into Swift as a proper enum.
 typedef enum SynthParam : unsigned long long {
-    SynthParamOscWaveform = 0,   // 0=saw, 1=square, 2=pulse
+    SynthParamOscWaveform = 0,   // 0=saw, 1=square, 2=pulse, 3=WT, 4=sine, 5=triangle
     SynthParamOscPulseWidth,     // 0.02 .. 0.98
     SynthParamOctave,            // -3 .. +3 (integer)
     SynthParamNoiseMix,          // 0 .. 1  (osc <-> noise blend)
@@ -46,7 +46,7 @@ typedef enum SynthParam : unsigned long long {
     SynthParamPitchBendRange,    // semitones (display only; bend applied live)
     SynthParamOscPhaseSpread,    // 0 .. 1 (per-voice start-phase randomisation)
 
-    SynthParamOsc2Waveform,      // 0=saw, 1=square, 2=pulse
+    SynthParamOsc2Waveform,      // 0=saw, 1=square, 2=pulse, 3=WT, 4=sine, 5=triangle
     SynthParamOsc2Octave,        // -2 .. +2 (integer)
     SynthParamOsc2Detune,        // -100 .. +100 cents (fine detune of osc 2)
     SynthParamOscMix,            // 0 = osc1 only ... 1 = osc2 only
@@ -165,6 +165,25 @@ typedef enum SynthParam : unsigned long long {
     SynthParamLFO1Mode,
     SynthParamLFO2Mode,
     SynthParamLFO3Mode,
+
+    // Wavetable digital-resolution character. Appended for AU/preset
+    // compatibility: existing parameter addresses must never move.
+    SynthParamWTResolution,      // 0=clean, 1=12-bit, 2=8-bit, 3=vintage 8-bit stepped
+    SynthParamWTSmooth,          // 0=stepped phase lookup, 1=linear interpolation
+    SynthParamWTFrame2,          // 0..1 independent Osc 2 wavetable frame
+    SynthParamWTFrame2Link,      // 0=independent, 1=follow Osc 1 frame (compat default)
+
+    // Analog oscillator mixer sources. Append-only for AU/preset compatibility.
+    SynthParamSubOscLevel,       // 0..1, square wave one octave below Osc 1
+    SynthParamRingModLevel,      // 0..1, bipolar Osc 1 * Osc 2 product
+
+    // Independent Osc 2 wavetable selection. Link defaults on so old patches
+    // continue to use SynthParamWavetable for both oscillators.
+    SynthParamWTTable2,          // 0..255 Osc 2 factory/user wavetable slot
+    SynthParamWTTable2Link,      // 0=independent, 1=follow Osc 1 table
+
+    // Ring-mod circuit character. Append-only for AU/preset compatibility.
+    SynthParamRingModCharacter,  // 0=clean multiplier, 1=soft diode bridge
 
     SynthParamCount
 } SynthParam;

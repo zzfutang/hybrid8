@@ -10,7 +10,7 @@
 
 namespace synth {
 
-enum class OscWave { Saw = 0, Square = 1, Pulse = 2 };
+enum class OscWave { Saw = 0, Square = 1, Pulse = 2, Sine = 3, Triangle = 4 };
 
 class Oscillator {
 public:
@@ -59,6 +59,15 @@ public:
                 value -= polyBlep(tw, adt);
                 break;
             }
+            case OscWave::Sine:
+                value = static_cast<float>(std::sin(kTwoPi * t));
+                break;
+            case OscWave::Triangle:
+                // An analytic triangle is continuous; only its slope changes
+                // at the corners, so its aliases are already much weaker than
+                // a saw or pulse and are removed by Hybrid8's 4x path.
+                value = static_cast<float>(1.0 - 4.0 * std::fabs(t - 0.5));
+                break;
         }
 
         phase_ += dt;
@@ -66,6 +75,18 @@ public:
         if (phase_ >= 1.0)      { phase_ -= 1.0; wrapped_ = true; } // forward wrap
         else if (phase_ < 0.0)  { phase_ += 1.0; wrapped_ = true; } // backward wrap
         return value;
+    }
+
+    // Advance the phase by one sample without generating a sample. Follows
+    // exactly the same trajectory as process(), so an oscillator that is
+    // momentarily inaudible keeps its phase relationship to the others
+    // instead of freezing and drifting when it comes back.
+    inline void advance() {
+        lastPhase_ = phase_;
+        phase_ += phaseInc_;
+        wrapped_ = false;
+        if (phase_ >= 1.0)      { phase_ -= 1.0; wrapped_ = true; }
+        else if (phase_ < 0.0)  { phase_ += 1.0; wrapped_ = true; }
     }
 
     // True if the most recent process() advanced past the cycle boundary.

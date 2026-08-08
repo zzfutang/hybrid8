@@ -40,10 +40,12 @@ struct VCFTolerance {
 struct VoiceTelemetry {
     float osc1Octave = 0.0f, osc2Octave = 0.0f;
     float pulseWidth = 0.5f, osc2PulseWidth = 0.5f;
-    float wtFrame = 0.0f, wtLiveness = 0.0f;
+    float wtFrame = 0.0f, wtFrame2 = 0.0f;
+    float wtLiveness = 0.0f, wtSmooth = 1.0f;
     float crossMod = 0.0f, cutoff = 6000.0f;
     float resonance = 0.0f, drive = 0.0f, amplitude = 1.0f;
     float osc1Level = 1.0f, osc2Level = 0.0f, noiseLevel = 0.0f;
+    float subOscLevel = 0.0f, ringModLevel = 0.0f;
     float filterSlope = 0.0f, filterMode = 0.0f, panOffset = 0.0f;
 };
 
@@ -63,6 +65,7 @@ public:
         // combined output before returning to the host rate.
         osc_.setSampleRate(sr * kOversample);
         osc2_.setSampleRate(sr * kOversample);
+        subOsc_.setSampleRate(sr * kOversample);
         wtOsc1_.setSampleRate(sr * kOversample);
         wtOsc2_.setSampleRate(sr * kOversample);
         wtLibrary();           // force factory construction off the audio thread
@@ -71,6 +74,8 @@ public:
         ampEnv_.setSampleRate(sr);
         filtEnv_.setSampleRate(sr);
         filter_.setSampleRate(sr * kOversample);
+        ringDcCoef_ = static_cast<float>(
+            std::exp(-kTwoPi * 7.0 / (sr * kOversample)));
         lfoLocal_.setSampleRate(sr);
         lfo2Local_.setSampleRate(sr);
         lfo3Local_.setSampleRate(sr);
@@ -127,14 +132,19 @@ public:
         age_ = 0;
         // Per-voice start-phase randomisation ("un-sync"), independently
         // controllable. At 0 every voice starts phase-aligned (hard sync).
-        osc_.reset(rng_.nextUnipolar() * phaseSpread);
+        const float osc1Phase = rng_.nextUnipolar() * phaseSpread;
+        osc_.reset(osc1Phase);
         osc2_.reset(rng_.nextUnipolar() * phaseSpread);
+        // A divider-style sub remains phase-coherent with Osc 1 at note start.
+        subOsc_.reset(osc1Phase * 0.5f);
         // Wavetable oscillators: random start phase and liveness offset per voice.
         wtOsc1_.reset(rng_.nextUnipolar() * phaseSpread, rng_.nextUnipolar());
         wtOsc2_.reset(rng_.nextUnipolar() * phaseSpread, rng_.nextUnipolar());
         decimator_.reset();
         decimator2_.reset();
         filter_.reset();
+        ringDcInput_ = 0.0f;
+        ringDcOutput_ = 0.0f;
         lfoLocal_.reset();      // start LFO phase at 0 (used when key-triggered)
         lfo2Local_.reset();
         lfo3Local_.reset();
@@ -279,6 +289,8 @@ public:
         float md[ModDstCount] = {0.0f};
         bool matrixLfo1ToWTFrame = false;
         bool matrixFilterEnvToWTFrame = false;
+        bool matrixLfo1ToWTFrame2 = false;
+        bool matrixFilterEnvToWTFrame2 = false;
         for (int s = 0; s < SYNTH_MOD_SLOTS; ++s) {
             int sr = p.modSource[s], ds = p.modDest[s];
             if (sr > 0 && ds > 0) {
@@ -286,6 +298,9 @@ public:
                 if (ds == ModDstWTFrame) {
                     matrixLfo1ToWTFrame |= sr == ModSrcLFO1;
                     matrixFilterEnvToWTFrame |= sr == ModSrcFilterEnv;
+                } else if (ds == ModDstWTFrame2) {
+                    matrixLfo1ToWTFrame2 |= sr == ModSrcLFO1;
+                    matrixFilterEnvToWTFrame2 |= sr == ModSrcFilterEnv;
                 }
             }
         }
@@ -347,18 +362,34 @@ public:
                                         + legacyLfoFrame
                                         + legacyEnvFrame
                                         + md[ModDstWTFrame], 0.0f, 1.0f);
+        const float legacyLfoFrame2 =
+            matrixLfo1ToWTFrame2 ? 0.0f : lfo * p.lfoToWTFrame;
+        const float legacyEnvFrame2 =
+            matrixFilterEnvToWTFrame2 ? 0.0f : env * p.wtFrameEnv;
+        const float wtFrame2Mod = p.wtFrame2Link
+            ? wtFrameMod
+            : clampf(p.wtFrame2
+                     + legacyLfoFrame2
+                     + legacyEnvFrame2
+                     + md[ModDstWTFrame2], 0.0f, 1.0f);
         const float wtLivenessMod = clampf(p.wtLiveness + md[ModDstWTLiveness],
                                            0.0f, 1.0f);
+        const float wtSmoothMod = clampf(p.wtSmooth + md[ModDstWTSmooth],
+                                        0.0f, 1.0f);
         if (p.osc1IsWT) {
             wtOsc1_.setTable(wtTableAt(p.wtTable));
             wtOsc1_.setFrame(wtFrameMod);
             wtOsc1_.setLiveness(wtLivenessMod);
+            wtOsc1_.setResolution(p.wtResolution);
+            wtOsc1_.setSmooth(wtSmoothMod);
             wtOsc1_.setFrequency(baseF1);
         }
         if (p.osc2IsWT) {
-            wtOsc2_.setTable(wtTableAt(p.wtTable));
-            wtOsc2_.setFrame(wtFrameMod);
+            wtOsc2_.setTable(wtTableAt(p.wtTable2));
+            wtOsc2_.setFrame(wtFrame2Mod);
             wtOsc2_.setLiveness(wtLivenessMod);
+            wtOsc2_.setResolution(p.wtResolution);
+            wtOsc2_.setSmooth(wtSmoothMod);
             wtOsc2_.setFrequency(baseF2);
         }
 
@@ -413,11 +444,19 @@ public:
             p.osc2Level + md[ModDstOsc2Level], 0.0f, 1.0f);
         const float noiseLevel = clampf(
             p.noiseLevel + md[ModDstNoiseLevel], 0.0f, 1.0f);
+        const float subOscLevel = p.osc1IsWT ? 0.0f : clampf(
+            p.subOscLevel + md[ModDstSubOscLevel], 0.0f, 1.0f);
+        // Ring modulation accepts every analog/wavetable pairing. FM and sync
+        // remain restricted to the two virtual-analogue oscillators above.
+        const float ringModLevel = clampf(
+            p.ringModLevel + md[ModDstRingModLevel], 0.0f, 1.0f);
 
         // Half-band decimation removes half the band of white noise per
         // stage; the extra sqrt(2) keeps the audible noise level where the
         // original 2x tuning put it now that the path runs at 4x.
         const float noiseGain = noiseLevel * 1.41421356f;
+        const bool subAudible = subOscLevel > 0.0f;
+        subOsc_.setWave(OscWave::Square);
         float filtered = 0.0f;
         for (int os = 0; os < kOversample; ++os) {
             // Process the modulator (osc 2) first so its sine can FM the carrier.
@@ -434,6 +473,9 @@ public:
                     f1 = baseF1 * std::exp2(static_cast<double>(cm) * mod * 2.0);
                 }
             }
+            // Maintain the exact divider relationship even while cross-mod FM
+            // bends Osc 1 or drives it through zero.
+            subOsc_.setFrequency(f1 * 0.5);
 
             float o1;
             if (p.osc1IsWT) {
@@ -446,7 +488,37 @@ public:
             // Hard sync: master osc 1 wraps -> reset slave osc 2.
             if (doSync && osc_.justWrapped()) osc2_.syncReset();
 
-            float m = o1 * osc1Level + o2 * osc2Level;
+            // The sub is a phase-coherent, band-limited square divider one
+            // octave below Osc 1. Ring modulation is a separate bipolar mixer
+            // source, independent of the two oscillators' direct levels.
+            // While it is inaudible the PolyBLEP square is skipped, but the
+            // phase still advances so the divider relationship survives a
+            // matrix route that dips the level through zero.
+            float sub = 0.0f;
+            if (subAudible) sub = subOsc_.process();
+            else            subOsc_.advance();
+            const float cleanRing = o1 * o2;
+            // Smooth four-diode bridge approximation. Its rounded threshold
+            // is gentler than an absolute-value model at low level and tends
+            // toward the signed-minimum response of a passive diode ring.
+            const float sum = o1 + o2;
+            const float difference = o1 - o2;
+            constexpr float diodeKnee2 = 0.0025f; // 0.05^2
+            const float diodeRing = 0.525f * (
+                std::sqrt(sum * sum + diodeKnee2)
+                - std::sqrt(difference * difference + diodeKnee2));
+            const float character = clampf(p.ringModCharacter, 0.0f, 1.0f);
+            const float rawRing = cleanRing
+                                + (diodeRing - cleanRing) * character;
+            // AC-couple only the ring branch. A 7 Hz one-pole blocker removes
+            // DC from equal-frequency products without discarding slow,
+            // musically useful difference tones.
+            const float ring = rawRing - ringDcInput_
+                             + ringDcCoef_ * ringDcOutput_;
+            ringDcInput_ = rawRing;
+            ringDcOutput_ = ring;
+            float m = o1 * osc1Level + o2 * osc2Level
+                    + sub * subOscLevel + ring * ringModLevel;
             // Noise and every nonlinear filter operation also run at 4x.
             float src = m + rng_.nextBipolar() * noiseGain;
             // First half-band runs at 4x (valid output every 2nd feed); its
@@ -467,7 +539,9 @@ public:
         telemetry_.pulseWidth = pw1;
         telemetry_.osc2PulseWidth = pw2;
         telemetry_.wtFrame = wtFrameMod;
+        telemetry_.wtFrame2 = wtFrame2Mod;
         telemetry_.wtLiveness = wtLivenessMod;
+        telemetry_.wtSmooth = wtSmoothMod;
         telemetry_.crossMod = cm;
         telemetry_.cutoff = static_cast<float>(cutoff);
         telemetry_.resonance = reso;
@@ -476,6 +550,8 @@ public:
         telemetry_.osc1Level = osc1Level;
         telemetry_.osc2Level = osc2Level;
         telemetry_.noiseLevel = noiseLevel;
+        telemetry_.subOscLevel = subOscLevel;
+        telemetry_.ringModLevel = ringModLevel;
         telemetry_.filterSlope = filterSlope;
         telemetry_.filterMode = filterMode;
         telemetry_.panOffset = clampf(md[ModDstVoicePan], -1.0f, 1.0f);
@@ -493,6 +569,7 @@ private:
 
     Oscillator osc_;
     Oscillator osc2_;
+    Oscillator subOsc_;
     WavetableOscillator wtOsc1_;
     WavetableOscillator wtOsc2_;
     Decimator2x      decimator_;    // 4x -> 2x: short filter, stage B cleans up
@@ -516,6 +593,9 @@ private:
     float velocity_ = 1.0f;
     float tuningOffsetSemis_ = 0.0f;
     float voiceGain_ = 1.0f;
+    float ringDcInput_ = 0.0f;
+    float ringDcOutput_ = 0.0f;
+    float ringDcCoef_ = 0.999f;
     bool  held_ = false;
     uint64_t age_ = 0;
 

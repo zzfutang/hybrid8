@@ -474,6 +474,8 @@ public:
         framePos_ = clampf(frame01, 0.0f, 1.0f) * (count - 1);
     }
     inline void setLiveness(float depth) { liveness_ = clampf(depth, 0.0f, 1.0f); }
+    inline void setResolution(int mode) { resolution_ = std::max(0, std::min(mode, 3)); }
+    inline void setSmooth(float amount) { smooth_ = clampf(amount, 0.0f, 1.0f); }
 
     inline float process() {
         if (set_ == nullptr) return 0.0f;
@@ -485,7 +487,7 @@ public:
         double vp = liveness_ * WT_NUM_VARIANTS * 0.5 *
                     (1.0 - std::cos(kTwoPi * livenessPhase_));
 
-        float out = read(framePos_, vp, levelF_, phase_);
+        float out = quantize(read(framePos_, vp, levelF_, phase_));
 
         phase_ += phaseInc_;
         if (phase_ >= 1.0) phase_ -= 1.0;
@@ -493,11 +495,21 @@ public:
     }
 
 private:
-    static inline float sampleMip(const WTMip& t, double phase) {
+    inline float sampleMip(const WTMip& t, double phase) const {
         double fp = phase * t.length;
         int i = (int)fp;
         float fr = (float)(fp - i);
-        return t.samples[i] + fr * (t.samples[i + 1] - t.samples[i]);
+        // Crossfade between a vintage phase-accumulator lookup (floor address,
+        // no interpolation) and the existing clean linear interpolator.
+        const float interpolation = resolution_ == 3 ? 0.0f : smooth_;
+        return t.samples[i]
+             + interpolation * fr * (t.samples[i + 1] - t.samples[i]);
+    }
+    inline float quantize(float sample) const {
+        if (resolution_ == 0) return sample;
+        // Symmetric signed quantisation keeps zero exact and avoids adding DC.
+        const float scale = resolution_ == 1 ? 2047.0f : 127.0f;
+        return std::round(clampf(sample, -1.0f, 1.0f) * scale) / scale;
     }
     // Bilinear read (frame x variant) at a single mip level.
     inline float readLevel(int f0, int f1, float ff, int v0, int v1, float vf,
@@ -535,6 +547,8 @@ private:
     double livenessPhase_ = 0.0, livenessInc_ = 0.0;
     float  levelF_ = 0.0f;
     float  framePos_ = 0.0f, liveness_ = 0.0f;
+    float  smooth_ = 1.0f;
+    int    resolution_ = 0;
 };
 
 } // namespace synth
