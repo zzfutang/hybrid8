@@ -1,0 +1,983 @@
+# R50 Three-Slot Effects Architecture
+
+## Goal
+
+Give R50 an effects architecture similar in spirit and scope to the Korg M1
+without attempting a bit-exact M1 reimplementation.
+
+R50 will have three selectable global effect slots, a small set of supported
+routing topologies, and independent sends from each Partial. The effect
+processors remain global: there is one instance of each selected slot for the
+whole instrument, not one instance per voice or Partial.
+
+The existing per-Partial waveshaper remains part of the synthesis voice and is
+not moved into the global rack.
+
+The Partial filter is deliberately digital and linear. It has cutoff,
+resonance, slope, key tracking, and envelope modulation, but no Drive or
+"Analogue" control. Nonlinear color belongs in the explicitly selectable
+per-Partial waveshaper or global Overdrive/Distortion effects.
+
+## Final Signal Model
+
+Each voice renders Partial 1 and Partial 2 separately far enough to accumulate
+their dry signal and effect sends. Sends from all active voices are then summed
+into global stereo buses and processed by the three slots.
+
+Conceptually:
+
+```text
+Partial 1 --+-- dry level ------------------------------+
+            +-- Slot 1 send --+                         |
+            +-- Slot 2 send --+--> global slot inputs   +--> output mix
+            +-- Slot 3 send --+                         |
+                                                          |
+Partial 2 --+-- dry level ------------------------------+
+            +-- Slot 1 send --+
+            +-- Slot 2 send --+--> global slot inputs
+            +-- Slot 3 send --+
+
+output mix --> optional global compressor --> master gain
+```
+
+The rack supports these topologies:
+
+1. Serial: `Slot 1 -> Slot 2 -> Slot 3`
+2. Parallel: `Slot 1 + Slot 2 + Slot 3`
+3. Serial pair plus parallel: `(Slot 1 -> Slot 2) + Slot 3`
+4. Parallel pair into master: `(Slot 1 + Slot 2) -> Slot 3`
+
+Do not implement a freely patchable graph in this project. Named topologies
+make feedback ownership, latency, preset storage, UI, and testing predictable.
+
+## Processing Ownership
+
+### Per Partial and per voice
+
+- Source/sample oscillator and noise
+- Linear digital filter
+- Amplitude, filter, and pitch envelopes
+- Off, Soft Clip, Hard Clip, Fold, or Rectify waveshaper
+- Waveshaper pre-filter/post-filter placement
+- Level and pan
+- Dry output level
+- Slot 1, Slot 2, and Slot 3 send levels
+
+### Global
+
+- Slot 1 processor
+- Slot 2 processor
+- Slot 3 processor
+- Slot routing topology
+- Slot algorithm parameters and wet/output level
+- Existing stereo-linked compressor, placed after the rack
+- Master gain
+
+Slot wet/output level and Partial sends have different jobs. A Partial send
+controls how strongly that Partial excites a shared processor. Slot wet/output
+level controls the processor return in the selected topology. Do not implement
+Partial-specific wet/dry controls inside an algorithm.
+
+## Effect Scope
+
+Every slot can select any supported algorithm. Slots are not permanently
+assigned to modulation, delay, or reverb.
+
+### Initial adapters
+
+Reuse the current implementations as the first three algorithms:
+
+- Chorus
+- Stereo/Cross Delay, including ping-pong behavior
+- Reverb
+
+### Target catalog
+
+The completed rack should cover the following scope:
+
+- Off
+- Hall Reverb
+- Room Reverb
+- Plate/Stage Reverb with a selectable character
+- Early Reflections
+- Stereo Delay
+- Cross/Ping-Pong Delay
+- Chorus
+- Symphonic Ensemble
+- Flanger
+- Phaser
+- Tremolo/Auto-Pan
+- Rotary Speaker
+- Equalizer
+- Overdrive
+- Distortion
+- Exciter
+
+Variations such as multiple hall characters or phase-inverted modulation can
+be algorithm modes rather than separate top-level algorithms. Combination
+effects like the M1's Delay/Hall are composed with the three slots and do not
+need dedicated algorithms.
+
+The goal is comparable creative coverage and routing flexibility, not matching
+the original M1's coefficients, nonlinear curves, modulation phases, or reverb
+topologies.
+
+## Researched Algorithm Definitions
+
+This section is the implementation specification for the effect catalog. Names,
+structures, modes, control meanings, and ranges below are decisions, not
+placeholders. Implementations may be tuned by listening tests, but changing the
+basic structure or public control contract requires updating this plan first.
+
+The selected structures follow established audio-DSP practice:
+
+- Schroeder established parallel feedback combs plus series allpasses as a
+  practical reverberator structure; modern R50 reverbs will use the more
+  controllable feedback-delay-network generalization. See
+  [Natural Sounding Artificial Reverberation](https://aes2.org/publications/elibrary-page/?id=849).
+- Dattorro documents recursive diffusion networks, delay modulation, damping,
+  interpolation, and practical reverberator design in
+  [Effect Design, Part 1](https://aes2.org/publications/elibrary-page/?id=10160).
+- An FDN consists of recirculating delay lines and a mixing matrix. Dense input
+  and output diffusion can improve echo buildup without a large line count, as
+  shown in
+  [Velvet-Noise Feedback Delay Network](https://www.dafx.de/paper-archive/details/5QRu1GCO7Aix-Qn4LMJdrw).
+- Chorus and flanger are modulated-delay effects; a flanger forms moving,
+  regularly spaced comb notches, while a phaser forms a limited number of
+  moving notches using cascaded allpass sections. See
+  [Enhanced Digital Models for Analog Modulation Effects](https://www.dafx.de/paper-archive/details.php?id=jPSmVsZq6Xn0nTNK6sygIQ)
+  and
+  [Modulation Extraction for LFO-Driven Audio Effects](https://dafx.de/paper-archive/2023/DAFx23_paper_63.pdf).
+- Rotary-speaker perception needs synchronized Doppler delay, directional
+  amplitude modulation, separate rotor speeds, and stereo projection. See the
+  model in
+  [Modulation and Delay Line Based Digital Audio Effects](https://dafx.de/paper-archive/1999/disch.pdf).
+- EQ coefficient generation will use the bilinear-transform formulas in the
+  W3C
+  [Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/).
+- Memoryless nonlinearities generate out-of-band harmonics which alias after
+  sampling. R50 will combine oversampling with antiderivative antialiasing where
+  useful, following
+  [Reducing the Aliasing of Nonlinear Waveshaping Using Continuous-Time Convolution](https://www.dafx.de/paper-archive/details/vem_XXF5qBbfiWOH2RVVAA)
+  and
+  [Antialiasing Piecewise Polynomial Waveshapers](https://www.dafx.de/paper-archive/details/cu51KU_JsiXj1cvMi-2DOw).
+- A harmonic exciter is modeled as a filtered high-frequency path, controlled
+  distortion, and a blend with the direct signal. This is consistent with
+  Shekar and Smith's
+  [Modeling the Harmonic Exciter](https://www.researchgate.net/publication/258333577_Modeling_the_Harmonic_Exciter).
+
+### Common slot behavior
+
+The following behavior is outside the individual algorithm controls and is
+identical for all algorithms:
+
+- `Algorithm`: exact selection from the roster below.
+- `Bypass`: click-free dry pass-through for serial use and silence for a
+  parallel return, as determined by the rack topology.
+- `Input Gain`: -24 to +12 dB, default 0 dB.
+- `Output Gain`: -24 to +12 dB, default 0 dB.
+- `Mix`: 0 to 100 percent for insert/serial use. In a parallel topology the
+  rack uses the algorithm's wet output and treats Mix as return level rather
+  than adding a second dry path.
+- `Stereo Width`: 0 to 200 percent where the algorithm produces stereo.
+
+The rack must have one authoritative rule for dry-path ownership. An algorithm
+must expose a separate wet result internally; it must not bake an unremovable
+dry signal into its output.
+
+### 0. Off
+
+Structure:
+
+- No algorithm state and no processing.
+- Pass input unchanged when the slot is in a serial path.
+- Produce silence when the slot is used as a parallel branch.
+
+Controls:
+
+- Common slot controls only.
+
+### 1. Hall Reverb
+
+Purpose:
+
+- Smooth, spacious late reverberation with a slower density buildup and broad
+  stereo image.
+
+Structure:
+
+- Stereo pre-delay.
+- Twelve to sixteen sparse early-reflection taps derived from one deterministic
+  seed.
+- Input diffusion using two short modulated allpasses per channel.
+- Eight-line FDN with mutually incommensurate delay lengths.
+- Energy-preserving Hadamard or Householder feedback matrix.
+- Per-line low-frequency decay control and one-pole high-frequency damping.
+- Slow decorrelated delay modulation below audible vibrato depth.
+- Different orthogonal projections for left and right returns.
+
+Controls:
+
+- `Pre-delay`: 0 to 200 ms, default 20 ms.
+- `Decay`: 0.4 to 12 s RT60, default 3.2 s.
+- `Size`: 50 to 200 percent, default 100 percent.
+- `Damping`: 1 to 20 kHz, default 7 kHz.
+- `Bass Decay`: 0.25 to 2 times the main decay, default 1.
+- `Early Level`: 0 to 100 percent, default 35 percent.
+- `Diffusion`: 0 to 100 percent, default 75 percent.
+- `Modulation`: 0 to 100 percent, default 20 percent.
+
+### 2. Room Reverb
+
+Purpose:
+
+- Short, perceptually bounded room ambience with prominent early reflections
+  and a faster, less luxuriant tail than Hall.
+
+Structure:
+
+- Same shared early-reflection and FDN primitives as Hall.
+- Sixteen to twenty-four earlier and more closely spaced reflection taps.
+- Six- or eight-line FDN with shorter delay lengths.
+- Higher early-to-late ratio and less delay modulation than Hall.
+- Size changes reflection timing and FDN delays together.
+
+Controls:
+
+- `Pre-delay`: 0 to 80 ms, default 8 ms.
+- `Decay`: 0.15 to 4 s RT60, default 1.1 s.
+- `Size`: 25 to 150 percent, default 75 percent.
+- `Damping`: 800 Hz to 20 kHz, default 6 kHz.
+- `Bass Decay`: 0.25 to 2 times, default 0.8.
+- `Early Level`: 0 to 100 percent, default 65 percent.
+- `Diffusion`: 0 to 100 percent, default 55 percent.
+- `Modulation`: 0 to 100 percent, default 8 percent.
+
+### 3. Plate/Stage Reverb
+
+Purpose:
+
+- One algorithm with two discrete characters:
+  `Plate` supplies a dense, bright, non-room-like tail; `Stage` supplies a wide
+  performance-space response with clear early energy.
+
+Structure:
+
+- `Plate` mode: Dattorro-inspired figure-eight diffusion tank with input
+  diffusion, two cross-coupled modulated tank loops, damping, and multiple
+  stereo output taps.
+- `Stage` mode: early-reflection generator feeding the eight-line FDN shared
+  with Hall, using an asymmetric wide reflection pattern and less late
+  diffusion.
+- Both modes use the same public control layout and report zero host latency.
+
+Controls:
+
+- `Character`: Plate or Stage, default Plate.
+- `Pre-delay`: 0 to 200 ms, default 12 ms.
+- `Decay`: 0.3 to 12 s RT60, default 2.4 s.
+- `Size`: 50 to 200 percent, default 100 percent.
+- `Damping`: 1 to 20 kHz, default 9 kHz.
+- `Bass Decay`: 0.25 to 2 times, default 0.9.
+- `Early Level`: 0 to 100 percent; in Plate mode this controls input diffusion
+  prominence, default 30 percent.
+- `Diffusion`: 0 to 100 percent, default 85 percent.
+
+### 4. Early Reflections
+
+Purpose:
+
+- Spatial definition, gated ambience, or reverse-style attacks without a late
+  reverb wash.
+
+Structure:
+
+- Stereo multi-tap FIR delay with 24 taps.
+- Deterministic families of nonuniform tap times, gains, polarity, damping, and
+  pan.
+- Four patterns: `Room`, `Hall`, `Gated`, and `Reverse`.
+- No feedback loop and therefore a finite tail.
+- Size scales tap times while preserving their relative pattern.
+
+Controls:
+
+- `Pattern`: Room, Hall, Gated, or Reverse, default Room.
+- `Pre-delay`: 0 to 200 ms, default 5 ms.
+- `Length`: 30 to 800 ms, default 180 ms.
+- `Density`: 0 to 100 percent, default 65 percent.
+- `Decay Shape`: -100 reverse/rising through 0 flat to +100 falling, with the
+  selected pattern supplying the default.
+- `Tone`: 500 Hz to 20 kHz low-pass, default 9 kHz.
+- `Stereo Spread`: 0 to 200 percent, default 100 percent.
+
+### 5. Stereo Delay
+
+Purpose:
+
+- Independent conventional left and right echoes with stable filtered
+  feedback.
+
+Structure:
+
+- One fractional delay line per channel with four-point interpolation.
+- Independent left/right delay times.
+- Same-channel feedback.
+- DC-blocking high-pass plus low-pass damping inside each feedback loop.
+- Soft saturation inside feedback to bound transients without making unity
+  feedback legal.
+- Equal-power crossfade between read heads when delay time changes abruptly.
+
+Controls:
+
+- `Left Time`: 1 to 2000 ms or tempo division, default 250 ms.
+- `Right Time`: 1 to 2000 ms or tempo division, default 375 ms.
+- `Feedback`: -95 to +95 percent, default 35 percent; negative values invert
+  feedback polarity.
+- `Low Cut`: 20 Hz to 2 kHz, default 40 Hz.
+- `High Cut`: 500 Hz to 20 kHz, default 8 kHz.
+- `Saturation`: 0 to 100 percent, default 15 percent.
+- `Time Mode`: milliseconds or tempo-synchronized, default milliseconds.
+
+### 6. Cross/Ping-Pong Delay
+
+Purpose:
+
+- Echoes that regenerate between channels, continuously variable from straight
+  stereo feedback to full ping-pong.
+
+Structure:
+
+- Same delay, interpolation, damping, saturation, and time-change behavior as
+  Stereo Delay.
+- A normalized 2x2 feedback matrix crossfades between diagonal
+  same-channel feedback and off-diagonal cross-feedback without increasing the
+  matrix gain.
+
+Controls:
+
+- `Left Time`: 1 to 2000 ms or tempo division, default 250 ms.
+- `Right Time`: 1 to 2000 ms or tempo division, default 375 ms.
+- `Feedback`: -95 to +95 percent, default 40 percent.
+- `Cross`: 0 straight to 100 percent full ping-pong, default 100 percent.
+- `Low Cut`: 20 Hz to 2 kHz, default 40 Hz.
+- `High Cut`: 500 Hz to 20 kHz, default 7 kHz.
+- `Saturation`: 0 to 100 percent, default 15 percent.
+- `Time Mode`: milliseconds or tempo-synchronized, default milliseconds.
+
+### 7. Chorus
+
+Purpose:
+
+- Natural pitch and timing thickening that can range from a restrained M1-style
+  stereo chorus to a wide modern chorus.
+
+Structure:
+
+- Four fractional-delay voices, two projected to each output.
+- Base delay longer than flanger: 8 to 30 ms.
+- Sine or triangle primary LFO plus optional very-slow decorrelated drift.
+- Quadrature and opposing phase offsets distribute voices across stereo.
+- No regeneration at the public control level.
+
+Controls:
+
+- `Rate`: 0.03 to 10 Hz or tempo division, default 0.35 Hz.
+- `Depth`: 0 to 100 percent, mapping to 0 to 5 ms excursion, default 40
+  percent.
+- `Delay`: 8 to 30 ms, default 17 ms.
+- `Voices`: 2 or 4, default 4.
+- `Waveform`: Sine or Triangle, default Sine.
+- `Drift`: 0 to 100 percent, default 20 percent.
+- `Tone`: 1 to 20 kHz wet-path low-pass, default 14 kHz.
+
+### 8. Symphonic Ensemble
+
+Purpose:
+
+- Denser, less obviously periodic widening for strings, choir, brass, and pads.
+
+Structure:
+
+- Six fractional-delay voices, three per output.
+- Three slow primary modulation rates in irrational ratios.
+- Per-voice deterministic filtered random drift.
+- Base delays from 12 to 28 ms.
+- Cross-channel projection chosen for mono compatibility.
+- Optional low-cut prevents low-frequency pitch smear.
+
+Controls:
+
+- `Rate`: 0.03 to 3 Hz, default 0.22 Hz.
+- `Depth`: 0 to 100 percent, default 55 percent.
+- `Spread`: 0 to 100 percent rate and phase dispersion, default 70 percent.
+- `Drift`: 0 to 100 percent, default 45 percent.
+- `Tone`: 1 to 20 kHz wet-path low-pass, default 12 kHz.
+- `Low Cut`: 20 to 500 Hz, default 100 Hz.
+
+### 9. Flanger
+
+Purpose:
+
+- Short modulated comb filtering from subtle animation to strong jet sweeps.
+
+Structure:
+
+- Fractional delay per channel with 0.1 to 15 ms delay.
+- Dry plus delayed signal creates the feedforward comb.
+- Bipolar feedback around each delay, with optional cross-feedback mode.
+- Sine or triangle LFO; stereo phase offsets of 0, 90, or 180 degrees.
+- Four-point interpolation and read-head smoothing.
+
+Controls:
+
+- `Rate`: 0.03 to 10 Hz or tempo division, default 0.2 Hz.
+- `Depth`: 0 to 100 percent, default 65 percent.
+- `Manual`: 0.1 to 15 ms center delay, default 2.5 ms.
+- `Feedback`: -95 to +95 percent, default 35 percent.
+- `Cross Feedback`: Off or On, default Off.
+- `Waveform`: Sine or Triangle, default Sine.
+- `Stereo Phase`: 0, 90, or 180 degrees, default 180 degrees.
+- `Tone`: 1 to 20 kHz feedback low-pass, default 12 kHz.
+
+### 10. Phaser
+
+Purpose:
+
+- A finite set of moving spectral notches with a character distinct from
+  delay-line flanging.
+
+Structure:
+
+- Six or twelve first-order allpass stages per channel.
+- LFO modulates allpass break frequencies exponentially so the sweep is
+  perceptually even.
+- Dry signal mixed with the allpass cascade produces the notches.
+- Bipolar feedback from the cascade output to its input.
+- Stereo channels use selectable LFO phase offset.
+- Coefficients are smoothed and constrained strictly inside the stable region.
+
+Controls:
+
+- `Rate`: 0.03 to 10 Hz or tempo division, default 0.3 Hz.
+- `Depth`: 0 to 100 percent, default 70 percent.
+- `Center`: 80 Hz to 4 kHz, default 800 Hz.
+- `Spread`: 0.5 to 6 octaves, default 3 octaves.
+- `Feedback`: -95 to +95 percent, default 30 percent.
+- `Stages`: 6 or 12, default 6.
+- `Waveform`: Sine or Triangle, default Sine.
+- `Stereo Phase`: 0 to 180 degrees, default 90 degrees.
+
+### 11. Tremolo/Auto-Pan
+
+Purpose:
+
+- Periodic amplitude modulation, stereo movement, or a blend of both.
+
+Structure:
+
+- One band-limited LFO drives smoothed channel gains.
+- `Tremolo` applies the same gain to both channels.
+- `Auto-Pan` uses equal-power complementary gains.
+- `Stereo Tremolo` permits controlled phase offset between channel gains.
+- Shape morphs continuously from sine through triangle toward rounded square;
+  do not use a discontinuous raw square wave.
+
+Controls:
+
+- `Mode`: Tremolo, Stereo Tremolo, or Auto-Pan, default Tremolo.
+- `Rate`: 0.03 to 20 Hz or tempo division, default 4 Hz.
+- `Depth`: 0 to 100 percent, default 60 percent.
+- `Shape`: -100 soft sine through 0 triangle to +100 rounded square, default
+  -100.
+- `Stereo Phase`: 0 to 180 degrees, default 180 degrees in Stereo Tremolo.
+- `Bias`: -100 to +100, changing the waveform duty emphasis without allowing
+  gain below zero, default 0.
+
+### 12. Rotary Speaker
+
+Purpose:
+
+- A musical Leslie-inspired effect rather than a measured model of a particular
+  cabinet.
+
+Structure:
+
+- Linkwitz-Riley fourth-order crossover at an adjustable frequency.
+- Independent horn and drum rotors.
+- Each rotor uses two short time-varying delay paths for Doppler shift.
+- Synchronized amplitude modulation represents directionality.
+- Unequal left/right projection creates stereo rotation.
+- Speed changes use separate acceleration and deceleration ramps; rotor phase
+  remains continuous.
+- A short cabinet/air damping stage follows the rotor mix.
+
+Controls:
+
+- `Speed`: Stop, Slow, or Fast, default Slow.
+- `Slow Rate`: 0.2 to 1.5 Hz, default 0.7 Hz.
+- `Fast Rate`: 3 to 10 Hz, default 6.5 Hz.
+- `Horn/Drum Ratio`: 0.5 to 2, default 1.25.
+- `Acceleration`: 0.2 to 8 s, default 1.8 s.
+- `Doppler Depth`: 0 to 100 percent, default 55 percent.
+- `Amplitude Depth`: 0 to 100 percent, default 65 percent.
+- `Crossover`: 400 Hz to 2 kHz, default 800 Hz.
+
+### 13. Equalizer
+
+Purpose:
+
+- Broad program-effect tone shaping comparable in role to the M1 EQ, with one
+  useful mid band added.
+
+Structure:
+
+- Cascaded low-shelf, peaking, and high-shelf biquads.
+- Coefficients use the Audio EQ Cookbook bilinear-transform formulas.
+- Transposed direct-form II processing in double-precision state where useful.
+- Parameter changes interpolate poles/zeros safely or crossfade coefficient
+  sets; do not linearly sweep unstable raw coefficients.
+
+Controls:
+
+- `Low Gain`: -18 to +18 dB, default 0 dB.
+- `Low Frequency`: 40 Hz to 1 kHz, default 200 Hz.
+- `Mid Gain`: -18 to +18 dB, default 0 dB.
+- `Mid Frequency`: 100 Hz to 10 kHz, default 1 kHz.
+- `Mid Q`: 0.2 to 8, default 0.8.
+- `High Gain`: -18 to +18 dB, default 0 dB.
+- `High Frequency`: 1 to 16 kHz, default 5 kHz.
+
+### 14. Overdrive
+
+Purpose:
+
+- Smooth, compressive predominantly odd-harmonic saturation with optional
+  asymmetric even-harmonic content.
+
+Structure:
+
+- Input high-pass to prevent DC-driven bias shifts.
+- Pre-emphasis low/high shelves.
+- Four-times oversampled static soft-clipping stage.
+- Transfer curve morphs between symmetric `tanh`-like clipping and an
+  asymmetric diode-style polynomial/soft-clip curve.
+- DC blocker after the nonlinearity.
+- Post-emphasis tone filter and output compensation.
+- Prefer first-order ADAA for the chosen analytic curve; retain oversampling
+  because the complete pre/post-filtered structure is stateful.
+
+Controls:
+
+- `Drive`: 0 to 36 dB, default 12 dB.
+- `Character`: Soft, Warm, or Bright, default Warm.
+- `Asymmetry`: 0 to 100 percent, default 20 percent.
+- `Tone`: 500 Hz to 16 kHz post low-pass mapping, default 7 kHz.
+- `Bass`: -12 to +12 dB pre-emphasis, default 0 dB.
+- `Level`: -24 to +12 dB, default -6 dB.
+
+### 15. Distortion
+
+Purpose:
+
+- Harder, brighter clipping and fuzz-like sounds distinct from Overdrive.
+
+Structure:
+
+- Four-times oversampled nonlinear path, raised to eight-times only if
+  aliasing acceptance tests require it.
+- Three transfer modes: `Hard Clip`, `Cubic`, and `Fuzz`.
+- Hard Clip and Cubic use piecewise-polynomial ADAA.
+- Fuzz uses asymmetric clipping plus bias and must remove generated DC.
+- Pre high-pass and post low-pass keep the result musically bounded.
+- Output compensation is mode-specific.
+
+Controls:
+
+- `Drive`: 0 to 48 dB, default 18 dB.
+- `Mode`: Hard Clip, Cubic, or Fuzz, default Cubic.
+- `Bias`: -100 to +100, default 0.
+- `Tone`: 500 Hz to 16 kHz post low-pass, default 6 kHz.
+- `Low Cut`: 20 Hz to 1 kHz, default 60 Hz.
+- `Level`: -30 to +12 dB, default -9 dB.
+
+### 16. Exciter
+
+Purpose:
+
+- Add controlled high-frequency harmonics and presence without applying
+  full-band distortion.
+
+Structure:
+
+- Split into a direct path and a second-order high-pass side path.
+- Apply controllable drive and asymmetric soft clipping to the side path at
+  four-times oversampling.
+- Remove DC and band-limit the generated harmonics.
+- Optionally delay the direct path by the oversampler/filter group delay so the
+  blend remains phase-consistent.
+- Add the processed side path back to the direct signal; the slot wet result is
+  the complete aligned exciter output minus the aligned dry input.
+
+Controls:
+
+- `Frequency`: 1 to 10 kHz high-pass corner, default 3.5 kHz.
+- `Drive`: 0 to 36 dB, default 12 dB.
+- `Harmonics`: 0 to 100 percent asymmetry/curve amount, default 45 percent.
+- `Amount`: 0 to 100 percent side-path blend, default 25 percent.
+- `Tone`: 4 to 20 kHz side-path low-pass, default 14 kHz.
+- `Presence`: -12 to +12 dB broad peaking stage, default 0 dB.
+
+### Non-slot global compressor
+
+The compressor remains a post-rack utility rather than a selectable slot
+algorithm.
+
+Structure:
+
+- Stereo-linked feed-forward peak detector.
+- 6 dB soft knee.
+- Separate attack and release smoothing.
+- No lookahead and therefore zero latency.
+- Click-free bypass.
+
+Public controls should be expanded from the current Amount macro to:
+
+- `On`
+- `Threshold`: -36 to 0 dBFS, default -18 dBFS.
+- `Ratio`: 1:1 to 20:1, default 4:1.
+- `Attack`: 1 to 100 ms, default 10 ms.
+- `Release`: 20 to 1000 ms, default 120 ms.
+- `Makeup`: 0 to 18 dB, default 0 dB.
+
+R50 currently presents these settings through one post-rack `Amount` macro.
+
+### Existing per-Partial waveshaper
+
+The existing Off, Soft Clip, Hard Clip, Fold, and Rectify algorithms remain
+per-Partial and retain pre-filter/post-filter placement. They are not aliases
+for the global Overdrive or Distortion effects.
+
+The Partial waveshaper now uses cascaded 4x oversampling built from 129-tap
+Kaiser half-band FIR stages. It has approximately -86 dB rejection at the far
+edge of the transition band, exact 96-sample base-rate round-trip latency, and
+a latency-aligned lightweight bypass. Direct tests lock the 2x/4x impulse
+latencies and DC gain; spectral acceptance tests remain mandatory for every
+nonlinear algorithm. Before/after preset renders are still required because
+the stronger reconstruction filter can subtly change the brightest patches.
+
+## Shared Algorithm Acceptance Rules
+
+All algorithms must satisfy these rules in addition to their individual
+definition:
+
+- Parameter values have identical audible meaning at every supported sample
+  rate.
+- Delay lengths are derived in seconds and resized during setup, never during
+  rendering.
+- Feedback matrices have a proven or bounded maximum gain below unity after
+  user feedback is applied.
+- Recursive state is checked or structurally prevented from producing NaN or
+  infinity.
+- Denormals are suppressed without injecting audible noise.
+- Modulation phase remains continuous across rate and depth changes.
+- Abrupt time changes use smoothing, interpolation, or dual-head crossfades.
+- Tempo synchronization resolves to seconds at control rate and survives a
+  missing or invalid host tempo.
+- Stereo algorithms collapse acceptably to mono; width above 100 percent may
+  reduce mono level but must not cancel the complete wet signal.
+- Algorithm bypass and replacement preserve or intentionally fade the old
+  tail; no state is abandoned as a full-scale discontinuity.
+- Nonlinear algorithms pass swept-sine alias measurements before their
+  oversampling factor is finalized.
+- Every default is level-matched closely enough that selecting an algorithm
+  does not cause a dangerous output jump.
+
+## Slot DSP Contract
+
+Create a common real-time-safe slot interface with:
+
+- Setup for sample rate and maximum render size
+- Reset
+- Algorithm selection
+- Parameter update at control rate
+- Stereo processing
+- Click-free bypass
+- Click-free or short-crossfaded algorithm changes
+- Tail-time reporting
+- Latency reporting, even if all initial algorithms report zero
+- No allocation, locking, file access, or ownership changes on the audio thread
+
+Prefer shared primitives for:
+
+- Fractional delay lines
+- LFO and waveform generation
+- Wet/dry and return gain smoothing
+- Low/high effect EQ
+- Feedback damping
+- Parameter smoothing
+
+Each slot owns only the state for its active algorithm unless profiling shows
+that pre-instantiating all algorithms is cheaper and simpler. Algorithm changes
+must prepare required storage outside the audio callback or use storage sized
+during setup.
+
+## Parameter Model
+
+Parameter addresses are append-only. Do not renumber or reinterpret existing
+addresses because presets and host automation depend on them.
+
+Add global parameters for:
+
+- Slot 1 algorithm and bypass
+- Slot 2 algorithm and bypass
+- Slot 3 algorithm and bypass
+- Rack topology
+- Slot output/wet level
+- A stable bank of algorithm controls per slot
+
+Add Partial fields for:
+
+- Dry level
+- Slot 1 send
+- Slot 2 send
+- Slot 3 send
+
+Use stable generic storage for slot controls, but present algorithm-specific
+names, units, ranges, and value formatting in the UI. Document the mapping for
+every algorithm in one authoritative descriptor table rather than duplicating
+switch statements across DSP, Audio Unit parameters, and SwiftUI.
+
+Suggested normalized control capacity per slot:
+
+- Eight continuous controls
+- Two or more discrete/mode controls
+
+If an algorithm needs more controls, extend the append-only bank rather than
+overloading an unrelated parameter.
+
+## Factory preset architecture
+
+Factory presets are authored directly against:
+
+```text
+Slot 1 Chorus -> Slot 2 Delay -> Slot 3 Reverb -> Compressor
+```
+
+Preset defaults:
+
+- Topology: Serial
+- Partials route at unity to Slot 1 and have no duplicate direct path.
+- Chorus, delay, and reverb use Slots 1, 2, and 3 respectively when combined.
+- Compressor remains post-rack.
+
+R50 has not shipped, so prototype compatibility code and retired parameter
+addresses are intentionally absent. Saved state contains only the three-slot
+model and post-rack compressor.
+
+## UI
+
+Replace the fixed Chorus, Delay, Reverb, and Compressor columns with:
+
+- A topology selector and compact routing diagram
+- Three slot panels
+- Algorithm selector and bypass per slot
+- Dynamic controls appropriate to the selected algorithm
+- Slot return/output level
+- A separate post-rack compressor panel
+
+On each Partial page add:
+
+- Dry level
+- Send 1
+- Send 2
+- Send 3
+
+Use consistent slot colors or labels in both the Partial sends and effects
+page. Make the current routing visible without requiring the user to infer it
+from control values.
+
+Changing algorithms should update labels and ranges without destroying the
+stored parameters for other algorithms during the current editing session.
+
+## Implementation Phases
+
+### Phase 1 - Data model and routing skeleton
+
+- [x] Define algorithm and topology enums.
+- [x] Define slot descriptors and the real-time DSP contract.
+- [x] Append global slot parameters and Partial send fields.
+- [x] Extend parameter snapshots and Audio Unit parameter exposure.
+- [x] Make each voice expose or accumulate separate Partial contributions.
+- [x] Add global dry and three-slot input buses.
+- [x] Implement the four named routing topologies with passthrough slots.
+- [x] Confirm that the unchanged default produces the current dry render.
+
+Exit criteria:
+
+- Both Partials can be independently routed to dry and each slot input.
+- All four topologies pass deterministic impulse-routing tests.
+- The render callback remains allocation-free.
+
+### Phase 2 - Adapt existing effects
+
+- [x] Adapt Chorus to the slot interface.
+- [x] Adapt Delay to the slot interface.
+- [x] Adapt Reverb to the slot interface.
+- [x] Move the compressor after the three-slot rack.
+- [x] Add smoothed bypass, sends, returns, and topology changes.
+- [x] Preserve effect tails when notes stop.
+
+Exit criteria:
+
+- Any of the three existing algorithms can run in any slot.
+- Serial, parallel, and mixed topologies behave correctly.
+- Switching or bypassing a slot produces no objectionable click.
+
+### Phase 3 - State model and initial UI
+
+- [x] Store and restore the three-slot state directly.
+- [x] Author factory presets directly with slot parameters.
+- [x] Build the three-slot effects page.
+- [x] Add topology visualization.
+- [x] Add Partial dry and send controls.
+- [x] Keep compressor controls separate from the slots.
+
+Exit criteria:
+
+- Old presets load successfully.
+- New presets round-trip every slot, topology, send, and algorithm parameter.
+- Factory preset comparison renders remain acceptably close.
+
+### Phase 4 - Modulation family
+
+- [x] Add Ensemble.
+- [x] Add Flanger.
+- [x] Add Phaser.
+- [x] Add Tremolo/Auto-Pan.
+- [x] Add Rotary Speaker.
+- [x] Share LFO, fractional delay, smoothing, and effect-EQ primitives.
+
+Exit criteria:
+
+- Every modulation algorithm is stable across supported sample rates.
+- Stereo width and mono compatibility have automated checks.
+- Bipolar feedback and waveform modes are tested.
+
+### Phase 5 - Space and delay family
+
+- [x] Add Hall, Room, and Plate/Stage characters.
+- [x] Add Early Reflections.
+- [x] Separate Stereo Delay and Cross/Ping-Pong modes cleanly.
+- [x] Add pre-delay, damping, effect EQ, and independent channel timing where
+      appropriate.
+
+Exit criteria:
+
+- Delay feedback remains bounded at every allowed value.
+- Reverb and early-reflection tails decay to silence without denormals.
+- Tail-time reporting is conservative enough for the host.
+
+### Phase 6 - Tone and nonlinear family
+
+- [x] Add Equalizer.
+- [x] Add Overdrive.
+- [x] Add Distortion.
+- [x] Add Exciter.
+- [x] Apply oversampling where aliasing tests show it is necessary.
+- [x] Distinguish these global algorithms clearly from the existing
+      per-Partial waveshaper.
+
+Measured optimized cost for one stereo 4x Distortion slot at 192 kHz is
+approximately 0.07 seconds per second of audio on the development machine.
+Overdrive, Distortion, and Exciter reuse the 129-tap 4x oversampler whose
+latency, DC gain, and alias-rejection tests also cover the per-Partial shaper.
+
+Exit criteria:
+
+- Nonlinear algorithms remain finite for full-scale and pathological input.
+- Bypass and unity settings do not create unexpected level jumps.
+- Aliasing and CPU costs are documented and tested.
+
+### Phase 7 - Optimization and polish
+
+- [x] Benchmark maximum polyphony at all supported sample rates and buffer
+      sizes.
+- [x] Remove the old fixed rack from the runtime signal path and host parameter
+      tree. Its small DSP primitives remain only as isolated test fixtures.
+- [x] Tune smoothing and transition times, including exact first-sample bypass
+      at zero Mix and click-free algorithm/topology transitions.
+- [x] Add hover help for routing, sends, and every algorithm.
+- [x] Review factory presets and add examples for modulation, rotary, EQ,
+      overdrive, and exciter alongside the existing space/delay examples.
+- [x] Audit dynamic controls against DSP use. Remove the unsupported reverb,
+      EQ, overdrive, distortion, and exciter controls; wire Plate/Stage and
+      Overdrive Character so every remaining visible control changes DSP.
+- [x] Remove obsolete state conversion and retired host parameters.
+
+Validation covers the full eight-voice engine, all algorithms from 11.025 to
+192 kHz, zero-mix identity, effect audibility/tails, pathological finite input,
+concurrent automation under ThreadSanitizer, and 4x nonlinear processing at
+192 kHz. The measured worst-case standalone stereo Distortion cost is about
+0.10x realtime on the development machine.
+
+Exit criteria:
+
+- No real-time allocations, locks, NaNs, infinities, or denormal regressions.
+- Maximum-polyphony CPU stays within the agreed product budget.
+- The catalog, UI, saved state, and documentation agree.
+
+## Test Plan
+
+Add focused DSP tests for:
+
+- Impulse routing through all four topologies
+- Partial 1 and Partial 2 send isolation
+- Dry-level and send gain accuracy
+- Slot order and parallel return summing
+- Slot bypass at silence and during sustained audio
+- Algorithm changes during sustained audio
+- Tail continuation after note-off
+- Reset clearing all delay and filter state
+- Independent engine instances producing independent effect state
+- Deterministic rendering where algorithms are deterministic
+- Bipolar and cross-feedback polarity
+- Feedback stability at maximum settings
+- Mono input/output compatibility
+- Sample rates from the lowest supported rate through 192 kHz
+- Small and large host buffer sizes
+- Silence, impulse, DC, full-scale, and non-finite-defense inputs
+- New-state and factory-preset round trips
+- Maximum-polyphony CPU and memory use
+
+## Primary Files Expected to Change
+
+- `Products/R50/DSP/R50EffectsRack.hpp`
+- `Products/R50/DSP/R50Engine.hpp`
+- `Products/R50/DSP/R50Voice.hpp`
+- `Products/R50/DSP/R50Partial.hpp`
+- `Products/R50/Extension/R50Parameters.h`
+- `Products/R50/Extension/R50ParametersTree.swift`
+- `Products/R50/Extension/R50DSPKernelAdapter.mm`
+- `Products/R50/Extension/UI/R50ParameterModel.swift`
+- `Products/R50/Extension/UI/R50View.swift`
+- `Products/R50/Extension/R50FactoryPresets.swift`
+- `Tests/test_r50.cpp`
+
+New DSP headers should separate shared primitives, algorithm implementations,
+slot hosting, and rack routing when `R50EffectsRack.hpp` would otherwise become
+an unreviewable monolith.
+
+## Definition of Done
+
+The work is complete when:
+
+- R50 exposes three interchangeable global effect slots.
+- All four named routing topologies work.
+- Each Partial has independent dry and three-slot sends.
+- The target effect families are present and usable in any slot.
+- The compressor remains an optional post-rack global processor.
+- The per-Partial waveshaper remains independent of the rack.
+- New presets and automation restore all effects state exactly.
+- DSP safety, routing, tail, and CPU tests pass.
+- The UI clearly communicates slots, topology, sends, and global versus
+  per-Partial processing.

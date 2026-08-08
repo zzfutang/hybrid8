@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.drum_kit",
+  "name": "Drum Kit",
+  "zones": [
+    {
+      "id": "kick1",
+      "file": "Power Bass Drum 1.wav",
+      "rootKey": 36,
+      "lowKey": 0,
+      "highKey": 36,
+      "loop": false
+    },
+    {
+      "id": "rim",
+      "file": "Rim Tap.wav",
+      "rootKey": 37,
+      "lowKey": 37,
+      "highKey": 37,
+      "loop": false
+    },
+    {
+      "id": "snare1",
+      "file": "Power Snare 1.wav",
+      "rootKey": 38,
+      "lowKey": 38,
+      "highKey": 38,
+      "loop": false
+    },
+    {
+      "id": "clap",
+      "file": "Clap.wav",
+      "rootKey": 39,
+      "lowKey": 39,
+      "highKey": 39,
+      "loop": false
+    },
+    {
+      "id": "snare2",
+      "file": "Power Snare 2.wav",
+      "rootKey": 40,
+      "lowKey": 40,
+      "highKey": 40,
+      "loop": false
+    },
+    {
+      "id": "tomfloor",
+      "file": "Tom Floor.wav",
+      "rootKey": 41,
+      "lowKey": 41,
+      "highKey": 41,
+      "loop": false
+    },
+    {
+      "id": "hhclosed",
+      "file": "Hi-Hat Closed.wav",
+      "rootKey": 42,
+      "lowKey": 42,
+      "highKey": 42,
+      "loop": false
+    },
+    {
+      "id": "tomlow",
+      "file": "Tom Low.wav",
+      "rootKey": 43,
+      "lowKey": 43,
+      "highKey": 43,
+      "loop": false
+    },
+    {
+      "id": "hhfoot",
+      "file": "Hi-Hat Foot.wav",
+      "rootKey": 44,
+      "lowKey": 44,
+      "highKey": 44,
+      "loop": false
+    },
+    {
+      "id": "tommed",
+      "file": "Tom Med.wav",
+      "rootKey": 45,
+      "lowKey": 45,
+      "highKey": 45,
+      "loop": false
+    },
+    {
+      "id": "hhopen",
+      "file": "Hi-Hat Half-Open.wav",
+      "rootKey": 46,
+      "lowKey": 46,
+      "highKey": 46,
+      "loop": false
+    },
+    {
+      "id": "tomhi",
+      "file": "Tom Hi.wav",
+      "rootKey": 47,
+      "lowKey": 47,
+      "highKey": 47,
+      "loop": false
+    },
+    {
+      "id": "cowbell",
+      "file": "Cow Bell.wav",
+      "rootKey": 48,
+      "lowKey": 48,
+      "highKey": 48,
+      "loop": false
+    },
+    {
+      "id": "crash",
+      "file": "Crsh 1.wav",
+      "rootKey": 49,
+      "lowKey": 49,
+      "highKey": 49,
+      "loop": false
+    },
+    {
+      "id": "splash",
+      "file": "Splash.wav",
+      "rootKey": 50,
+      "lowKey": 50,
+      "highKey": 50,
+      "loop": false
+    },
+    {
+      "id": "ride",
+      "file": "Ride1.wav",
+      "rootKey": 51,
+      "lowKey": 51,
+      "highKey": 127,
+      "loop": false
+    }
+  ]
+}

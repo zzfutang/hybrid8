@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.ahh_choir",
+  "name": "Ahh Choir",
+  "zones": [
+    {
+      "id": "ds2",
+      "file": "Ahh Choir D#3.wav",
+      "rootKey": 39,
+      "lowKey": 0,
+      "highKey": 40
+    },
+    {
+      "id": "fs2",
+      "file": "Ahh Choir F#3.wav",
+      "rootKey": 42,
+      "lowKey": 41,
+      "highKey": 43
+    },
+    {
+      "id": "a2",
+      "file": "Ahh Choir G#3.wav",
+      "rootKey": 45,
+      "lowKey": 44,
+      "highKey": 46,
+      "tuneCents": 22
+    },
+    {
+      "id": "c3",
+      "file": "Ahh Choir C4.wav",
+      "rootKey": 48,
+      "lowKey": 47,
+      "highKey": 49
+    },
+    {
+      "id": "ds3",
+      "file": "Ahh Choir D#4.wav",
+      "rootKey": 51,
+      "lowKey": 50,
+      "highKey": 52
+    },
+    {
+      "id": "fs3",
+      "file": "Ahh Choir F#4.wav",
+      "rootKey": 54,
+      "lowKey": 53,
+      "highKey": 55
+    },
+    {
+      "id": "a3",
+      "file": "Ahh Choir A4.wav",
+      "rootKey": 57,
+      "lowKey": 56,
+      "highKey": 58
+    },
+    {
+      "id": "c4",
+      "file": "Ahh Choir C5.wav",
+      "rootKey": 60,
+      "lowKey": 59,
+      "highKey": 61
+    },
+    {
+      "id": "ds4",
+      "file": "Ahh Choir D#5.wav",
+      "rootKey": 63,
+      "lowKey": 62,
+      "highKey": 64
+    },
+    {
+      "id": "fs4",
+      "file": "Ahh Choir F#5.wav",
+      "rootKey": 66,
+      "lowKey": 65,
+      "highKey": 67
+    },
+    {
+      "id": "a4",
+      "file": "Ahh Choir A5.wav",
+      "rootKey": 69,
+      "lowKey": 68,
+      "highKey": 70
+    },
+    {
+      "id": "c5",
+      "file": "Ahh Choir C6.wav",
+      "rootKey": 72,
+      "lowKey": 71,
+      "highKey": 73
+    },
+    {
+      "id": "ds5",
+      "file": "Ahh Choir D#6.wav",
+      "rootKey": 75,
+      "lowKey": 74,
+      "highKey": 76
+    },
+    {
+      "id": "fs5",
+      "file": "Ahh Choir F#6.wav",
+      "rootKey": 78,
+      "lowKey": 77,
+      "highKey": 79
+    },
+    {
+      "id": "a5",
+      "file": "Ahh Choir A6.wav",
+      "rootKey": 81,
+      "lowKey": 80,
+      "highKey": 127
+    }
+  ]
+}

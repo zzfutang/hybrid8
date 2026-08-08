@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.brass_section",
+  "name": "Brass Section",
+  "zones": [
+    {
+      "id": "f2",
+      "file": "Brass Section F3.wav",
+      "rootKey": 41,
+      "lowKey": 0,
+      "highKey": 44
+    },
+    {
+      "id": "c3",
+      "file": "Brass Section C4.wav",
+      "rootKey": 48,
+      "lowKey": 45,
+      "highKey": 51
+    },
+    {
+      "id": "fs3",
+      "file": "Brass Section F#4.wav",
+      "rootKey": 54,
+      "lowKey": 52,
+      "highKey": 56
+    },
+    {
+      "id": "as3",
+      "file": "Brass Section A#4.wav",
+      "rootKey": 58,
+      "lowKey": 57,
+      "highKey": 59
+    },
+    {
+      "id": "c4",
+      "file": "Brass Section C5.wav",
+      "rootKey": 60,
+      "lowKey": 60,
+      "highKey": 62
+    },
+    {
+      "id": "f4",
+      "file": "Brass Section F5.wav",
+      "rootKey": 65,
+      "lowKey": 63,
+      "highKey": 67
+    },
+    {
+      "id": "a4",
+      "file": "Brass Section A5.wav",
+      "rootKey": 69,
+      "lowKey": 68,
+      "highKey": 70
+    },
+    {
+      "id": "c5",
+      "file": "Brass Section C6.wav",
+      "rootKey": 72,
+      "lowKey": 71,
+      "highKey": 74
+    },
+    {
+      "id": "f5",
+      "file": "Brass Section F6.wav",
+      "rootKey": 77,
+      "lowKey": 75,
+      "highKey": 80
+    },
+    {
+      "id": "c6",
+      "file": "Brass Section C7.wav",
+      "rootKey": 84,
+      "lowKey": 81,
+      "highKey": 127
+    }
+  ]
+}

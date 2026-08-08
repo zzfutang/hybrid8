@@ -1,0 +1,735 @@
+//
+//  R50Theme.swift
+//  R50's visual language — deliberately nothing like Hybrid 8's warm brass
+//  fascia. This is cold-rolled steel and smoked acrylic with a cyan VFD glow:
+//  flat panels, thin rules, square-shouldered controls.
+//
+//  Everything here is self-contained (palette, knob, selector, meter) so R50's
+//  look can evolve without touching any other product.
+//
+
+import AudioToolbox
+import SwiftUI
+
+enum R50Layout {
+    static let width: CGFloat  = 1180
+    // Header + tallest page + padding. Keeping the old 545-point prototype
+    // height left an empty band below every page.
+    static let height: CGFloat = 470
+    /// Every page occupies exactly this much vertical space. Without a fixed
+    /// page area the pages have different intrinsic heights, and switching
+    /// tabs re-centres the whole fascia — the header and footer visibly jump.
+    static let pageHeight: CGFloat = 330
+    /// The FX rack needs one extra control row for algorithms with discrete
+    /// modes. It replaces the global footer on that page rather than drawing
+    /// through it.
+    static let effectsPageHeight: CGFloat = 370
+}
+
+enum R50Palette {
+    static let chassisTop  = Color(white: 0.16)
+    static let chassisLow  = Color(white: 0.10)
+    static let panel       = Color(white: 0.19)
+    static let panelEdge   = Color(white: 0.30)
+    static let engrave     = Color(white: 0.62)
+    static let legend      = Color(white: 0.78)
+
+    static let glow        = Color(red: 0.35, green: 0.90, blue: 0.92)  // VFD cyan
+    static let glowDim     = Color(red: 0.20, green: 0.48, blue: 0.50)
+    static let accent      = Color(red: 0.95, green: 0.42, blue: 0.30)  // burnt orange
+    static let track       = Color(white: 0.09)
+}
+
+enum R50Type {
+    /// The badge face. Monospaced faces slash the zero — a terminal convention
+    /// that reads as a code listing, not as a fascia. Instrument panels of the
+    /// period were badged in tight grotesques with an unslashed, near-circular
+    /// zero, so the wordmark and its strapline are set in Helvetica Neue
+    /// Condensed, falling back through the plain cut to the system font on any
+    /// machine that lacks it.
+    static func wordmark(size: CGFloat) -> Font {
+        face(["HelveticaNeue-CondensedBlack", "HelveticaNeue-Bold"], size: size)
+            ?? .system(size: size, weight: .heavy)
+    }
+
+    static func strapline(size: CGFloat) -> Font {
+        face(["HelveticaNeue-CondensedBold", "HelveticaNeue-Medium"], size: size)
+            ?? .system(size: size, weight: .medium)
+    }
+
+    private static func face(_ names: [String], size: CGFloat) -> Font? {
+        for name in names where NSFont(name: name, size: size) != nil {
+            // fixedSize, not size: the fascia is laid out at fixed dimensions
+            // and scaled as a whole, so the badge must not also follow the
+            // host's text-size setting.
+            return .custom(name, fixedSize: size)
+        }
+        return nil
+    }
+}
+
+// MARK: - Chrome
+
+/// Titled panel with a hairline border and an engraved header rule.
+struct R50Panel<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .tracking(1.6)
+                .foregroundColor(R50Palette.engrave)
+            Rectangle()
+                .fill(R50Palette.panelEdge)
+                .frame(height: 1)
+            content
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 3)
+                .fill(R50Palette.panel)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(R50Palette.panelEdge, lineWidth: 1))
+        )
+    }
+}
+
+// MARK: - Value row
+
+/// A parameter as a digital readout: name, numeric value, and a bar showing
+/// where it sits in its range. Drag horizontally to change it, hold option for
+/// fine adjustment, double-click to reset.
+///
+/// This is a workstation, not an analogue emulation — the instrument reports
+/// values rather than implying them with a pointer angle, and a row of these
+/// packs far more into a panel than a row of knobs.
+struct R50Value: View {
+    let title: String
+    let address: R50Param
+    @ObservedObject var model: R50ParameterModel
+    var displayOverride: ((Float) -> String)? = nil
+
+    @State private var dragStart: Float?
+
+    private var param: AUParameter? { model.parameter(address) }
+    private var bipolar: Bool { (param?.minValue ?? 0) < 0 }
+
+    var body: some View {
+        let value = model.value(address)
+        let norm = CGFloat(normalized(value))
+
+        VStack(spacing: 3) {
+            HStack(spacing: 6) {
+                Text(title.uppercased())
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .tracking(0.7)
+                    .foregroundColor(R50Palette.engrave)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text(displayOverride?(value) ?? model.displayString(address))
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundColor(R50Palette.glow)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(R50Palette.track)
+                    if bipolar {
+                        // Bipolar values read from the centre, so a glance says
+                        // which side of zero the value is on.
+                        let centre = geo.size.width * 0.5
+                        Rectangle()
+                            .fill(R50Palette.glow)
+                            .frame(width: abs(norm - 0.5) * geo.size.width)
+                            .offset(x: norm >= 0.5 ? centre : norm * geo.size.width)
+                        Rectangle().fill(R50Palette.engrave.opacity(0.5))
+                            .frame(width: 1).offset(x: centre)
+                    } else {
+                        Rectangle().fill(R50Palette.glow)
+                            .frame(width: norm * geo.size.width)
+                    }
+                }
+            }
+            .frame(height: 5)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { drag in
+                    guard let param else { return }
+                    if dragStart == nil { dragStart = value }
+                    let start = dragStart ?? value
+                    let fine = NSEvent.modifierFlags.contains(.option) ? 0.25 : 1.0
+                    let delta = Float(drag.translation.width * fine / 180.0)
+                    let mapped = denormalized(
+                        min(max(normalized(start) + delta, 0), 1))
+                    param.setValue(param.unit == .indexed ? mapped.rounded() : mapped,
+                                   originator: nil)
+                    model.objectWillChange.send()
+                }
+                .onEnded { _ in dragStart = nil })
+        .onTapGesture(count: 2) {
+            if let param { param.setValue(resetValue, originator: nil) }
+            model.objectWillChange.send()
+        }
+    }
+
+    private var isLogarithmic: Bool {
+        param?.flags.contains(.flag_DisplayLogarithmic) ?? false
+    }
+
+    private var resetValue: Float {
+        guard let param else { return 0 }
+        return param.minValue < 0 ? 0 : param.minValue
+    }
+
+    private func normalized(_ value: Float) -> Float {
+        guard let param else { return 0 }
+        let lo = param.minValue, hi = param.maxValue
+        guard hi > lo else { return 0 }
+        guard value.isFinite else { return 0 }
+        if param.unit == .seconds && lo == 0 && hi > 1 {
+            // Delay, fade and the optional EG slope genuinely include Off.
+            // Give 0...1 second half the travel, then expand smoothly to max.
+            if value <= 1 { return 0.5 * min(max(value, 0), 1) }
+            let upper = min(max((value - 1) / (hi - 1), 0), 1)
+            return 0.5 + 0.5 * sqrt(upper)
+        }
+        if param.unit == .seconds && lo > 0 && lo < 1 && hi > 1 {
+            if value <= 1 {
+                return 0.5 * Float(log(Double(max(value, lo) / lo))
+                                   / log(Double(1 / lo)))
+            }
+            return 0.5 + 0.5 * Float(log(Double(value))
+                                     / log(Double(hi)))
+        }
+        if isLogarithmic && lo > 0 {
+            return Float(log(Double(value / lo)) / log(Double(hi / lo)))
+        }
+        return (value - lo) / (hi - lo)
+    }
+
+    private func denormalized(_ norm: Float) -> Float {
+        guard let param else { return 0 }
+        let lo = param.minValue, hi = param.maxValue
+        let position = norm.isFinite ? min(max(norm, 0), 1) : 0
+        if param.unit == .seconds && lo == 0 && hi > 1 {
+            if position <= 0.5 { return position * 2 }
+            let upper = (position - 0.5) * 2
+            return 1 + (hi - 1) * upper * upper
+        }
+        if param.unit == .seconds && lo > 0 && lo < 1 && hi > 1 {
+            if position <= 0.5 {
+                return lo * Float(pow(Double(1 / lo), Double(position * 2)))
+            }
+            return Float(pow(Double(hi), Double((position - 0.5) * 2)))
+        }
+        if isLogarithmic && lo > 0 {
+            return lo * Float(pow(Double(hi / lo), Double(position)))
+        }
+        return lo + position * (hi - lo)
+    }
+}
+
+/// A normalized AU storage parameter presented in an algorithm-specific
+/// physical domain. The host still automates 0...1, while the musician sees
+/// values such as 350 ms, -40%, 6.5 Hz, or 800 Hz.
+struct R50MappedValue: View {
+    let title: String
+    let address: R50Param
+    @ObservedObject var model: R50ParameterModel
+    let display: (Float) -> String
+
+    @State private var dragStart: Float?
+
+    var body: some View {
+        let value = min(max(model.value(address), 0), 1)
+        VStack(spacing: 3) {
+            HStack(spacing: 6) {
+                Text(title.uppercased())
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .tracking(0.7)
+                    .foregroundColor(R50Palette.engrave)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text(display(value))
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundColor(R50Palette.glow)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(R50Palette.track)
+                    Rectangle().fill(R50Palette.glow)
+                        .frame(width: CGFloat(value) * geo.size.width)
+                }
+            }
+            .frame(height: 5)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { drag in
+                    guard let parameter = model.parameter(address) else { return }
+                    if dragStart == nil { dragStart = value }
+                    let fine = NSEvent.modifierFlags.contains(.option) ? 0.25 : 1.0
+                    let next = min(max((dragStart ?? value)
+                        + Float(drag.translation.width * fine / 180.0), 0), 1)
+                    parameter.setValue(next, originator: nil)
+                    model.objectWillChange.send()
+                }
+                .onEnded { _ in dragStart = nil })
+        .onTapGesture(count: 2) {
+            model.parameter(address)?.setValue(0.5, originator: nil)
+            model.objectWillChange.send()
+        }
+    }
+}
+
+// MARK: - Envelope display
+
+/// Plots the EG so its shape is readable at a glance. Seven numbers do not say
+/// what an envelope does; the curve does, and the break point in particular is
+/// hard to picture from a list of values.
+struct R50EnvelopeGraph: View {
+    let attack: R50Param
+    let attackLevel: R50Param
+    let decay: R50Param
+    let breakPoint: R50Param
+    let slope: R50Param
+    let sustain: R50Param
+    let release: R50Param
+    @ObservedObject var model: R50ParameterModel
+
+    /// Envelope vertices as (cumulative time, level). Built outside the view
+    /// body: Swift's type checker gives up on a tuple-array ternary this size
+    /// inside a ViewBuilder.
+    private struct Shape {
+        var points: [CGPoint] = []      // x = seconds, y = level
+        var total: Float = 1
+    }
+
+    private func shape() -> Shape {
+        let attackTime = model.value(attack)
+        let decayTime = model.value(decay)
+        let slopeTime = model.value(slope)
+        let releaseTime = model.value(release)
+        let peak = model.value(attackLevel)
+        let breakLevel = model.value(breakPoint)
+        let sustainLevel = model.value(sustain)
+
+        // Slope at the minimum disables the break stage, exactly as the engine
+        // does, so the plot shows what will actually be heard.
+        let breakActive = slopeTime > 0.0015
+        let span = attackTime + decayTime + slopeTime + releaseTime
+        let hold = max(0.15 * span, 0.08)
+
+        var segments: [(Float, Float)] = [(0, 0), (attackTime, peak)]
+        if breakActive {
+            segments.append((decayTime, breakLevel))
+            segments.append((slopeTime, sustainLevel))
+        } else {
+            segments.append((decayTime, sustainLevel))
+        }
+        segments.append((hold, sustainLevel))
+        segments.append((releaseTime, 0))
+
+        var result = Shape()
+        var t: Float = 0
+        for segment in segments {
+            t += segment.0
+            result.points.append(CGPoint(x: CGFloat(t), y: CGFloat(segment.1)))
+        }
+        result.total = max(t, 0.0001)
+        return result
+    }
+
+    var body: some View {
+        let plot = shape()
+        return GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+
+            Path { path in
+                for (index, point) in plot.points.enumerated() {
+                    let x = point.x / CGFloat(plot.total) * w
+                    let y = h - point.y * (h - 4) - 2
+                    if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                    else { path.addLine(to: CGPoint(x: x, y: y)) }
+                }
+            }
+            .stroke(R50Palette.glow, lineWidth: 1.5)
+
+            // Node markers, as on the hardware displays this follows.
+            ForEach(Array(plot.points.enumerated()), id: \.offset) { _, point in
+                Rectangle()
+                    .fill(R50Palette.legend)
+                    .frame(width: 4, height: 4)
+                    .position(x: point.x / CGFloat(plot.total) * w,
+                              y: h - point.y * (h - 4) - 2)
+            }
+        }
+        .background(R50Palette.track)
+        .overlay(Rectangle().stroke(Color(white: 0.28), lineWidth: 1))
+    }
+}
+
+// MARK: - Knob
+
+/// Rotary control. Vertical drag changes the value; ⌥-drag is a fine adjust and
+/// double-click returns the parameter to its Init value.
+struct R50Knob: View {
+    let title: String
+    let address: R50Param
+    @ObservedObject var model: R50ParameterModel
+
+    @State private var dragStart: Float?
+
+    private var param: AUParameter? { model.parameter(address) }
+
+    var body: some View {
+        let value = model.value(address)
+        let norm  = normalized(value)
+
+        VStack(spacing: 5) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [Color(white: 0.26), Color(white: 0.13)],
+                        startPoint: .top, endPoint: .bottom))
+                    .overlay(Circle().stroke(Color(white: 0.34), lineWidth: 1))
+
+                // Value arc: 240° sweep starting at the lower-left.
+                Circle()
+                    .trim(from: 0, to: 0.666 * CGFloat(norm))
+                    .stroke(R50Palette.glow, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(138))
+                    .padding(-5)
+
+                // Pointer.
+                Rectangle()
+                    .fill(R50Palette.legend)
+                    .frame(width: 2, height: 13)
+                    .offset(y: -8)
+                    .rotationEffect(.degrees(-120 + 240 * Double(norm)))
+            }
+            .frame(width: 42, height: 42)
+            .contentShape(Circle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        guard let param else { return }
+                        let start = dragStart ?? value
+                        if dragStart == nil { dragStart = value }
+                        let fine = NSEvent.modifierFlags.contains(.option) ? 0.25 : 1.0
+                        let delta = Float(-drag.translation.height * fine / 160.0)
+                        let target = normalized(start) + delta
+                        let mapped = denormalized(min(max(target, 0), 1))
+                        param.setValue(param.unit == .indexed ? mapped.rounded() : mapped,
+                                       originator: nil)
+                        model.objectWillChange.send()
+                    }
+                    .onEnded { _ in dragStart = nil })
+            .onTapGesture(count: 2) {
+                if let param { param.setValue(initValue, originator: nil) }
+                model.objectWillChange.send()
+            }
+
+            Text(title.uppercased())
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .tracking(0.8)
+                .foregroundColor(R50Palette.engrave)
+            Text(model.displayString(address))
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundColor(R50Palette.glow)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .frame(width: 64)
+    }
+
+    // MARK: Value mapping
+
+    private var isLogarithmic: Bool {
+        param?.flags.contains(.flag_DisplayLogarithmic) ?? false
+    }
+
+    /// Init values live in the tree's declared defaults; re-reading them here
+    /// would need a second copy, so double-click uses the range midpoint for
+    /// bipolar controls and the minimum otherwise — predictable and cheap.
+    private var initValue: Float {
+        guard let param else { return 0 }
+        return param.minValue < 0 ? 0 : param.minValue
+    }
+
+    private func normalized(_ value: Float) -> Float {
+        guard let param else { return 0 }
+        let lo = param.minValue, hi = param.maxValue
+        guard hi > lo else { return 0 }
+        if isLogarithmic && lo > 0 {
+            return Float(log(Double(value / lo)) / log(Double(hi / lo)))
+        }
+        return (value - lo) / (hi - lo)
+    }
+
+    private func denormalized(_ norm: Float) -> Float {
+        guard let param else { return 0 }
+        let lo = param.minValue, hi = param.maxValue
+        if isLogarithmic && lo > 0 {
+            return lo * Float(pow(Double(hi / lo), Double(norm)))
+        }
+        return lo + norm * (hi - lo)
+    }
+}
+
+// MARK: - Selector
+
+/// Segmented switch for indexed parameters.
+struct R50Selector: View {
+    let title: String
+    let address: R50Param
+    let options: [String]
+    @ObservedObject var model: R50ParameterModel
+
+    var body: some View {
+        let current = Int(model.value(address).rounded())
+
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title.uppercased())
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .tracking(0.8)
+                .foregroundColor(R50Palette.engrave)
+
+            HStack(spacing: 1) {
+                ForEach(Array(options.enumerated()), id: \.offset) { index, label in
+                    let selected = index == current
+                    Text(label)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundColor(selected ? Color.black : R50Palette.legend)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 5)
+                        .background(selected ? R50Palette.glow : Color(white: 0.13))
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            model.parameter(address)?
+                                .setValue(Float(index), originator: nil)
+                            model.objectWillChange.send()
+                        }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color(white: 0.32), lineWidth: 1))
+        }
+    }
+}
+
+// MARK: - Wave grid
+
+/// Indexed-parameter picker for lists too long for a single segmented row.
+/// Lays the options out as a fixed-column grid of short labels.
+struct R50WaveGrid: View {
+    let title: String
+    let address: R50Param
+    let options: [String]
+    let columns: Int
+    @ObservedObject var model: R50ParameterModel
+
+    var body: some View {
+        let current = Int(model.value(address).rounded())
+        let rows = Int(ceil(Double(options.count) / Double(columns)))
+
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title.uppercased())
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .tracking(0.8)
+                .foregroundColor(R50Palette.engrave)
+
+            VStack(spacing: 1) {
+                ForEach(0..<rows, id: \.self) { row in
+                    HStack(spacing: 1) {
+                        ForEach(0..<columns, id: \.self) { column in
+                            let index = row * columns + column
+                            if index < options.count {
+                                cell(options[index], index: index,
+                                     selected: index == current)
+                            } else {
+                                Color.clear.frame(maxWidth: .infinity)
+                            }
+                        }
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color(white: 0.32), lineWidth: 1))
+        }
+    }
+
+    private func cell(_ label: String, index: Int, selected: Bool) -> some View {
+        Text(label)
+            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+            .foregroundColor(selected ? Color.black : R50Palette.legend)
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background(selected ? R50Palette.glow : Color(white: 0.13))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                model.parameter(address)?.setValue(Float(index), originator: nil)
+                model.objectWillChange.send()
+            }
+    }
+}
+
+// MARK: - Name selector
+
+/// Readout plus steppers for an indexed parameter whose list is too long to
+/// show as buttons — waves today, sample instruments as soon as a user imports
+/// a few. The name is always visible, which a grid of abbreviated buttons
+/// cannot promise once the list grows.
+///
+/// A custom button and popover rather than the system Menu, matching Hybrid 8's
+/// note that macOS overrides Menu's label styling and breaks the fascia look.
+struct R50NameSelector: View {
+    let title: String
+    let address: R50Param
+    let names: [String]
+    @ObservedObject var model: R50ParameterModel
+
+    @State private var showingList = false
+
+    private var index: Int {
+        min(max(Int(model.value(address).rounded()), 0), max(names.count - 1, 0))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if !title.isEmpty {
+                Text(title.uppercased())
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundColor(R50Palette.engrave)
+            }
+
+            HStack(spacing: 2) {
+                stepper("◀") { step(-1) }
+
+                Button { showingList.toggle() } label: {
+                    HStack(spacing: 4) {
+                        Text(names.isEmpty ? "—" : names[index])
+                            .font(.system(size: 10, weight: .semibold,
+                                          design: .monospaced))
+                            .foregroundColor(R50Palette.glow)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Spacer(minLength: 2)
+                        Text("▾")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(R50Palette.engrave)
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 5)
+                    .frame(maxWidth: .infinity)
+                    .background(R50Palette.track)
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showingList, arrowEdge: .bottom) {
+                    listPopover
+                }
+
+                stepper("▶") { step(1) }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .overlay(RoundedRectangle(cornerRadius: 2)
+                .stroke(Color(white: 0.32), lineWidth: 1))
+        }
+    }
+
+    private var listPopover: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(Array(names.enumerated()), id: \.offset) { offset, name in
+                    let selected = offset == index
+                    Text(name)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(selected ? Color.black : R50Palette.legend)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(selected ? R50Palette.glow : Color.clear)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            select(offset)
+                            showingList = false
+                        }
+                }
+            }
+            .padding(4)
+        }
+        .frame(width: 190, height: min(CGFloat(names.count) * 26 + 12, 320))
+        .background(Color(white: 0.13))
+    }
+
+    private func stepper(_ glyph: String, action: @escaping () -> Void) -> some View {
+        Text(glyph)
+            .font(.system(size: 8, weight: .bold))
+            .foregroundColor(R50Palette.legend)
+            .frame(width: 18)
+            .padding(.vertical, 5)
+            .background(Color(white: 0.15))
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+    }
+
+    private func step(_ delta: Int) {
+        guard !names.isEmpty else { return }
+        select((index + delta + names.count) % names.count)
+    }
+
+    private func select(_ newIndex: Int) {
+        model.parameter(address)?.setValue(Float(newIndex), originator: nil)
+        model.objectWillChange.send()
+    }
+}
+
+// MARK: - Meter
+
+struct R50Meter: View {
+    let level: Float
+
+    var body: some View {
+        let clamped = CGFloat(min(max(level, 0), 1))
+        HStack(spacing: 6) {
+            Text("OUT")
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .foregroundColor(R50Palette.engrave)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(R50Palette.track)
+                    Rectangle()
+                        .fill(LinearGradient(
+                            colors: [R50Palette.glowDim, R50Palette.glow,
+                                     R50Palette.accent],
+                            startPoint: .leading, endPoint: .trailing))
+                        .frame(width: geo.size.width * clamped)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 1))
+                .overlay(RoundedRectangle(cornerRadius: 1)
+                    .stroke(Color(white: 0.30), lineWidth: 1))
+            }
+            .frame(width: 110, height: 8)
+        }
+    }
+}

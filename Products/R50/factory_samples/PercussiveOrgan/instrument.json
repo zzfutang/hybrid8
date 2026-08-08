@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.percussive_organ",
+  "name": "Percussive Organ",
+  "zones": [
+    {
+      "id": "g1",
+      "file": "B3 G3.wav",
+      "rootKey": 31,
+      "lowKey": 0,
+      "highKey": 33
+    },
+    {
+      "id": "c2",
+      "file": "B3 C4.wav",
+      "rootKey": 36,
+      "lowKey": 34,
+      "highKey": 37
+    },
+    {
+      "id": "d2",
+      "file": "B3 D4.wav",
+      "rootKey": 38,
+      "lowKey": 38,
+      "highKey": 39
+    },
+    {
+      "id": "e2",
+      "file": "B3 E4.wav",
+      "rootKey": 40,
+      "lowKey": 40,
+      "highKey": 42
+    },
+    {
+      "id": "gs2",
+      "file": "B3 G#4.wav",
+      "rootKey": 44,
+      "lowKey": 43,
+      "highKey": 44
+    },
+    {
+      "id": "a2",
+      "file": "B3 A3.wav",
+      "rootKey": 45,
+      "lowKey": 45,
+      "highKey": 46
+    },
+    {
+      "id": "b2",
+      "file": "B3 B4.wav",
+      "rootKey": 47,
+      "lowKey": 47,
+      "highKey": 48
+    },
+    {
+      "id": "d3",
+      "file": "B3 D5.wav",
+      "rootKey": 50,
+      "lowKey": 49,
+      "highKey": 53
+    },
+    {
+      "id": "gs3",
+      "file": "B3 G#5.wav",
+      "rootKey": 56,
+      "lowKey": 54,
+      "highKey": 58
+    },
+    {
+      "id": "c4",
+      "file": "B3 C6.wav",
+      "rootKey": 60,
+      "lowKey": 59,
+      "highKey": 61
+    },
+    {
+      "id": "ds4",
+      "file": "B3 D#6.wav",
+      "rootKey": 63,
+      "lowKey": 62,
+      "highKey": 65
+    },
+    {
+      "id": "gs4",
+      "file": "B3 G#6.wav",
+      "rootKey": 68,
+      "lowKey": 66,
+      "highKey": 70
+    },
+    {
+      "id": "c5",
+      "file": "B3 C7.wav",
+      "rootKey": 72,
+      "lowKey": 71,
+      "highKey": 73
+    },
+    {
+      "id": "ds5",
+      "file": "B3 D#7.wav",
+      "rootKey": 75,
+      "lowKey": 74,
+      "highKey": 76
+    },
+    {
+      "id": "f5",
+      "file": "B3 F7.wav",
+      "rootKey": 77,
+      "lowKey": 77,
+      "highKey": 78
+    },
+    {
+      "id": "g5",
+      "file": "B3 G7.wav",
+      "rootKey": 79,
+      "lowKey": 79,
+      "highKey": 127
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.trumpet",
+  "name": "Trumpet",
+  "zones": [
+    {
+      "id": "e4",
+      "file": "tp_e3.wav",
+      "rootKey": 64,
+      "lowKey": 0,
+      "highKey": 65
+    },
+    {
+      "id": "g4",
+      "file": "tp_g3.wav",
+      "rootKey": 67,
+      "lowKey": 66,
+      "highKey": 69
+    },
+    {
+      "id": "c5",
+      "file": "tp_c4.wav",
+      "rootKey": 72,
+      "lowKey": 70,
+      "highKey": 75
+    },
+    {
+      "id": "g5",
+      "file": "tp_g4.wav",
+      "rootKey": 79,
+      "lowKey": 76,
+      "highKey": 83
+    },
+    {
+      "id": "e6",
+      "file": "tp_e5.wav",
+      "rootKey": 88,
+      "lowKey": 84,
+      "highKey": 92
+    },
+    {
+      "id": "c7",
+      "file": "tp_c6.wav",
+      "rootKey": 96,
+      "lowKey": 93,
+      "highKey": 127
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.nylon_guitar_multisample",
+  "name": "Nylon Guitar",
+  "zones": [
+    {
+      "id": "e2",
+      "file": "Nylon E3.wav",
+      "rootKey": 40,
+      "lowKey": 0,
+      "highKey": 42
+    },
+    {
+      "id": "a2",
+      "file": "Nylon A3.wav",
+      "rootKey": 45,
+      "lowKey": 43,
+      "highKey": 47
+    },
+    {
+      "id": "d3",
+      "file": "Nylon D4.wav",
+      "rootKey": 50,
+      "lowKey": 48,
+      "highKey": 52
+    },
+    {
+      "id": "g3",
+      "file": "Nylon G4.wav",
+      "rootKey": 55,
+      "lowKey": 53,
+      "highKey": 57,
+      "tuneCents": 13
+    },
+    {
+      "id": "b3",
+      "file": "Nylon B4.wav",
+      "rootKey": 59,
+      "lowKey": 58,
+      "highKey": 61
+    },
+    {
+      "id": "e4",
+      "file": "Nylon E5.wav",
+      "rootKey": 64,
+      "lowKey": 62,
+      "highKey": 66
+    },
+    {
+      "id": "a4",
+      "file": "Nylon A5.wav",
+      "rootKey": 69,
+      "lowKey": 67,
+      "highKey": 72
+    },
+    {
+      "id": "e5",
+      "file": "Nylon E6.wav",
+      "rootKey": 76,
+      "lowKey": 73,
+      "highKey": 79,
+      "tuneCents": -12
+    },
+    {
+      "id": "b5",
+      "file": "Nylon B6.wav",
+      "rootKey": 83,
+      "lowKey": 80,
+      "highKey": 127
+    }
+  ]
+}

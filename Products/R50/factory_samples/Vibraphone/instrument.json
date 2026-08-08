@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.vibraphone",
+  "name": "Vibraphone",
+  "zones": [
+    {
+      "id": "a3",
+      "file": "Vibraphone A4.wav",
+      "rootKey": 57,
+      "lowKey": 0,
+      "highKey": 60
+    },
+    {
+      "id": "ds4",
+      "file": "Vibraphone D#5.wav",
+      "rootKey": 63,
+      "lowKey": 61,
+      "highKey": 64
+    },
+    {
+      "id": "fs4",
+      "file": "Vibraphone F#5.wav",
+      "rootKey": 66,
+      "lowKey": 65,
+      "highKey": 68
+    },
+    {
+      "id": "b4",
+      "file": "Vibraphone B5.wav",
+      "rootKey": 71,
+      "lowKey": 69,
+      "highKey": 74
+    },
+    {
+      "id": "fs5",
+      "file": "Vibraphone F#6.wav",
+      "rootKey": 78,
+      "lowKey": 75,
+      "highKey": 79
+    },
+    {
+      "id": "a5",
+      "file": "Vibraphone A6.wav",
+      "rootKey": 81,
+      "lowKey": 80,
+      "highKey": 83
+    },
+    {
+      "id": "cs6",
+      "file": "Vibraphone C#7.wav",
+      "rootKey": 85,
+      "lowKey": 84,
+      "highKey": 86
+    },
+    {
+      "id": "e6",
+      "file": "Vibraphone E7.wav",
+      "rootKey": 88,
+      "lowKey": 87,
+      "highKey": 91
+    },
+    {
+      "id": "as6",
+      "file": "Vibraphone A#7.wav",
+      "rootKey": 94,
+      "lowKey": 92,
+      "highKey": 95
+    },
+    {
+      "id": "c7",
+      "file": "Vibraphone C8.wav",
+      "rootKey": 96,
+      "lowKey": 96,
+      "highKey": 97
+    },
+    {
+      "id": "ds7",
+      "file": "Vibraphone D#8.wav",
+      "rootKey": 99,
+      "lowKey": 98,
+      "highKey": 101
+    },
+    {
+      "id": "g7",
+      "file": "Vibraphone G8.wav",
+      "rootKey": 103,
+      "lowKey": 102,
+      "highKey": 105
+    },
+    {
+      "id": "b7",
+      "file": "Vibraphone B8.wav",
+      "rootKey": 107,
+      "lowKey": 106,
+      "highKey": 127
+    }
+  ]
+}

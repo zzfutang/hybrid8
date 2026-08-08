@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "id": "factory.cello",
+  "name": "Cello",
+  "zones": [
+    {
+      "id": "cs2",
+      "file": "Cello C#3.wav",
+      "rootKey": 37,
+      "lowKey": 0,
+      "highKey": 38
+    },
+    {
+      "id": "e2",
+      "file": "Cello E3.wav",
+      "rootKey": 40,
+      "lowKey": 39,
+      "highKey": 41
+    },
+    {
+      "id": "g2",
+      "file": "Cello G3.wav",
+      "rootKey": 43,
+      "lowKey": 42,
+      "highKey": 44
+    },
+    {
+      "id": "as2",
+      "file": "Cello A#3.wav",
+      "rootKey": 46,
+      "lowKey": 45,
+      "highKey": 47
+    },
+    {
+      "id": "cs3",
+      "file": "Cello C#4.wav",
+      "rootKey": 49,
+      "lowKey": 48,
+      "highKey": 50
+    },
+    {
+      "id": "e3",
+      "file": "Cello E4.wav",
+      "rootKey": 52,
+      "lowKey": 51,
+      "highKey": 53
+    },
+    {
+      "id": "g3",
+      "file": "Cello G4.wav",
+      "rootKey": 55,
+      "lowKey": 54,
+      "highKey": 56
+    },
+    {
+      "id": "as3",
+      "file": "Cello A#4.wav",
+      "rootKey": 58,
+      "lowKey": 57,
+      "highKey": 59
+    },
+    {
+      "id": "cs4",
+      "file": "Cello C#5.wav",
+      "rootKey": 61,
+      "lowKey": 60,
+      "highKey": 62
+    },
+    {
+      "id": "e4",
+      "file": "Cello E5.wav",
+      "rootKey": 64,
+      "lowKey": 63,
+      "highKey": 65
+    },
+    {
+      "id": "g4",
+      "file": "Cello G5.wav",
+      "rootKey": 67,
+      "lowKey": 66,
+      "highKey": 68
+    },
+    {
+      "id": "as4",
+      "file": "Cello A#5.wav",
+      "rootKey": 70,
+      "lowKey": 69,
+      "highKey": 71
+    },
+    {
+      "id": "cs5",
+      "file": "Cello C#6.wav",
+      "rootKey": 73,
+      "lowKey": 72,
+      "highKey": 74
+    },
+    {
+      "id": "e5",
+      "file": "Cello E6.wav",
+      "rootKey": 76,
+      "lowKey": 75,
+      "highKey": 77
+    },
+    {
+      "id": "g5",
+      "file": "Cello G6.wav",
+      "rootKey": 79,
+      "lowKey": 78,
+      "highKey": 83
+    },
+    {
+      "id": "e6",
+      "file": "Cello E7.wav",
+      "rootKey": 88,
+      "lowKey": 84,
+      "highKey": 127
+    }
+  ]
+}

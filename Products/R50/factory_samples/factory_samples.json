@@ -1,0 +1,158 @@
+{
+  "instruments": [
+    {
+      "name": "Glass Pad",
+      "id": "factory.glass_pad",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "glass_pad_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "name": "Spectrum 1",
+      "id": "factory.spectrum_1",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "spectrum_1_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "name": "Spectrum 2",
+      "id": "factory.spectrum_2",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "spectrum_2_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "name": "Spectrum 3",
+      "id": "factory.spectrum_3",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "spectrum_3_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "name": "Spectrum 4",
+      "id": "factory.spectrum_4",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "spectrum_4_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "name": "Spectrum 5",
+      "id": "factory.spectrum_5",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "spectrum_5_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "name": "Spectrum 6",
+      "id": "factory.spectrum_6",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "spectrum_6_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "name": "Spectrum 7",
+      "id": "factory.spectrum_7",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "spectrum_7_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "name": "Spectrum 8",
+      "id": "factory.spectrum_8",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "spectrum_8_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "name": "Spectrum 9",
+      "id": "factory.spectrum_9",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "spectrum_9_z1.wav",
+          "rootKey": 54,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "name": "Anvil",
+      "id": "factory.anvil",
+      "zones": [
+        {
+          "id": "z1",
+          "file": "anvil.wav",
+          "rootKey": 60,
+          "lowKey": 0,
+          "highKey": 127,
+          "loop": false
+        }
+      ]
+    }
+  ]
+}

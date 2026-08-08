@@ -4,5 +4,6 @@
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
-clang++ -std=c++17 -O2 Tests/test_dsp.cpp -o /tmp/hybrid8_test_dsp
+clang++ -std=c++17 -O2 -I Shared/DSPCore -I Products/R50/DSP \
+  Tests/test_dsp.cpp -o /tmp/hybrid8_test_dsp
 /tmp/hybrid8_test_dsp

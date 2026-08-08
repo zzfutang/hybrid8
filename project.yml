@@ -16,6 +16,15 @@ schemes:
       config: Debug
     archive:
       config: Release
+  R50:
+    build:
+      targets:
+        R50: all
+        R50Extension: all
+    run:
+      config: Debug
+    archive:
+      config: Release
 
 settings:
   base:
@@ -81,6 +90,74 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: Extension/Extension-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - "$(SRCROOT)/Extension"
+          - "$(SRCROOT)/Shared/DSPCore"
+        # AUv3 extension boilerplate.
+        SKIP_INSTALL: "YES"
+
+  # ------------------------------------------------------------- R50 App ---
+  # R50 is a separate product: its own app, its own appex, its own DSP and UI.
+  # It shares only Shared/ (header-only DSP core, performance keyboard, host
+  # value types) — nothing under Extension/ or Products/Hybrid8/.
+  R50:
+    type: application
+    platform: macOS
+    sources:
+      - path: Products/R50/App
+        excludes:
+          - "Info.plist"
+          - "*.entitlements"
+      - path: Shared/PerformanceKeyboard
+      - path: Shared/InstrumentHost
+    settings:
+      base:
+        PRODUCT_NAME: R50
+        PRODUCT_BUNDLE_IDENTIFIER: com.johangorsjo.R50
+        INFOPLIST_FILE: Products/R50/App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Products/R50/App/App.entitlements
+        GENERATE_INFOPLIST_FILE: "NO"
+        COMBINE_HIDPI_IMAGES: "YES"
+    dependencies:
+      - target: R50Extension
+        embed: true
+        codeSign: true
+
+  # -------------------------------------------------- R50 AUv3 Extension ---
+  R50Extension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Products/R50/Extension
+        excludes:
+          - "Info.plist"
+          - "*.entitlements"
+      - path: Products/R50/DSP
+      - path: Shared/PerformanceKeyboard/MusicalTypingStateMachine.swift
+      # The controller (and the event types it dispatches) run inside the
+      # extension too: the AUv3 editor is a separate view-service process, so
+      # standalone musical typing has to be handled here as well.
+      - path: Shared/PerformanceKeyboard/MusicalTypingController.swift
+      - path: Shared/PerformanceKeyboard/MIDIEvent.swift
+      # A folder reference, so the whole directory is copied into the bundle's
+      # Resources and adding a WAV needs no project change.
+      - path: Products/R50/Samples
+        type: folder
+      - path: Products/R50/factory_samples
+        type: folder
+      # Factory presets as JSON patch documents; when non-empty this IS the
+      # factory bank (see R50FactoryPresets.fileBank).
+      - path: Products/R50/factory_presets
+        type: folder
+    settings:
+      base:
+        PRODUCT_NAME: R50Extension
+        PRODUCT_BUNDLE_IDENTIFIER: com.johangorsjo.R50.AUv3
+        INFOPLIST_FILE: Products/R50/Extension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Products/R50/Extension/Extension.entitlements
+        GENERATE_INFOPLIST_FILE: "NO"
+        SWIFT_OBJC_BRIDGING_HEADER: Products/R50/Extension/R50-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/Products/R50/Extension"
+          - "$(SRCROOT)/Products/R50/DSP"
           - "$(SRCROOT)/Shared/DSPCore"
         # AUv3 extension boilerplate.
         SKIP_INSTALL: "YES"
