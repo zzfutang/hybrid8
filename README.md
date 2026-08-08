@@ -101,6 +101,19 @@ output meter. Hovering any control also flips its label to its live value.
   sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
   ```
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`) — generates the project.
+- **[Git LFS](https://git-lfs.com) (`brew install git-lfs`) — required before cloning.**
+  R50's factory sample library (378 WAVs, ~68 MB) is tracked in LFS. Without the
+  filter installed those files clone as small pointer text rather than audio, and
+  because they look present the failure is confusing: R50 ships no sound, and the
+  shipped-multisample tests in `Tests/test_r50.cpp` fail on unreadable WAVs.
+
+  ```sh
+  brew install git-lfs && git lfs install     # once per machine, before cloning
+  git clone https://github.com/zzfutang/hybrid8.git
+  ```
+
+  Already cloned without it? Install as above, then `git lfs pull` to replace the
+  pointers with the real audio. `git lfs ls-files | wc -l` should report 378.
 
 ## Build & install
 
