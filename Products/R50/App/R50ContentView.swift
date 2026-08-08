@@ -5,25 +5,24 @@ struct R50ContentView: View {
     @ObservedObject var host: R50AudioUnitHost
 
     var body: some View {
-        GeometryReader { geo in
+        ZStack(alignment: .topLeading) {
             // Invisible key sink: consumes the plain keys musical typing uses
             // so the window's own keyDown never answers them with the beep.
             MusicalTypingKeyCatcher()
                 .frame(width: 0, height: 0)
-            // Mirror the AU editor's fixed canvas without importing extension
-            // UI sources into the standalone host target.
-            let editorAspect: CGFloat = 1180.0 / 470.0
-            let editorHeight = min(
-                max(380, geo.size.width / editorAspect),
-                max(380, geo.size.height - 146))
+            // Hand the editor the room and let it fit its own fascia to it,
+            // exactly as Hybrid8's host does. Restating the fascia's aspect
+            // here and clamping the height to it made the canvas wider than
+            // the space it was drawn into, so the panel sat off-centre and
+            // clipped on the right edge.
             VStack(spacing: 0) {
                 if let viewController = host.viewController {
                     R50AUViewRepresentable(viewController: viewController)
-                        .frame(height: editorHeight)
+                        .frame(minHeight: 380)
                 } else {
                     Text(host.product.name)
                         .font(.largeTitle.bold())
-                        .frame(maxWidth: .infinity, minHeight: editorHeight)
+                        .frame(maxWidth: .infinity, minHeight: 380)
                         .background(Color(white: 0.10))
                 }
 
@@ -39,7 +38,6 @@ struct R50ContentView: View {
                 .padding(.vertical, 4)
 
                 PerformanceKeyboardView(sink: host)
-                Spacer(minLength: 0)
             }
         }
     }

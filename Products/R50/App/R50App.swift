@@ -14,9 +14,13 @@ struct R50App: App {
     var body: some Scene {
         WindowGroup("R50") {
             R50ContentView(host: host)
-                .frame(minWidth: 720, minHeight: 520)
+                .frame(minWidth: 900, minHeight: 460)
         }
-        .defaultSize(width: 960, height: 720)
+        // Same width as Hybrid8's window. The height is the 680-point fascia
+        // plus the status line and performance keyboard beneath it, so the
+        // editor opens at 1:1 rather than being scaled down, and no empty
+        // chassis band is left between the panels and the keyboard.
+        .defaultSize(width: 1700, height: 836)
         .windowResizability(.automatic)
     }
 }

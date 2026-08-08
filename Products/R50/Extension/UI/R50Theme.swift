@@ -12,18 +12,44 @@ import AudioToolbox
 import SwiftUI
 
 enum R50Layout {
-    static let width: CGFloat  = 1180
+    /// Matches Hybrid8's fascia width so the two plugins present the same
+    /// editor footprint in a host.
+    static let width: CGFloat  = 1700
     // Header + tallest page + padding. Keeping the old 545-point prototype
     // height left an empty band below every page.
-    static let height: CGFloat = 470
+    static let height: CGFloat = 680
+    /// Uniform fascia padding, subtracted from `width` to get the space a page
+    /// row actually has to divide up.
+    static let padding: CGFloat = 16
+    static var contentWidth: CGFloat { width - padding * 2 }
+
+    /// The pages were laid out against a 1180-point fascia. Their panel widths
+    /// are still expressed in those original numbers and converted through
+    /// here, so widening the fascia spreads the panels out rather than
+    /// magnifying every glyph: type sizes and row heights stay put while the
+    /// panels themselves get the new room.
+    private static let designWidth: CGFloat = 1180
+    static func span(_ designPanelWidth: CGFloat) -> CGFloat {
+        designPanelWidth / (designWidth - padding * 2) * contentWidth
+    }
     /// Every page occupies exactly this much vertical space. Without a fixed
     /// page area the pages have different intrinsic heights, and switching
     /// tabs re-centres the whole fascia — the header and footer visibly jump.
-    static let pageHeight: CGFloat = 330
+    static let pageHeight: CGFloat = 475
     /// The FX rack needs one extra control row for algorithms with discrete
     /// modes. It replaces the global footer on that page rather than drawing
     /// through it.
-    static let effectsPageHeight: CGFloat = 370
+    static let effectsPageHeight: CGFloat = 533
+}
+
+extension View {
+    /// Sizes one panel in a page row. The argument is the panel's width in the
+    /// original 1180-point design; it becomes a proportional floor, and the
+    /// panel then absorbs its share of whatever the row has left over, so a
+    /// row fills the fascia edge to edge instead of trailing off into chassis.
+    func spread(_ designPanelWidth: CGFloat) -> some View {
+        frame(minWidth: R50Layout.span(designPanelWidth), maxWidth: .infinity)
+    }
 }
 
 enum R50Palette {
@@ -57,6 +83,42 @@ enum R50Type {
             ?? .system(size: size, weight: .medium)
     }
 
+    // MARK: The control type scale
+    //
+    // One size per job, so a control reads the same on every page. These were
+    // previously chosen per call site, which left clickable labels at 7, 8, 9,
+    // 10 and 11 point and the two dropdowns disagreeing with each other.
+
+    /// A panel's header.
+    static let panelTitle = Font.system(size: 13, weight: .semibold,
+                                        design: .monospaced)
+    /// The caption naming a control, and any row label.
+    static let label = Font.system(size: 11, weight: .medium, design: .monospaced)
+    /// A value the instrument reports back.
+    static let value = Font.system(size: 13, weight: .semibold,
+                                   design: .monospaced)
+    /// Anything clickable that carries a word: segments, tabs, chips, buttons.
+    static let control = Font.system(size: 13, weight: .semibold,
+                                     design: .monospaced)
+    /// The current selection shown on a dropdown's face.
+    static let readout = Font.system(size: 14, weight: .semibold,
+                                     design: .monospaced)
+    /// A row inside a dropdown's list.
+    static let listRow = Font.system(size: 14, weight: .medium,
+                                     design: .monospaced)
+    /// A stepper arrow flanking a dropdown.
+    static let stepper = Font.system(size: 13, weight: .bold)
+    /// The disclosure caret on a dropdown's face.
+    static let disclosure = Font.system(size: 11, weight: .bold)
+    /// A heading grouping rows inside a panel or a list. Distinct from
+    /// `control`: it names a group, it is not something you click.
+    static let heading = Font.system(size: 11, weight: .bold,
+                                     design: .monospaced)
+    /// Explanatory prose under a control.
+    static let note = Font.system(size: 11, weight: .medium, design: .monospaced)
+    /// The smallest legends — state pills and meter captions.
+    static let micro = Font.system(size: 10, weight: .bold, design: .monospaced)
+
     private static func face(_ names: [String], size: CGFloat) -> Font? {
         for name in names where NSFont(name: name, size: size) != nil {
             // fixedSize, not size: the fascia is laid out at fixed dimensions
@@ -76,9 +138,9 @@ struct R50Panel<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 13) {
             Text(title.uppercased())
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(R50Type.panelTitle)
                 .tracking(1.6)
                 .foregroundColor(R50Palette.engrave)
             Rectangle()
@@ -87,7 +149,7 @@ struct R50Panel<Content: View>: View {
             content
             Spacer(minLength: 0)
         }
-        .padding(12)
+        .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 3)
@@ -123,16 +185,16 @@ struct R50Value: View {
         let value = model.value(address)
         let norm = CGFloat(normalized(value))
 
-        VStack(spacing: 3) {
-            HStack(spacing: 6) {
+        VStack(spacing: 4) {
+            HStack(spacing: 8) {
                 Text(title.uppercased())
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .font(R50Type.label)
                     .tracking(0.7)
                     .foregroundColor(R50Palette.engrave)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Text(displayOverride?(value) ?? model.displayString(address))
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(R50Type.value)
                     .foregroundColor(R50Palette.glow)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -157,9 +219,9 @@ struct R50Value: View {
                     }
                 }
             }
-            .frame(height: 5)
+            .frame(height: 7)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -252,16 +314,16 @@ struct R50MappedValue: View {
 
     var body: some View {
         let value = min(max(model.value(address), 0), 1)
-        VStack(spacing: 3) {
-            HStack(spacing: 6) {
+        VStack(spacing: 4) {
+            HStack(spacing: 8) {
                 Text(title.uppercased())
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .font(R50Type.label)
                     .tracking(0.7)
                     .foregroundColor(R50Palette.engrave)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Text(display(value))
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(R50Type.value)
                     .foregroundColor(R50Palette.glow)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -273,9 +335,9 @@ struct R50MappedValue: View {
                         .frame(width: CGFloat(value) * geo.size.width)
                 }
             }
-            .frame(height: 5)
+            .frame(height: 7)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -446,11 +508,11 @@ struct R50Knob: View {
             }
 
             Text(title.uppercased())
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .font(R50Type.label)
                 .tracking(0.8)
                 .foregroundColor(R50Palette.engrave)
             Text(model.displayString(address))
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(R50Type.value)
                 .foregroundColor(R50Palette.glow)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -506,7 +568,7 @@ struct R50Selector: View {
 
         VStack(alignment: .leading, spacing: 5) {
             Text(title.uppercased())
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .font(R50Type.label)
                 .tracking(0.8)
                 .foregroundColor(R50Palette.engrave)
 
@@ -514,10 +576,15 @@ struct R50Selector: View {
                 ForEach(Array(options.enumerated()), id: \.offset) { index, label in
                     let selected = index == current
                     Text(label)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .font(R50Type.value)
                         .foregroundColor(selected ? Color.black : R50Palette.legend)
+                        // Segment labels are names, not prose: a two-word
+                        // option like "Saw Down" must shrink to fit rather
+                        // than break onto a second line and grow the row.
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 5)
+                        .padding(.vertical, 7)
                         .background(selected ? R50Palette.glow : Color(white: 0.13))
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -531,65 +598,6 @@ struct R50Selector: View {
             .overlay(RoundedRectangle(cornerRadius: 2)
                 .stroke(Color(white: 0.32), lineWidth: 1))
         }
-    }
-}
-
-// MARK: - Wave grid
-
-/// Indexed-parameter picker for lists too long for a single segmented row.
-/// Lays the options out as a fixed-column grid of short labels.
-struct R50WaveGrid: View {
-    let title: String
-    let address: R50Param
-    let options: [String]
-    let columns: Int
-    @ObservedObject var model: R50ParameterModel
-
-    var body: some View {
-        let current = Int(model.value(address).rounded())
-        let rows = Int(ceil(Double(options.count) / Double(columns)))
-
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title.uppercased())
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                .tracking(0.8)
-                .foregroundColor(R50Palette.engrave)
-
-            VStack(spacing: 1) {
-                ForEach(0..<rows, id: \.self) { row in
-                    HStack(spacing: 1) {
-                        ForEach(0..<columns, id: \.self) { column in
-                            let index = row * columns + column
-                            if index < options.count {
-                                cell(options[index], index: index,
-                                     selected: index == current)
-                            } else {
-                                Color.clear.frame(maxWidth: .infinity)
-                            }
-                        }
-                    }
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 2))
-            .overlay(RoundedRectangle(cornerRadius: 2)
-                .stroke(Color(white: 0.32), lineWidth: 1))
-        }
-    }
-
-    private func cell(_ label: String, index: Int, selected: Bool) -> some View {
-        Text(label)
-            .font(.system(size: 8, weight: .semibold, design: .monospaced))
-            .foregroundColor(selected ? Color.black : R50Palette.legend)
-            .lineLimit(1)
-            .minimumScaleFactor(0.65)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
-            .background(selected ? R50Palette.glow : Color(white: 0.13))
-            .contentShape(Rectangle())
-            .onTapGesture {
-                model.parameter(address)?.setValue(Float(index), originator: nil)
-                model.objectWillChange.send()
-            }
     }
 }
 
@@ -618,7 +626,7 @@ struct R50NameSelector: View {
         VStack(alignment: .leading, spacing: 5) {
             if !title.isEmpty {
                 Text(title.uppercased())
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .font(R50Type.label)
                     .tracking(0.8)
                     .foregroundColor(R50Palette.engrave)
             }
@@ -629,18 +637,17 @@ struct R50NameSelector: View {
                 Button { showingList.toggle() } label: {
                     HStack(spacing: 4) {
                         Text(names.isEmpty ? "—" : names[index])
-                            .font(.system(size: 10, weight: .semibold,
-                                          design: .monospaced))
+                            .font(R50Type.readout)
                             .foregroundColor(R50Palette.glow)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                         Spacer(minLength: 2)
                         Text("▾")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(R50Type.disclosure)
                             .foregroundColor(R50Palette.engrave)
                     }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
                     .frame(maxWidth: .infinity)
                     .background(R50Palette.track)
                 }
@@ -663,11 +670,11 @@ struct R50NameSelector: View {
                 ForEach(Array(names.enumerated()), id: \.offset) { offset, name in
                     let selected = offset == index
                     Text(name)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(R50Type.listRow)
                         .foregroundColor(selected ? Color.black : R50Palette.legend)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
                         .background(selected ? R50Palette.glow : Color.clear)
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -678,16 +685,16 @@ struct R50NameSelector: View {
             }
             .padding(4)
         }
-        .frame(width: 190, height: min(CGFloat(names.count) * 26 + 12, 320))
+        .frame(width: 274, height: min(CGFloat(names.count) * 37 + 17, 460))
         .background(Color(white: 0.13))
     }
 
     private func stepper(_ glyph: String, action: @escaping () -> Void) -> some View {
         Text(glyph)
-            .font(.system(size: 8, weight: .bold))
+            .font(R50Type.stepper)
             .foregroundColor(R50Palette.legend)
-            .frame(width: 18)
-            .padding(.vertical, 5)
+            .frame(width: 26)
+            .padding(.vertical, 7)
             .background(Color(white: 0.15))
             .contentShape(Rectangle())
             .onTapGesture(perform: action)
@@ -713,7 +720,7 @@ struct R50Meter: View {
         let clamped = CGFloat(min(max(level, 0), 1))
         HStack(spacing: 6) {
             Text("OUT")
-                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .font(R50Type.label)
                 .foregroundColor(R50Palette.engrave)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
