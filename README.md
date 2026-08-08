@@ -5,7 +5,7 @@ an **Audio Unit v3 (AUv3) app extension** for macOS. Loads in Logic Pro and any
 AU host. Header-only real-time C++ DSP, an Obj-C++ render bridge, and a SwiftUI
 editor.
 
-Coding by claude and codex.
+Coding by claude and codex, PM by myself.  Work in progress with gain adjustments needed, right now patch volume is inconsistent and in general too low. 
 
 
 ## Features
