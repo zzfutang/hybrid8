@@ -13,6 +13,12 @@ enum SynthTime {
     private static let tMax  = Float(SYNTH_TIME_MAX)
     private static let skew  = Float(SYNTH_TIME_SKEW)
     private static let ratio = Float(SYNTH_TIME_MAX / SYNTH_TIME_MIN)
+    // The public AU parameter/DSP curve remains at SYNTH_TIME_SKEW so old
+    // presets and automation retain their exact times. The editor uses a
+    // gentler 0.5 exponent for physical knob travel, composed with the public
+    // curve through this parameter-space conversion.
+    private static let controlTimeExponent: Float = 0.5
+    private static let controlToParameterExponent = controlTimeExponent / skew
 
     static func seconds(fromNorm n: Float) -> Float {
         let nn = min(max(n, 0), 1)
@@ -24,6 +30,16 @@ enum SynthTime {
         let ss = min(max(s, tMin), tMax)
         let e = logf(ss / tMin) / logf(ratio)
         return powf(max(0, e), 1.0 / skew)
+    }
+
+    static func controlNorm(fromParameterNorm n: Float) -> Float {
+        let nn = min(max(n, 0), 1)
+        return powf(nn, 1.0 / controlToParameterExponent)
+    }
+
+    static func parameterNorm(fromControlNorm n: Float) -> Float {
+        let nn = min(max(n, 0), 1)
+        return powf(nn, controlToParameterExponent)
     }
 
     /// The six envelope-time parameter addresses (normalised 0..1 in the tree).

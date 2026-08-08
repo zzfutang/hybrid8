@@ -207,8 +207,9 @@ struct Knob: View {
     // Curve skew for log knobs: 1 = pure log; <1 pushes the midpoint toward the
     // top of the range while keeping fine resolution at the bottom.
     let skew: Float
-    // When true the (linear 0..1) value is displayed as a mapped time in
-    // seconds — the curve lives in the DSP mapping, so the knob stays linear.
+    // When true the stored 0..1 value is displayed as mapped seconds and the
+    // editor applies a gentler travel taper. The underlying AU/DSP value is
+    // unchanged, preserving existing presets and automation.
     let timeMapped: Bool
 
     @EnvironmentObject private var help: HelpModel
@@ -324,6 +325,10 @@ struct Knob: View {
             let e = (log2f(max(v, lo)) - log2f(lo)) / (log2f(hi) - log2f(lo))
             return CGFloat(powf(max(0, e), 1.0 / skew))   // inverse of the skew
         }
+        if timeMapped {
+            let parameterNorm = (v - lo) / (hi - lo)
+            return CGFloat(SynthTime.controlNorm(fromParameterNorm: parameterNorm))
+        }
         return CGFloat((v - lo) / (hi - lo))
     }
     private func valueFor(_ n: CGFloat) -> Float {
@@ -331,6 +336,10 @@ struct Knob: View {
         if log {
             let e = powf(nn, skew)                          // skew the log position
             return powf(2, log2f(lo) + e * (log2f(hi) - log2f(lo)))
+        }
+        if timeMapped {
+            let parameterNorm = SynthTime.parameterNorm(fromControlNorm: nn)
+            return lo + parameterNorm * (hi - lo)
         }
         return lo + nn * (hi - lo)
     }

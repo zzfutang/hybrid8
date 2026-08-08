@@ -551,7 +551,8 @@ struct SynthView: View {
                 }
                 HStack(spacing: 0) {
                     Knob("Cutoff", SynthParamFilterCutoff, model,
-                         accent: Palette.filterAccent, unit: "", log: true).frame(maxWidth: .infinity)
+                         accent: Palette.filterAccent, unit: "", log: true,
+                         skew: 0.6).frame(maxWidth: .infinity)
                     Knob("Reso", SynthParamFilterResonance, model, accent: Palette.filterAccent).frame(maxWidth: .infinity)
                     Knob("Drive", SynthParamFilterDrive, model, accent: Palette.filterAccent).frame(maxWidth: .infinity)
                     Knob("Env", SynthParamFilterEnvAmount, model, accent: Palette.filterAccent).frame(maxWidth: .infinity)
